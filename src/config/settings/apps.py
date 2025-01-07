@@ -1,9 +1,12 @@
-from src.config.autoconfig import autoconfig
+from config.auto_config import discover_installed_apps
 
 CORE_DIR = 'src/core'
 EXTERNAL_MODULES_DIR = 'src/external_modules'
 
-DEVELOPED_APPS = autoconfig(CORE_DIR) + autoconfig(EXTERNAL_MODULES_DIR)
+CORE_APPS = discover_installed_apps(CORE_DIR)
+EXTERNAL_MODULES_APPS = discover_installed_apps(EXTERNAL_MODULES_DIR)
+
+DEVELOPED_APPS = CORE_APPS + EXTERNAL_MODULES_APPS
 
 INSTALLED_APPS = DEVELOPED_APPS + [
     'daphne',
