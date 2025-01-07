@@ -1,4 +1,4 @@
-from config.auto_config import discover_installed_apps
+from src.config.auto_config import discover_installed_apps
 
 CORE_DIR = 'src/core'
 EXTERNAL_MODULES_DIR = 'src/external_modules'
