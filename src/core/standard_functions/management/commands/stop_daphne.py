@@ -1,4 +1,4 @@
-from src.core.standard_functions.management.commands.daphne import Daphne
+from src.core.standard_functions.daphne import Daphne
 
 from django.core.management.base import BaseCommand
 
