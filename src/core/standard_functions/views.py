@@ -1,5 +1,6 @@
 import os
 import sys
+import subprocess
 
 import psycopg2
 from psycopg2 import OperationalError
@@ -14,6 +15,8 @@ from django.conf import settings
 
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
+
+from src.core.standard_functions.serializers import ScriptSerializer
 
 class CheckAPIView(APIView):
     @swagger_auto_schema(
@@ -118,15 +121,6 @@ class CheckAPIView(APIView):
             return Response({"message": "Подключение успешно."}, status=status.HTTP_200_OK)
         except OperationalError as e:
             return Response({"message": "Нет подключения к базе данных."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
-
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from .serializers import ScriptSerializer
-import subprocess
-
-import os
 
 class ExecuteScriptView(APIView):
     @swagger_auto_schema(
