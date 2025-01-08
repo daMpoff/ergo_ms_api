@@ -1,12 +1,9 @@
 import os
-
 from textwrap import dedent
-
 from django.core.management.base import BaseCommand
-from django.core.management.commands.startapp import Command as StartAppCommand
 
 class Command(BaseCommand):
-    help = 'Создание нового Django приложения в директории src/external_modules'
+    help = 'Создание нового Django приложения в директории src/external_modules без файла admin.py'
 
     def add_arguments(self, parser):
         parser.add_argument('name', help='Имя приложения')
@@ -19,33 +16,33 @@ class Command(BaseCommand):
         if not os.path.exists(directory):
             os.makedirs(directory)
 
-        # Сохраните текущую рабочую директорию
-        original_cwd = os.getcwd()
+        app_directory = os.path.join(directory, app_name)
 
-        # Измените рабочую директорию на целевую директорию
-        os.chdir(directory)
+        # Создайте структуру директорий для нового приложения
+        os.makedirs(app_directory)
+        os.makedirs(os.path.join(app_directory, 'migrations'))
 
-        # Вызовите оригинальную команду startapp
-        startapp_command = StartAppCommand()
-        startapp_command.run_from_argv(['manage.py', 'startapp', app_name])
+        # Создайте файлы для нового приложения
+        files_to_create = {
+            '__init__.py': '',
+            'apps.py': dedent(f"""
+                from django.apps import AppConfig
 
-        # Сгенерируйте содержимое файла apps.py
-        app_config_name = f'src.external_modules.{app_name}'
-        apps_py_content = dedent(f"""
-        from django.apps import AppConfig
+                class {app_name.capitalize()}Config(AppConfig):
+                    default_auto_field = 'django.db.models.BigAutoField'
+                    name = 'src.external_modules.{app_name}'
+            """),
+            'models.py': '',
+            'tests.py': '',
+            'views.py': '',
+            'urls.py': '',
+            'migrations/__init__.py': '',
+        }
 
-        class {app_name.capitalize()}Config(AppConfig):
-            default_auto_field = 'django.db.models.BigAutoField'
-            name = '{app_config_name}'
-        """)
-
-        # Восстановите оригинальную рабочую директорию
-        os.chdir(original_cwd)
-
-        # Запишите содержимое файла apps.py в файл
-        apps_py_path = os.path.join(directory, app_name, 'apps.py')
-        with open(apps_py_path, 'w') as f:
-            f.write(apps_py_content.strip())
+        for filename, content in files_to_create.items():
+            file_path = os.path.join(app_directory, filename)
+            with open(file_path, 'w') as f:
+                f.write(content.strip())
 
         # Выведите сообщение об успешном создании приложения
         self.stdout.write(self.style.SUCCESS(f'Приложение {app_name} успешно создано по пути - {directory}'))

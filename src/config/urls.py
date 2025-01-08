@@ -9,7 +9,9 @@ urlpatterns = [
     path("messenger/", include("src.core.modules.messenger.urls")),
 
     path("standard_functions/", include("src.core.standard_functions.urls")),
+]
 
+urlpatterns += [
     path("external_modules/bi/", include("src.external_modules.bi.urls")),
     path("external_modules/bpm/", include("src.external_modules.bpm.urls")),
     path("external_modules/crm/", include("src.external_modules.crm.urls")),
