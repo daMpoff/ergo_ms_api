@@ -3,16 +3,17 @@ name = "ergo_ms_api"
 version = "0.1.0"
 description = ""
 authors = ["Eugene Sergeevich Muzalevsky <53302920+DohaoSTR@users.noreply.github.com>"]
-readme = "README.md"
-packages = [{include = "src", from = ""}]
+packages = [
+    { include = "src", from = "", format = ["sdist"] }
+]
 
 [tool.poetry.dependencies]
-python = "^3.12"
-numpy = "^2.1.3"
-django = "^5.1.3"
+python = "==3.12.8"
+django = "^5.1.4"
 djangorestframework = "^3.15.2"
 django-cors-headers = "^4.6.0"
-setuptools = "^75.6.0"
+numpy = "^2.2.1"
+setuptools = "^75.7.0"
 wheel = "^0.45.1"
 daphne = "^4.1.2"
 whitenoise = "^6.8.2"
@@ -25,18 +26,19 @@ matplotlib = "^3.10.0"
 scikit-learn = "^1.6.0"
 pandas = "^2.2.3"
 drf-yasg = "^1.21.8"
+poetry = "^2.0.0"
 
 [tool.poetry.scripts]
-makemigrations = 'scripts.__main__:run_makemigrations'
-migrate = 'scripts.__main__:run_migrate'
-dev = 'scripts.__main__:run_dev'
-shell = 'scripts.__main__:run_shell'
-prod = 'scripts.__main__:run_prod'
-stop_prod = 'scripts.__main__:run_stop_prod'
-clear_cache = 'scripts.__main__:run_clear_cache'
-clear_pycache = 'scripts.__main__:run_clear_pycache'
-collectstatic = 'scripts.__main__:run_collectstatic'
+makemigrations = "scripts.__main__:run_makemigrations"
+migrate = "scripts.__main__:run_migrate"
+dev = "scripts.__main__:run_dev"
+shell = "scripts.__main__:run_shell"
+prod = "scripts.__main__:run_prod"
+stop_prod = "scripts.__main__:run_stop_prod"
+clear_cache = "scripts.__main__:run_clear_cache"
+clear_pycache = "scripts.__main__:run_clear_pycache"
+collectstatic = "scripts.__main__:run_collectstatic"
 
 [build-system]
-requires = ["poetry-core"]
+requires = ["poetry-core>=2.0.0"]
 build-backend = "poetry.core.masonry.api"
