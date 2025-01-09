@@ -2,7 +2,8 @@ import subprocess
 import threading
 import psutil
 
-from src.config.settings.server import SERVER_PORT, SERVER_HOST
+from django.conf import settings
+
 from src.core.standard_functions.enums import LogLevel
 
 class Daphne:
@@ -37,8 +38,12 @@ class Daphne:
         return False
 
     def start_daphne(self, log_level: LogLevel = LogLevel.INFO) -> psutil.Process:
+        server_process_name = getattr(settings, 'SERVER_PROCESS_NAME', None)
+        server_port = getattr(settings, 'SERVER_PORT', None)
+        server_host = getattr(settings, 'SERVER_HOST', None)
+
         process = subprocess.Popen(
-            ['daphne.exe', '-p', SERVER_PORT, '-b', SERVER_HOST, 'src.config.asgi:application'],
+            [server_process_name, '-p', server_port, '-b', server_host, 'src.config.asgi:application'],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True
