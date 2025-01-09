@@ -1,5 +1,6 @@
 import os
 from textwrap import dedent
+
 from django.core.management.base import BaseCommand
 
 class Command(BaseCommand):
@@ -17,6 +18,12 @@ class Command(BaseCommand):
             os.makedirs(directory)
 
         app_directory = os.path.join(directory, app_name)
+        app_directory = os.path.normpath(app_directory)
+        
+        # Проверка существования модуля
+        if os.path.exists(app_directory):
+            self.stdout.write(self.style.ERROR(f'Приложение {app_name} уже существует по пути - {app_directory}'))
+            return
 
         # Создайте структуру директорий для нового приложения
         os.makedirs(app_directory)
@@ -35,7 +42,14 @@ class Command(BaseCommand):
             'models.py': '',
             'tests.py': '',
             'views.py': '',
-            'urls.py': '',
+            'urls.py': dedent("""
+                from django.urls import (
+                    path
+                )
+
+                urlpatterns = [
+                ]
+            """),
             'migrations/__init__.py': '',
         }
 

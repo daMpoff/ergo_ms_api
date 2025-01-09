@@ -29,15 +29,7 @@ drf-yasg = "^1.21.8"
 poetry = "^2.0.0"
 
 [tool.poetry.scripts]
-makemigrations = "scripts.__main__:run_makemigrations"
-migrate = "scripts.__main__:run_migrate"
-dev = "scripts.__main__:run_dev"
-shell = "scripts.__main__:run_shell"
-prod = "scripts.__main__:run_prod"
-stop_prod = "scripts.__main__:run_stop_prod"
-clear_cache = "scripts.__main__:run_clear_cache"
-clear_pycache = "scripts.__main__:run_clear_pycache"
-collectstatic = "scripts.__main__:run_collectstatic"
+cmd = "scripts.__main__:main"
 
 [build-system]
 requires = ["poetry-core>=2.0.0"]

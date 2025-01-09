@@ -1,28 +1,75 @@
-import os
+import sys
+import inspect
 
-def run_makemigrations():
-    os.system("python src/manage.py makemigrations")
+from scripts.commands import PoetryCommand
 
-def run_migrate():
-    os.system("python src/manage.py migrate")
+def main():
+    """
+    Точка входа для управления командами через Poetry.
 
-def run_dev():
-    os.system("python src/manage.py runserver")
+    Этот скрипт динамически загружает все доступные команды, которые являются подклассами `PoetryCommand`,
+    и предоставляет интерфейс для их вызова через терминал.
 
-def run_shell():
-    os.system("python src/manage.py shell")
+    Основные этапы выполнения:
+    1. Загрузка всех команд из модуля `scripts.commands`.
+    2. Проверка переданных аргументов.
+    3. Поиск команды по её имени (ключ `poetry_command_name`).
+    4. Выполнение команды с переданными аргументами.
 
-def run_prod():
-    os.system("python src/manage.py start_daphne")
+    Пример использования:
+        В терминале, запустите:
+        ```bash
+        poetry run <команда> [аргументы...]
+        ```
 
-def run_stop_prod():
-    os.system("python src/manage.py stop_daphne")
+        Например:
+        ```bash
+        poetry run makemigrations --dry-run
+        poetry run dev
+        poetry run collectstatic --no-input
+        ```
 
-def run_clear_cache():
-    os.system("python src/manage.py clear_cache")
+    Вывод:
+        Если команды отсутствуют или указана неверная команда, будет выведен список доступных команд.
 
-def run_clear_pycache():
-    os.system("python src/manage.py clear_pycache")
+    Исключения:
+        - Выход с кодом `1`, если команда не указана.
+        - Выход с кодом `1`, если указана неизвестная команда.
 
-def run_collectstatic():
-    os.system("python src/manage.py collectstatic")
+    Зависимости:
+        - Модуль `scripts.commands` должен содержать классы команд, наследующие `PoetryCommand`.
+    """
+    # Динамически получаем все классы, наследующие PoetryCommand
+    modules = sys.modules["scripts.commands"]
+
+    # Создаем словарь команд
+    commands = {}
+
+    # Ищем все классы, наследующие PoetryCommand, но не сам PoetryCommand
+    for _, cls in inspect.getmembers(modules, inspect.isclass):
+        if issubclass(cls, PoetryCommand) and cls is not PoetryCommand:
+            # Добавляем класс в словарь с ключом, равным poetry_command_name
+            commands[cls.poetry_command_name] = cls
+
+    # Проверяем, что указана команда
+    if len(sys.argv) < 2:
+        print("Использование: poetry run <команда> [аргументы...]")
+        print("Доступные команды:", ", ".join(commands.keys()))
+        sys.exit(1)
+
+    # Получаем имя команды и аргументы
+    command_name = sys.argv[1]
+    args = sys.argv[2:]
+
+    # Проверяем, существует ли команда
+    CommandClass = commands.get(command_name)
+    if not CommandClass:
+        print(f"Неизвестная команда: {command_name}")
+        print("Доступные команды:", ", ".join(commands.keys()))
+        sys.exit(1)
+
+    # Создаём экземпляр команды и вызываем метод run
+    CommandClass().run(*args)
+
+if __name__ == "__main__":
+    main()
