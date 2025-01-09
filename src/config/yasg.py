@@ -5,9 +5,13 @@ from drf_yasg import openapi
 
 from django.urls import re_path
 
+from src.config.env import env
+
+system_title = env.str('SYSTEM_TITLE')
+
 schema_view = get_schema_view(
     openapi.Info(
-        title="ERGO MS API",
+        title=f"{system_title} API",
         default_version='v1',
         description="API системы управления организациями",
         terms_of_service="https://www.google.com/policies/terms/",

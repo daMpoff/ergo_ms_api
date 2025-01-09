@@ -1,5 +1,7 @@
 from datetime import timedelta
 
+from src.config.env import env
+
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
@@ -35,7 +37,7 @@ SIMPLE_JWT = {
     'ROTATE_REFRESH_TOKENS': False,
     'BLACKLIST_AFTER_ROTATION': True,
     'ALGORITHM': 'HS256',
-    'SIGNING_KEY': 'django-insecure-sa=7si9=c83gifa(5oft)^epyiosceii&y*+cx_2q!@%shwj8h',
+    'SIGNING_KEY': env.str('API_SECRET_KEY'),
     'VERIFYING_KEY': None,
     'AUTH_HEADER_TYPES': ('Bearer',),
     'USER_ID_FIELD': 'id',

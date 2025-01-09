@@ -3,6 +3,10 @@ import importlib
 import inspect
 
 from django.apps import AppConfig
+from django.urls import (
+    include, 
+    path
+)
 
 def discover_installed_apps(apps_dir):
     installed_apps = []
@@ -35,3 +39,16 @@ def discover_installed_apps(apps_dir):
     recursively_find_apps(apps_dir, os.path.basename(apps_dir))
 
     return installed_apps
+
+def discover_installed_app_urls(base_path):
+    urlpatterns = []
+    # Получаем список всех подпапок в base_path
+    for module_name in os.listdir(base_path):
+        module_path = os.path.join(base_path, module_name)
+        # Проверяем, является ли подпапка директорией
+        if os.path.isdir(module_path):
+            # Формируем путь для include
+            url_pattern = path(f"external_modules/{module_name}/", include(f"src.external_modules.{module_name}.urls"))
+            urlpatterns.append(url_pattern)
+
+    return urlpatterns
