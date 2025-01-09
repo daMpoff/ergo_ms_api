@@ -12,9 +12,7 @@ class Command(RunserverCommand):
     def handle(self, *args, **options):
         # Проверяем, установлен ли аргумент addrport (адрес и порт)
         if not options['addrport']:
-            # Если аргумент addrport не установлен, устанавливаем его по умолчанию
-            # Используем значения SERVER_HOST и SERVER_PORT из конфигурационного файла
-            options['addrport'] = f'{SERVER_HOST}:{SERVER_PORT}'  # Хост и порт по умолчанию
+            # Хост и порт по умолчанию
+            options['addrport'] = f'{SERVER_HOST}:{SERVER_PORT}'
 
-        # Вызываем метод handle родительского класса для выполнения стандартной обработки команды
         super().handle(*args, **options)
