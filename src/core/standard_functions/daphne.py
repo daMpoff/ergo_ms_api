@@ -2,6 +2,7 @@ import subprocess
 import threading
 import psutil
 
+from src.config.settings.server import SERVER_PORT, SERVER_HOST
 from src.core.standard_functions.enums import LogLevel
 
 class Daphne:
@@ -37,7 +38,7 @@ class Daphne:
 
     def start_daphne(self, log_level: LogLevel = LogLevel.INFO) -> psutil.Process:
         process = subprocess.Popen(
-            ['daphne.exe', '-p', '8000', 'src.config.asgi:application'],
+            ['daphne.exe', '-p', SERVER_PORT, '-b', SERVER_HOST, 'src.config.asgi:application'],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True
