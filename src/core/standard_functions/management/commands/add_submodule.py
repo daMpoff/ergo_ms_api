@@ -6,10 +6,13 @@ class Command(BaseCommand):
     help = 'Create a new submodule'
 
     def add_arguments(self, parser):
+        parser.add_argument('module_name', type=str, help='The name of the module to create')
         parser.add_argument('submodule_name', type=str, help='The name of the submodule to create')
 
     def handle(self, *args, **options):
         submodule_name = options['submodule_name']
+        module_name = options['module_name']
+
         submodule_path = os.path.join('main_module', submodule_name)
 
         if os.path.exists(submodule_path):

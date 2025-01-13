@@ -9,19 +9,19 @@ class PoetryCommand:
         Этот класс предоставляет механизм для выполнения команд, как через `manage.py` (для Django), так и через
         обычные Python скрипты, которые могут быть указаны пользователем.
 
-        Attributes:
+        Аргументы:
             poetry_command_name (str): Имя команды, которое будет использовано в Poetry.
             django_command_name (Optional[str]): Имя команды, которое будет передано Django через manage.py.
             script_command (Optional[str]): Имя пользовательской команды или Python скрипта, который будет выполнен.
 
-        Methods:
+        Методы:
             __init__(self, command_name: Optional[str] = None):
                 Инициализация команды с указанием ее имени. Можно указать команду для Django или пользовательскую команду.
             
             run(self, *args):
                 Выполняет команду с переданными аргументами. Формирует команду для выполнения и запускает ее.
         
-        Example:
+        Пример:
             Для запуска в терминале команды, например `makemigrations`: 
             >>> poetry run cmd makemigrations
 
@@ -49,11 +49,11 @@ class PoetryCommand:
         
         Если имя команды не указано, будет выбрано значение из одного из полей, если оно присутствует.
         
-        Args:
+        Аргументы:
             command_name (Optional[str]): Имя команды для выполнения. Если не указано, используется значение из
                                           `django_command_name` или `script_command`.
         
-        Raises:
+        Исключения:
             ValueError: Если не указано имя команды для выполнения.
         """
         self.command_name = command_name or self.django_command_name or self.script_command
@@ -68,14 +68,14 @@ class PoetryCommand:
         Формирует команду для выполнения, исходя из типа команды (Django или пользовательская команда),
         и запускает ее в операционной системе.
 
-        Args:
+        Аргументы:
             *args (str): Аргументы, которые будут переданы в команду при выполнении. Они конкатенируются в строку.
 
-        Raises:
+        Исключения:
             RuntimeError: Если не удалось определить тип команды для выполнения (например, если не указаны
                           ни Django, ни пользовательские команды).
         
-        Example:
+        Пример:
             Для команды `makemigrations` с дополнительными аргументами:
             >>> command = PoetryCommand(django_command_name="makemigrations")
             >>> command.run("--dry-run")
