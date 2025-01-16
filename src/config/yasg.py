@@ -1,3 +1,10 @@
+"""
+Файл для настройки маршрутов документации Django-API с использованием библиотеки drf-yasg.
+
+Он создает представление схемы API, используя информацию из переменных окружения,
+и определяет маршруты для доступа к документации в форматах JSON, YAML, Swagger UI и ReDoc.
+"""
+
 from rest_framework.permissions import AllowAny
 
 from drf_yasg.views import get_schema_view
@@ -7,8 +14,10 @@ from django.urls import re_path
 
 from src.config.env import env
 
+# Получаем название системы из переменных окружения
 system_title = env.str('SYSTEM_TITLE')
 
+# Создаем представление схемы API
 schema_view = get_schema_view(
     openapi.Info(
         title=f"{system_title} API",
@@ -20,6 +29,7 @@ schema_view = get_schema_view(
     permission_classes=(AllowAny,),
 )
 
+# Определяем маршруты для доступа к документации API
 urlpatterns = [
     re_path(
         r"^swagger(?P<format>\.json|\.yaml)$",

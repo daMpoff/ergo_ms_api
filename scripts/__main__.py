@@ -1,3 +1,15 @@
+"""
+Файл для связи poetry и команд созданных в commands.py.
+
+Данный функционал взаимодействует с Poetry при помощи следующей секции pyproject.toml файла:
+
+[tool.poetry.scripts]
+cmd = "scripts.__main__:main"
+
+Пример команды для запуска сервера Django API:
+>>> poetry run cmd dev
+"""
+
 import sys
 import inspect
 
@@ -24,9 +36,9 @@ def main():
 
         Например:
         ```bash
-        poetry run makemigrations --dry-run
-        poetry run dev
-        poetry run collectstatic --no-input
+        poetry run cmd makemigrations --dry-run
+        poetry run cmd dev
+        poetry run cmd collectstatic --no-input
         ```
 
     Вывод:

@@ -1,5 +1,14 @@
+"""
+Файл для определения маршрутов URL для Django-API-приложения.
+
+Он использует функцию `path` из `django.urls` для определения маршрутов и функцию `include`
+для включения URL-конфигураций из других модулей. Также используется функция
+`discover_installed_app_urls` для автоматического обнаружения и включения URL-конфигураций
+из внешних модулей, находящихся в директории `EXTERNAL_MODULES_DIR`.
+"""
+
 from django.urls import (
-    include, 
+    include,
     path
 )
 
@@ -10,8 +19,8 @@ urlpatterns = [
     path("cms/adp/", include("src.core.modules.cms.adp.urls")),
     path("cms/content_manager/", include("src.core.modules.cms.content_manager.urls")),
     path("messenger/", include("src.core.modules.messenger.urls")),
-
     path("standard_functions/", include("src.core.standard_functions.urls")),
 ]
 
+# Добавляем URL-конфигурации из внешних модулей, автоматически обнаруженные в директории EXTERNAL_MODULES_DIR
 urlpatterns += discover_installed_app_urls(EXTERNAL_MODULES_DIR)

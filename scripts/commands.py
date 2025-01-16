@@ -1,3 +1,7 @@
+"""
+Модуль для определения Poetry команд.
+"""
+
 from scripts.base import PoetryCommand
 
 class MakeMigrationsCommand(PoetryCommand):
@@ -50,11 +54,11 @@ class ShellCommand(PoetryCommand):
 
 class ProdServerCommand(PoetryCommand):
     """
-    Команда для запуска продакшн сервера (например, с использованием Daphne).
+    Команда для запуска production сервера (с использованием Daphne).
 
     Используется для запуска приложения в боевом режиме.
     """
-    poetry_command_name = 'dev'
+    poetry_command_name = 'prod'
     django_command_name = 'start_daphne'
 
     def __init__(self):
