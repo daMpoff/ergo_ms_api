@@ -80,7 +80,7 @@ def discover_installed_app_urls(apps_dir: str) -> List[str]:
         # Проверяем, является ли подпапка директорией
         if os.path.isdir(module_path):
             # Формируем путь для include
-            url_pattern = path(f"external_modules/{module_name}/", include(f"src.external_modules.{module_name}.urls"))
+            url_pattern = path(f"external/{module_name}/", include(f"src.external.{module_name}.urls"))
             urlpatterns.append(url_pattern)
 
     return urlpatterns

@@ -14,7 +14,7 @@ from src.config.auto_config import discover_installed_apps
 
 # Определяем директории для основных и внешних модулей
 CORE_DIR = 'src/core'
-EXTERNAL_MODULES_DIR = 'src/external_modules'
+EXTERNAL_MODULES_DIR = 'src/external'
 
 # Обнаруживаем и устанавливаем основные и сторонние модули
 CORE_APPS = discover_installed_apps(CORE_DIR)

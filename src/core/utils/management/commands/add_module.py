@@ -1,5 +1,5 @@
 """
-Файл для команды создания нового модуля в директории src/external_modules.
+Файл для команды создания нового модуля в директории src/external.
 
 Этот файл содержит Django команду для создания нового модуля в указанной директории.
 Команда создает необходимую структуру директорий и файлов для нового модуля.
@@ -15,7 +15,7 @@ from django.core.management.base import BaseCommand
 from django.conf import settings
 
 from src.config.auto_config import check_app_config_name
-from src.core.standard_functions.methods import convert_snake_to_camel
+from src.core.utils.methods import convert_snake_to_camel
 
 class Command(BaseCommand):
     """
@@ -24,7 +24,7 @@ class Command(BaseCommand):
     Атрибуты:
         help (str): Описание команды.
     """
-    help = 'Создание нового модуля в директории src/external_modules'
+    help = 'Создание нового модуля в директории src/external'
 
     def add_arguments(self, parser):
         """
@@ -76,7 +76,7 @@ class Command(BaseCommand):
 
                 config = configparser.ConfigParser()
 
-                MODULE_PATH = 'src/external_modules/{module_name}/'
+                MODULE_PATH = 'src/external/{module_name}/'
                 CONF_PATH = MODULE_PATH + '.conf'
 
                 config.read(CONF_PATH)
@@ -86,7 +86,7 @@ class Command(BaseCommand):
 
                 class {camel_module_name}Config(AppConfig):
                     default_auto_field = 'django.db.models.BigAutoField'
-                    name = 'src.external_modules.{module_name}'
+                    name = 'src.external.{module_name}'
             """),
             'urls.py': dedent("""
                 from django.urls import (
@@ -98,7 +98,7 @@ class Command(BaseCommand):
             """),
             '.conf': dedent(f"""
                 [Main]
-                module_name = {camel_module_name}
+                module_name = {module_name}
             """),
             'models.py': dedent("""
                 from django.db import models

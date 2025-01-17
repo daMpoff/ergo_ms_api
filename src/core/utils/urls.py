@@ -6,7 +6,7 @@ from django.urls import (
     path
 )
 
-from src.core.standard_functions.views import (
+from src.core.utils.views import (
     CheckAPIView,
 )
 

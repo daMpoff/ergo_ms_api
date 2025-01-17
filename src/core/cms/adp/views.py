@@ -12,7 +12,7 @@ from drf_yasg import openapi
 from django.contrib.auth import authenticate
 from django.utils.crypto import get_random_string
 
-from src.core.standard_functions.methods import (
+from src.core.utils.methods import (
     parse_errors_to_dict, 
     send_confirmation_email
 )

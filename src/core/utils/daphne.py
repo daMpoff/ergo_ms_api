@@ -16,7 +16,7 @@ import psutil
 
 from django.conf import settings
 
-from src.core.standard_functions.enums import LogLevel
+from src.core.utils.enums import LogLevel
 
 class Daphne:
     def find_process(self, process_name: str) -> psutil.Process:
