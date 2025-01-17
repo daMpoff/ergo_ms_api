@@ -1,5 +1,5 @@
 """
-Команда для создания нового модуля в директории src/external_modules.
+Файл для команды создания нового модуля в директории src/external_modules.
 
 Этот файл содержит Django команду для создания нового модуля в указанной директории.
 Команда создает необходимую структуру директорий и файлов для нового модуля.
@@ -71,7 +71,16 @@ class Command(BaseCommand):
 
         # Создание файлов для нового приложения
         files_to_create = {
-            '__init__.py': '',
+            '__init__.py': dedent(f"""
+                import configparser
+
+                config = configparser.ConfigParser()
+
+                MODULE_PATH = 'src/external_modules/{module_name}/'
+                CONF_PATH = MODULE_PATH + '.conf'
+
+                config.read(CONF_PATH)
+            """),
             'apps.py': dedent(f"""
                 from django.apps import AppConfig
 
@@ -117,7 +126,8 @@ class Command(BaseCommand):
 
                 # Создавайте свои API методы здесь.
             """),
-            'migrations/__init__.py': '',
+            'migrations/__init__.py': dedent(f"""
+            """),
         }
 
         for filename, content in files_to_create.items():
