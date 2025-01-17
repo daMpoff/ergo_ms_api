@@ -16,8 +16,8 @@ from src.core.standard_functions.methods import (
     parse_errors_to_dict, 
     send_confirmation_email
 )
-from src.core.modules.cms.adp.models import EmailConfirmationCode
-from src.core.modules.cms.adp.serializers import (
+from src.core.cms.adp.models import EmailConfirmationCode
+from src.core.cms.adp.serializers import (
     UserLoginSerializer, 
     UserRegistrationSerializer,
     UserRegistrationValidationSerializer,

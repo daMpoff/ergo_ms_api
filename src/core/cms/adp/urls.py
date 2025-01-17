@@ -6,7 +6,7 @@ from rest_framework_simplejwt.views import (
     TokenRefreshView
 )
 
-from src.core.modules.cms.adp.views import (
+from src.core.cms.adp.views import (
     UserRegistrationValidationView,
     UserRegistrationView,
     UserAuthorizationView,
