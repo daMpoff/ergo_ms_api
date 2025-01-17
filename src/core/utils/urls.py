@@ -11,5 +11,5 @@ from src.core.utils.views import (
 )
 
 urlpatterns = [
-    path('check_database_connection/', CheckAPIView.as_view(), name='check-database-connection'),
+    path('check-database-connection/', CheckAPIView.as_view(), name='check-database-connection'),
 ]

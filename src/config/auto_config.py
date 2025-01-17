@@ -15,6 +15,9 @@ from django.urls import (
     path
 )
 
+from src.config.env import env
+
+
 def discover_installed_apps(apps_dir: str) -> List[str]:
     """
     Рекурсивно обходит директории и находит установленные приложения.
@@ -108,3 +111,14 @@ def check_app_config_name(directory: str, config_name: str) -> bool:
                     if re.search(searched_class_signature, content):
                         return True
     return False
+
+def get_env_deploy_type():
+    development = 'src.config.patterns.development'
+    production = 'src.config.patterns.production'
+
+    deploy_type = env.str('API_DEPLOY_TYPE')
+
+    if deploy_type == 'production':
+        return production
+    else:
+        return development

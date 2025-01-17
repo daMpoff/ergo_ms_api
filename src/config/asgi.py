@@ -10,6 +10,9 @@ import os
 
 from django.core.asgi import get_asgi_application
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'src.config.patterns.development')
+from src.config.auto_config import get_env_deploy_type
+
+deploy_type = get_env_deploy_type()
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', deploy_type)
 
 application = get_asgi_application()

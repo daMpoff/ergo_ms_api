@@ -72,14 +72,6 @@ class Command(BaseCommand):
         # Создание файлов для нового приложения
         files_to_create = {
             '__init__.py': dedent(f"""
-                import configparser
-
-                config = configparser.ConfigParser()
-
-                MODULE_PATH = 'src/external/{module_name}/'
-                CONF_PATH = MODULE_PATH + '.conf'
-
-                config.read(CONF_PATH)
             """),
             'apps.py': dedent(f"""
                 from django.apps import AppConfig
@@ -95,10 +87,6 @@ class Command(BaseCommand):
 
                 urlpatterns = [
                 ]
-            """),
-            '.conf': dedent(f"""
-                [Main]
-                module_name = {module_name}
             """),
             'models.py': dedent("""
                 from django.db import models
