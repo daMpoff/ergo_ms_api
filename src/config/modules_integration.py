@@ -2,6 +2,7 @@ import configparser
 import importlib
 
 from django.urls import path
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
 
@@ -15,6 +16,7 @@ def load_handler(handler_path):
 def load_config(config_path):
     config = configparser.ConfigParser()
     config.read(config_path)
+    
     return config
 
 # Создание APIView на основе конфигурации
