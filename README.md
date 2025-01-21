@@ -25,8 +25,12 @@ py -3.12 -m venv .venv
 ```
 
 #### 2. Активация виртуального окружения
-```bash
+```bash - CMD
 call .venv\Scripts\activate
+```
+
+```bash - IDE Visual Studio Code
+.venv\Scripts\activate
 ```
 
 #### 3. Установка Poetry
@@ -46,7 +50,8 @@ poetry install
 
 #### 6. Создание директорий для медиафайлов и логов
 ```bash
-mkdir media logs
+mkdir media
+mkdir logs
 ```
 
 #### 7. Сборка статических файлов
@@ -144,3 +149,5 @@ poetry run cmd stop_prod
 ---
 
 ## Руководство по командам 
+
+[Руководство по модулям и подмодулям](MODULES.md)
