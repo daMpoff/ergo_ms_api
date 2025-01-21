@@ -1,5 +1,5 @@
 """
-Модуль для определения Poetry команд.
+Файл для определения Poetry команд.
 """
 
 from scripts.base import PoetryCommand
