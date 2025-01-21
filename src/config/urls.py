@@ -26,5 +26,7 @@ urlpatterns = [
 external_modules_urlpatterns = discover_installed_app_urls(EXTERNAL_MODULES_DIR)
 urlpatterns += external_modules_urlpatterns
 
-config_urlpatterns = generate_routes_from_config("src/config/modules_integration.conf")
+INTEGRATION_CONFIG_PATH = 'src/config/integration_config.yaml"'
+
+config_urlpatterns = generate_routes_from_config(INTEGRATION_CONFIG_PATH)
 urlpatterns += config_urlpatterns

@@ -1,22 +1,30 @@
 from src.external.bpm.scripts import get_tasks
 from src.external.bi.scripts import transform_data_for_bi_graph
+from src.handlers.base_handler import BaseHandler
 
-def handler():
-    tasks = get_tasks(10, 10, 10)
+class HandlerClass(BaseHandler):
+    def process(self):
+        tasks = get_tasks(
+            self.params.get('limit', 10),
+            self.params.get('offset', 10),
+            self.params.get('page_size', 10)
+        )
 
-    aggregation_params = [
-        {
-            "key": "status", 
-            "aggregation_type": "count", 
-            "data_source": "tasks"
-        },
-        {
-            "key": "process_id", 
-            "aggregation_type": "unique_count", 
-            "data_source": "tasks"
-        }
-    ]
+        aggregation_params = [
+            {
+                "key": "status", 
+                "aggregation_type": "count", 
+                "data_source": "tasks"
+            },
+            {
+                "key": "process_id", 
+                "aggregation_type": "unique_count", 
+                "data_source": "tasks"
+            }
+        ]
 
-    graph_data = transform_data_for_bi_graph(tasks, aggregation_params)
-    
-    return {"data": graph_data}
+        graph_data = transform_data_for_bi_graph(tasks, aggregation_params)
+        return {"data": graph_data}
+
+# Создаем экземпляр для использования в конфигурации
+handler = HandlerClass()

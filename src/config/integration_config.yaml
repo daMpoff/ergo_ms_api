@@ -1,0 +1,55 @@
+TasksGraphView:
+  path: tasks/
+  method: GET
+  handler: statistic.tasks_graph_handler
+  status_code: 200
+  renderers: json,browsable
+  required_params: []
+  optional_params:
+    item_id: null
+    limit: 10
+    offset: 10
+    page_size: 10
+  description: Get statistics for tasks in graph format
+  params_description:
+    item_id: ID of specific item to filter by
+    limit: Maximum number of records to return
+    offset: Number of records to skip
+    page_size: Number of items per page
+  responses:
+    200:
+      description: Successfully retrieved tasks statistics
+      example:
+        data:
+          status:
+            completed: 5
+            in_progress: 3
+          process_id:
+            unique_count: 4
+
+ProcessGraphView:
+  path: processes/
+  method: GET
+  handler: statistic.tasks_graph_handler
+  status_code: 200
+  renderers: json,browsable
+  required_params: 
+    - process_id
+  optional_params:
+    limit: 10
+    offset: 0
+  description: Get statistics for specific process
+  params_description:
+    process_id: ID of the process to get statistics for
+    limit: Maximum number of records to return
+    offset: Number of records to skip
+  responses:
+    200:
+      description: Successfully retrieved process statistics
+      example:
+        data:
+          status:
+            completed: 5
+            in_progress: 3
+          process_id:
+            unique_count: 1 

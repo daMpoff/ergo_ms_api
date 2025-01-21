@@ -27,6 +27,7 @@ scikit-learn = "^1.6.0"
 pandas = "^2.2.3"
 drf-yasg = "^1.21.8"
 poetry = "^2.0.0"
+pyyaml = "^6.0.2"
 
 [tool.poetry.scripts]
 cmd = "scripts.__main__:main"
