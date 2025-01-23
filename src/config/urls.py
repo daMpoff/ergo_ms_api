@@ -12,7 +12,8 @@ from django.urls import (
     path
 )
 
-from src.config.modules_integration import generate_routes_from_config
+from src.config.settings.integration import INTEGRATION_CONFIG_PATH
+from src.core.utils.integration.modules_integration import generate_routes_from_config
 
 from src.config.auto_config import discover_installed_app_urls
 from src.config.settings.apps import EXTERNAL_MODULES_DIR
@@ -22,11 +23,10 @@ urlpatterns = [
     path("utils/", include("src.core.utils.urls")),
 ]
 
-# Добавляем URL-конфигурации из внешних модулей, автоматически обнаруженные в директории EXTERNAL_MODULES_DIR
+# Добавляем URL-конфигурации из внешних модулей, автоматически 
+# обнаруженные в директории EXTERNAL_MODULES_DIR
 external_modules_urlpatterns = discover_installed_app_urls(EXTERNAL_MODULES_DIR)
 urlpatterns += external_modules_urlpatterns
-
-INTEGRATION_CONFIG_PATH = 'src/config/integration_config.yaml"'
 
 config_urlpatterns = generate_routes_from_config(INTEGRATION_CONFIG_PATH)
 urlpatterns += config_urlpatterns

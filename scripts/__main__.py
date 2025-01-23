@@ -12,8 +12,25 @@ cmd = "scripts.__main__:main"
 
 import sys
 import inspect
+import logging
 
 from scripts.commands import PoetryCommand
+from src.config.settings.logger import LOGGING
+
+# Настройка логгера для скриптов
+logger = logging.getLogger('scripts')
+
+# Использование форматтера из конфигурации
+formatter = logging.Formatter(
+    fmt=LOGGING['formatters']['simple']['format'],
+    style=LOGGING['formatters']['simple']['style']
+)
+
+# Настройка вывода только в консоль
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
+logger.setLevel(logging.INFO)
 
 def main():
     """
@@ -65,9 +82,9 @@ def main():
 
     # Проверяем, что указана команда
     if len(sys.argv) < 2:
-        print("Использование: poetry run <команда> [аргументы...]")
-        print("Доступные команды:", ", ".join(commands.keys()))
-        sys.exit(1)
+        logger.info("Использование: poetry run <команда> [аргументы...]")
+        logger.info("Доступные команды: %s", ", ".join(commands.keys()))
+        return
 
     # Получаем имя команды и аргументы
     command_name = sys.argv[1]
@@ -76,9 +93,9 @@ def main():
     # Проверяем, существует ли команда
     CommandClass = commands.get(command_name)
     if not CommandClass:
-        print(f"Неизвестная команда: {command_name}")
-        print("Доступные команды:", ", ".join(commands.keys()))
-        sys.exit(1)
+        logger.error("Неизвестная команда: %s", command_name)
+        logger.info("Доступные команды: %s", ", ".join(commands.keys()))
+        return
 
     # Создаём экземпляр команды и вызываем метод run
     CommandClass().run(*args)

@@ -1,6 +1,7 @@
 from src.external.bpm.scripts import get_tasks
 from src.external.bi.scripts import transform_data_for_bi_graph
-from src.handlers.base_handler import BaseHandler
+
+from src.core.utils.integration.base_handler import BaseHandler
 
 class HandlerClass(BaseHandler):
     def process(self):
@@ -24,7 +25,5 @@ class HandlerClass(BaseHandler):
         ]
 
         graph_data = transform_data_for_bi_graph(tasks, aggregation_params)
-        return {"data": graph_data}
 
-# Создаем экземпляр для использования в конфигурации
-handler = HandlerClass()
+        return {"data": graph_data}

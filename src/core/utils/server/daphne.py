@@ -13,10 +13,13 @@
 import subprocess
 import threading
 import psutil
+import logging
 
 from django.conf import settings
 
 from src.core.utils.enums import LogLevel
+
+logger = logging.getLogger(__name__)
 
 class Daphne:
     def find_process(self, process_name: str) -> psutil.Process:
@@ -27,7 +30,7 @@ class Daphne:
                     any(process_name in arg for arg in proc.info['cmdline']))):
                     return proc
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess) as e:
-                print(f'{e}')
+                logger.error(f'Ошибка при поиске процесса: {e}')
 
         return None
 
@@ -37,7 +40,7 @@ class Daphne:
             process.wait(timeout=5)
             return True
         except Exception as e:
-            print(f"Ошибка при остановке процесса: {e}")
+            logger.error(f"Ошибка при остановке процесса: {e}")
             return False
 
     def stop_process(self, process_name: str) -> bool:
@@ -65,11 +68,11 @@ class Daphne:
         def read_output(pipe, log_level: LogLevel):
             for line in iter(pipe.readline, ''):
                 if log_level == LogLevel.ERROR and 'ERROR' in line:
-                    print(line.strip())
+                    logger.error(line.strip())
                 elif log_level == LogLevel.WARNING and 'WARNING' in line:
-                    print(line.strip())
+                    logger.warning(line.strip())
                 elif log_level == LogLevel.INFO:
-                    print(line.strip())
+                    logger.info(line.strip())
                 elif log_level == LogLevel.NONE:
                     continue
 

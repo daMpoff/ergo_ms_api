@@ -52,14 +52,19 @@ LOGGING = {
     'loggers': {
         # Логгер для Django.
         'django': {
-            'handlers': ['file', 'console'],
+            'handlers': ['console'],
             'level': 'INFO',
             'propagate': True,
         },
         
         # Логгер для стандартных функций.
-        'standard_functions': {
-            'handlers': ['file', 'console'],
+        'utils': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': True,
+        },
+        'scripts': {
+            'handlers': ['console'],
             'level': 'INFO',
             'propagate': True,
         },

@@ -6,6 +6,7 @@ import os
 import re
 import importlib
 import inspect
+import logging
 
 from typing import List
 
@@ -17,6 +18,7 @@ from django.urls import (
 
 from src.config.env import env
 
+logger = logging.getLogger('standard_functions')
 
 def discover_installed_apps(apps_dir: str) -> List[str]:
     """
@@ -56,9 +58,9 @@ def discover_installed_apps(apps_dir: str) -> List[str]:
                         if app_config:
                             installed_apps.append(f'src.{module_path}')
                     except ModuleNotFoundError:
-                        print(f"Модуль не найден: {module_path}.apps")
+                        logger.error("Модуль не найден: %s.apps", module_path)
                     except AttributeError:
-                        print(f"Ошибка атрибута: {module_path}.apps не имеет допустимого класса AppConfig")
+                        logger.error("Ошибка атрибута: %s.apps не имеет допустимого класса AppConfig", module_path)
                 else:
                     recursively_find_apps(app_path, module_path)
 

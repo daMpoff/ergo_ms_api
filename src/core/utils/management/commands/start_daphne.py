@@ -23,7 +23,7 @@
 from django.core.management.base import BaseCommand
 
 from src.core.utils.enums import LogLevel
-from src.core.utils.daphne import Daphne
+from src.core.utils.server.daphne import Daphne
 
 class Command(BaseCommand):
     """

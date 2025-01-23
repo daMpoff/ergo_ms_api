@@ -15,7 +15,7 @@
 >>> python src/manage.py stop_daphne
 """
 
-from src.core.utils.daphne import Daphne
+from src.core.utils.server.daphne import Daphne
 
 from django.core.management.base import BaseCommand
 from django.conf import settings
