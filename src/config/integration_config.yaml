@@ -4,6 +4,7 @@ TasksGraphView:
   handler: statistic.tasks_graph_handler
   status_code: 200
   renderers: json, browsable
+  auth_required: true
   required_params: []
   optional_params:
     limit: 10
@@ -88,6 +89,7 @@ MessagesView:
   handler: messages.messages_handler
   status_code: 200
   renderers: json, browsable
+  auth_required: false
   required_params: []
   optional_params:
     type: info

@@ -23,3 +23,5 @@ from src.config.settings.templates import *
 from src.config.settings.smtp import *
 
 from src.config.settings.integration import *
+
+from src.config.settings.swagger import *

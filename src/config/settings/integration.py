@@ -23,7 +23,7 @@ AVAILABLE_RENDERERS = {
 }
 
 # Настройки Swagger
-SWAGGER_SETTINGS = {
+INTEGRATION_SWAGGER_SETTINGS = {
     'DEFAULT_TAG': 'Интеграция модулей',
     'DEFAULT_RENDERER': 'json',
     'FILE_PARAM_NAME': 'file',

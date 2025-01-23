@@ -19,6 +19,10 @@ from rest_framework.exceptions import NotFound, ValidationError
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 
+from rest_framework import permissions, status
+from rest_framework.exceptions import PermissionDenied
+from rest_framework_simplejwt.authentication import JWTAuthentication
+
 logger = logging.getLogger('utils')
 
 # Настройки из конфига
@@ -27,7 +31,7 @@ class IntegrationSettings:
     standard_handlers_path: str = getattr(settings, 'STANDARD_HANDLERS_PATH', '')
     handler_method_name: str = getattr(settings, 'HANDLER_METHOD_NAME', '')
     available_renderers: Dict = getattr(settings, 'AVAILABLE_RENDERERS', {})
-    swagger_settings: Dict = getattr(settings, 'SWAGGER_SETTINGS', {})
+    swagger_settings: Dict = getattr(settings, 'INTEGRATION_SWAGGER_SETTINGS', {})
 
 def load_handler(handler_path: str) -> Any:
     """
@@ -427,6 +431,8 @@ def create_dynamic_api_view(method, renderers, handler, status_code,
         'method': method.upper(),
         'handler': staticmethod(handler),
         'default_status_code': status_code,
+        'permission_classes': [permissions.IsAuthenticated],
+        'authentication_classes': [JWTAuthentication],
     }
 
     # Добавляем поддержку загрузки файлов для POST запросов
@@ -438,10 +444,17 @@ def create_dynamic_api_view(method, renderers, handler, status_code,
         operation_description=swagger_description,
         manual_parameters=swagger_params,
         responses=swagger_response_schemas,
-        tags=[IntegrationSettings.swagger_settings['DEFAULT_TAG']]
+        tags=[IntegrationSettings.swagger_settings['DEFAULT_TAG']],
+        security=[{'Bearer': []}]
     )
     def method_func(self, request, *args, **kwargs):
         try:
+            if not request.user.is_authenticated:
+                return Response(
+                    {"error": "Authentication required"}, 
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+
             if method in ["GET", "DELETE"]:
                 query_params = request.query_params.dict()
                 response = self.handler(**query_params, **kwargs)
@@ -451,12 +464,14 @@ def create_dynamic_api_view(method, renderers, handler, status_code,
             elif method in ["POST", "PUT", "PATCH"]:
                 if request.FILES:
                     data = self.handler(
-                        **{IntegrationSettings.swagger_settings['FILE_PARAM_NAME']: request.FILES[IntegrationSettings.swagger_settings['FILE_PARAM_NAME']]}, 
+                        user=request.user,
+                        **{IntegrationSettings.swagger_settings['FILE_PARAM_NAME']: 
+                           request.FILES[IntegrationSettings.swagger_settings['FILE_PARAM_NAME']]}, 
                         **kwargs
                     )
                 else:
                     body_data = request.data
-                    data = self.handler(**body_data, **kwargs)
+                    data = self.handler(user=request.user, **body_data, **kwargs)
             else:
                 return Response({"error": "Unsupported method"}, status=400)
             
@@ -471,6 +486,8 @@ def create_dynamic_api_view(method, renderers, handler, status_code,
             return Response({"error": str(e)}, status=404)
         except ValidationError as e:
             return Response({"error": str(e)}, status=400)
+        except PermissionDenied as e:
+            return Response({"error": str(e)}, status=403)
         except Exception as e:
             return Response(
                 {"error": f"Внутренняя ошибка сервера: {str(e)}"}, 
@@ -491,10 +508,28 @@ def create_api_view(name: str, config: dict) -> Tuple[str, Type[APIView]]:
     status_code = int(endpoint_config["status_code"])
     description = endpoint_config.get("description", "")
     
+    auth_required = endpoint_config.get("auth_required", True)
+    
     required_params = endpoint_config.get("required_params", [])
     optional_params = endpoint_config.get("optional_params", {})
     params_description = endpoint_config.get("params_description", {})
     responses = endpoint_config.get("responses", {})
+    
+    if auth_required:
+        responses.update({
+            "401": {
+                "description": "Unauthorized - Authentication credentials were not provided",
+                "example": {
+                    "error": "Authentication credentials were not provided."
+                }
+            },
+            "403": {
+                "description": "Forbidden - You don't have permission to access this resource",
+                "example": {
+                    "error": "You do not have permission to perform this action."
+                }
+            }
+        })
     
     renderers_str = endpoint_config.get("renderers", IntegrationSettings.swagger_settings['DEFAULT_RENDERER']).lower()
     renderer_names = [r.strip() for r in renderers_str.split(',')]
@@ -523,6 +558,9 @@ def create_api_view(name: str, config: dict) -> Tuple[str, Type[APIView]]:
         swagger_responses=responses
     )
 
+    if not auth_required:
+        DynamicAPIView.permission_classes = [permissions.AllowAny]
+    
     DynamicAPIView.__name__ = name
     
     return path, DynamicAPIView
