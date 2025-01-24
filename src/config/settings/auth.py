@@ -12,6 +12,8 @@
 
 from datetime import timedelta
 
+from django.conf import settings
+
 from src.config.env import env
 
 # Список валидаторов паролей, используемых для проверки паролей пользователей.
@@ -48,6 +50,10 @@ REST_FRAMEWORK = {
         'user': THROTTLE_RATES_USER,
     }
 }
+
+# Установка настроек REST_FRAMEWORK глобально
+if not hasattr(settings, 'REST_FRAMEWORK'):
+    setattr(settings, 'REST_FRAMEWORK', REST_FRAMEWORK)
 
 # Настройка время жизни токенов доступа и обновления.
 ACCESS_TOKEN_LIFETIME = env.int('API_ACCESS_TOKEN_LIFETIME', default=30)

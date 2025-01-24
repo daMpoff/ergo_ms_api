@@ -5,6 +5,9 @@ TasksGraphView:
   status_code: 200
   renderers: json, browsable
   auth_required: true
+  throttle_rates:
+    anon: 100/minute
+    user: 100/minute
   required_params: []
   optional_params:
     limit: 10
@@ -50,6 +53,9 @@ ProcessGraphView:
   status_code: 200
   renderers: json, browsable
   auth_required: true
+  throttle_rates:
+    anon: 100/minute
+    user: 100/minute
   required_params: 
     - process_id
   optional_params:
@@ -91,6 +97,9 @@ MessagesView:
   status_code: 200
   renderers: json, browsable
   auth_required: false
+  throttle_rates:
+    anon: 1/minute
+    user: 1/minute
   required_params: []
   optional_params:
     type: info
@@ -126,6 +135,9 @@ FileUploadView:
   status_code: 201
   renderers: json, browsable
   auth_required: true
+  throttle_rates:
+    anon: 100/minute
+    user: 100/minute
   required_params:
     - file
   optional_params: {}
@@ -169,6 +181,9 @@ FileDownloadView:
   status_code: 200
   renderers: json, browsable
   auth_required: true
+  throttle_rates:
+    anon: 100/minute
+    user: 100/minute
   required_params:
     - filename
   optional_params: {}
@@ -207,3 +222,6 @@ Tasks1GraphView:
   method: GET
   handler: statistic.tasks_graph_handler
   auth_required: true
+  throttle_rates:
+    anon: 100/minute
+    user: 100/minute

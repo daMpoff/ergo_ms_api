@@ -22,6 +22,7 @@ from drf_yasg import openapi
 
 from rest_framework import permissions
 from rest_framework.exceptions import PermissionDenied
+from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 
 from src.core.utils.auto_api.base_views import BaseAPIView
 
@@ -218,6 +219,30 @@ class BaseDynamicAPIView(BaseAPIView):
                     code=getattr(permission, 'code', None)
                 )
 
+    def get_throttle_info(self):
+        """Получить информацию о текущих ограничениях запросов."""
+        throttle_info = {
+            'throttling_enabled': bool(self.throttle_classes),
+            'throttle_classes': []
+        }
+        
+        if self.throttle_classes:
+            for throttle_class in self.throttle_classes:
+                throttle = throttle_class()
+                try:
+                    rate = throttle.get_rate()
+                    scope = getattr(throttle, 'scope', 'default')
+                    throttle_info['throttle_classes'].append({
+                        'name': throttle_class.__name__,
+                        'scope': scope,
+                        'rate': rate
+                    })
+                except Exception as e:
+                    print(f"Error getting throttle info: {e}")
+                    continue
+                    
+        return throttle_info
+
     def dispatch(self, request, *args, **kwargs):
         """Обработка входящего запроса"""
         self.args = args
@@ -227,9 +252,23 @@ class BaseDynamicAPIView(BaseAPIView):
         request = super().initialize_request(request, *args, **kwargs)
         self.request = request
         
+        # Инициализируем throttle_info до блока try
+        throttle_info = {}
         try:
-            # Проверяем права доступа
+            # Проверяем права доступа и throttling
             self.check_permissions(request)
+            
+            # Проверяем throttling и сохраняем информацию о нем
+            for throttle in self.get_throttles():
+                if not throttle.allow_request(request, self):
+                    self.throttled(request, throttle.wait())
+                # Сохраняем информацию о throttle после его инициализации
+                if hasattr(throttle, 'get_rate'):
+                    throttle_info[throttle.__class__.__name__] = {
+                        'rate': throttle.get_rate(),
+                        'num_requests': getattr(throttle, 'num_requests', None),
+                        'duration': getattr(throttle, 'duration', None)
+                    }
             
             if request.method == 'OPTIONS':
                 response = self.options(request, *args, **kwargs)
@@ -286,78 +325,30 @@ class BaseDynamicAPIView(BaseAPIView):
         return None
 
 def create_dynamic_api_view(method, renderers, handler, status_code, 
-                          swagger_description, swagger_params, swagger_responses):
+                          swagger_description, swagger_params, swagger_responses,
+                          throttle_rates=None):
     """Фабрика для создания классов DynamicAPIView"""
     class_name = f'DynamicAPIView_{method}'
     
-    # Преобразуем responses из конфига в формат для swagger
-    swagger_response_schemas = {}
-    for status_code_str, response_info in swagger_responses.items():
-        try:
-            response_status = int(status_code_str)
+    # Создаем динамические классы throttling если указаны специфические rates
+    throttle_classes = []
+    if throttle_rates:
+        if 'anon' in throttle_rates:
+            class CustomAnonRateThrottle(AnonRateThrottle):
+                rate = throttle_rates['anon']
+            throttle_classes.append(CustomAnonRateThrottle)
             
-            # Создаем схему для ответа
-            if isinstance(response_info, dict) and 'example' in response_info:
-                example_data = response_info['example']
-                
-                if example_data == 'binary_data':
-                    # Для бинарных данных
-                    properties = {
-                        'file': openapi.Schema(
-                            type=openapi.TYPE_STRING,
-                            format='binary'
-                        )
-                    }
-                elif isinstance(example_data, dict):
-                    # Для JSON ответов
-                    properties = {}
-                    for key, value in example_data.items():
-                        if isinstance(value, dict):
-                            nested_properties = {
-                                k: openapi.Schema(
-                                    type=openapi.TYPE_STRING if isinstance(v, str) 
-                                    else openapi.TYPE_INTEGER if isinstance(v, int)
-                                    else openapi.TYPE_OBJECT,
-                                    example=v
-                                ) for k, v in value.items()
-                            }
-                            properties[key] = openapi.Schema(
-                                type=openapi.TYPE_OBJECT,
-                                properties=nested_properties
-                            )
-                        else:
-                            properties[key] = openapi.Schema(
-                                type=openapi.TYPE_STRING if isinstance(value, str)
-                                else openapi.TYPE_INTEGER if isinstance(value, int)
-                                else openapi.TYPE_OBJECT,
-                                example=value
-                            )
-                    
-                schema = openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties=properties
-                )
-                
-                swagger_response_schemas[response_status] = openapi.Response(
-                    description=response_info.get('description', ''),
-                    schema=schema,
-                    examples={'application/json': example_data} if example_data != 'binary_data' else None
-                )
-            else:
-                # Для ответов без примеров
-                swagger_response_schemas[response_status] = openapi.Response(
-                    description=response_info.get('description', '')
-                )
-                
-        except (ValueError, TypeError) as e:
-            logger.error("Ошибка при обработке response для кода %s: %s", status_code_str, e)
-            continue
+        if 'user' in throttle_rates:
+            class CustomUserRateThrottle(UserRateThrottle):
+                rate = throttle_rates['user']
+            throttle_classes.append(CustomUserRateThrottle)
 
     class_attrs = {
         'renderer_classes': renderers,
         'method': method.upper(),
         'handler': staticmethod(handler),
         'default_status_code': status_code,
+        'throttle_classes': throttle_classes,  # Добавляем throttle классы
     }
 
     # Добавляем поддержку загрузки файлов для POST запросов
@@ -368,7 +359,7 @@ def create_dynamic_api_view(method, renderers, handler, status_code,
     @swagger_auto_schema(
         operation_description=swagger_description,
         manual_parameters=swagger_params,
-        responses=swagger_response_schemas,
+        responses=swagger_responses,
         tags=[IntegrationSettings.swagger_settings['DEFAULT_TAG']],
     )
     def method_func(self, request, *args, **kwargs):
@@ -425,13 +416,15 @@ def create_dynamic_api_view(method, renderers, handler, status_code,
 
 def create_api_view(name: str, config: dict) -> Tuple[str, Type[APIView]]:
     """Создает APIView на основе конфигурации."""
-    # Обязательные параметры
     endpoint_config = config[name]
     path = endpoint_config["path"]
     handler_path = endpoint_config["handler"]
     method = endpoint_config["method"]
 
-    # Необязательные параметры  
+    # Получаем настройки throttling из конфига
+    throttle_rates = endpoint_config.get("throttle_rates", None)
+
+    # Обязательные параметры
     status_code = endpoint_config.get("status_code", None)
     description = endpoint_config.get("description", "")
     # Получаем требование аутентификации из конфига
@@ -482,7 +475,8 @@ def create_api_view(name: str, config: dict) -> Tuple[str, Type[APIView]]:
         status_code=status_code,
         swagger_description=description,
         swagger_params=swagger_params,
-        swagger_responses=responses
+        swagger_responses=responses,
+        throttle_rates=throttle_rates  # Передаем настройки throttling
     )
 
     # Создаем новый класс с нужными permission_classes
