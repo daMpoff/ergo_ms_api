@@ -4,14 +4,24 @@
 
 from scripts.base import PoetryCommand
 
-class MakeMigrationsCommand(PoetryCommand):
+class CreateSuperuserCommand(PoetryCommand):
     """
-    Команда для создания миграций Django.
+    Команда для создания суперпользователя Django.
 
     Используется для создания новых файлов миграций на основе изменений в моделях.
     """
-    poetry_command_name = 'makemigrations'
+    poetry_command_name = 'make_migrations'
     django_command_name = 'makemigrations'
+
+    def __init__(self):
+        super().__init__(self.django_command_name)
+
+class MakeMigrationsCommand(PoetryCommand):
+    """
+    Команда для создания миграций Django.
+    """
+    poetry_command_name = 'create_superuser'
+    django_command_name = 'createsuperuser'
 
     def __init__(self):
         super().__init__(self.django_command_name)
@@ -106,7 +116,7 @@ class CollectStaticCommand(PoetryCommand):
 
     Копирует статические файлы из приложений в единую директорию.
     """
-    poetry_command_name = 'collectstatic'
+    poetry_command_name = 'collect_static'
     django_command_name = 'collectstatic'
 
     def __init__(self):
