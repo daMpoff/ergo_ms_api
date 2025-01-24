@@ -1,5 +1,5 @@
 """
-Модуль для динамического создания API эндпоинтов на основе конфигурации.
+Файл для динамического создания API эндпоинтов на основе конфигурации.
 """
 
 import importlib
@@ -219,30 +219,6 @@ class BaseDynamicAPIView(BaseAPIView):
                     code=getattr(permission, 'code', None)
                 )
 
-    def get_throttle_info(self):
-        """Получить информацию о текущих ограничениях запросов."""
-        throttle_info = {
-            'throttling_enabled': bool(self.throttle_classes),
-            'throttle_classes': []
-        }
-        
-        if self.throttle_classes:
-            for throttle_class in self.throttle_classes:
-                throttle = throttle_class()
-                try:
-                    rate = throttle.get_rate()
-                    scope = getattr(throttle, 'scope', 'default')
-                    throttle_info['throttle_classes'].append({
-                        'name': throttle_class.__name__,
-                        'scope': scope,
-                        'rate': rate
-                    })
-                except Exception as e:
-                    print(f"Error getting throttle info: {e}")
-                    continue
-                    
-        return throttle_info
-
     def dispatch(self, request, *args, **kwargs):
         """Обработка входящего запроса"""
         self.args = args
@@ -343,12 +319,75 @@ def create_dynamic_api_view(method, renderers, handler, status_code,
                 rate = throttle_rates['user']
             throttle_classes.append(CustomUserRateThrottle)
 
+    # Преобразуем responses из конфига в формат для swagger
+    swagger_response_schemas = {}
+    for status_code_str, response_info in swagger_responses.items():
+        try:
+            response_status = int(status_code_str)
+            
+            # Создаем схему для ответа
+            if isinstance(response_info, dict) and 'example' in response_info:
+                example_data = response_info['example']
+                
+                if example_data == 'binary_data':
+                    # Для бинарных данных
+                    properties = {
+                        'file': openapi.Schema(
+                            type=openapi.TYPE_STRING,
+                            format='binary'
+                        )
+                    }
+                elif isinstance(example_data, dict):
+                    # Для JSON ответов
+                    properties = {}
+                    for key, value in example_data.items():
+                        if isinstance(value, dict):
+                            nested_properties = {
+                                k: openapi.Schema(
+                                    type=openapi.TYPE_STRING if isinstance(v, str) 
+                                    else openapi.TYPE_INTEGER if isinstance(v, int)
+                                    else openapi.TYPE_OBJECT,
+                                    example=v
+                                ) for k, v in value.items()
+                            }
+                            properties[key] = openapi.Schema(
+                                type=openapi.TYPE_OBJECT,
+                                properties=nested_properties
+                            )
+                        else:
+                            properties[key] = openapi.Schema(
+                                type=openapi.TYPE_STRING if isinstance(value, str)
+                                else openapi.TYPE_INTEGER if isinstance(value, int)
+                                else openapi.TYPE_OBJECT,
+                                example=value
+                            )
+                    
+                schema = openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties=properties
+                )
+                
+                swagger_response_schemas[response_status] = openapi.Response(
+                    description=response_info.get('description', ''),
+                    schema=schema,
+                    examples={'application/json': example_data} if example_data != 'binary_data' else None
+                )
+            else:
+                # Для ответов без примеров
+                swagger_response_schemas[response_status] = openapi.Response(
+                    description=response_info.get('description', '')
+                )
+                
+        except (ValueError, TypeError) as e:
+            logger.error("Ошибка при обработке response для кода %s: %s", status_code_str, e)
+            continue
+
     class_attrs = {
         'renderer_classes': renderers,
         'method': method.upper(),
         'handler': staticmethod(handler),
         'default_status_code': status_code,
-        'throttle_classes': throttle_classes,  # Добавляем throttle классы
+        'throttle_classes': throttle_classes,
     }
 
     # Добавляем поддержку загрузки файлов для POST запросов
@@ -359,7 +398,7 @@ def create_dynamic_api_view(method, renderers, handler, status_code,
     @swagger_auto_schema(
         operation_description=swagger_description,
         manual_parameters=swagger_params,
-        responses=swagger_responses,
+        responses=swagger_response_schemas,  # Используем преобразованные схемы
         tags=[IntegrationSettings.swagger_settings['DEFAULT_TAG']],
     )
     def method_func(self, request, *args, **kwargs):
