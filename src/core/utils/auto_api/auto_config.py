@@ -18,7 +18,7 @@ from django.urls import (
 
 from src.config.env import env
 
-logger = logging.getLogger('standard_functions')
+logger = logging.getLogger('utils')
 
 def discover_installed_apps(apps_dir: str) -> List[str]:
     """

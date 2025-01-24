@@ -1,11 +1,7 @@
-from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
-from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.tokens import RefreshToken
-
-from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
@@ -23,10 +19,9 @@ from src.core.cms.adp.serializers import (
     UserRegistrationSerializer,
     UserRegistrationValidationSerializer,
 )
+from src.core.utils.auto_api.base_views import BaseAPIView
 
-class UserRegistrationValidationView(APIView):
-    throttle_classes = [AnonRateThrottle, UserRateThrottle]
-
+class UserRegistrationValidationView(BaseAPIView):
     @swagger_auto_schema(
         operation_description="Регистрация нового пользователя.",
 
@@ -95,7 +90,9 @@ class UserRegistrationValidationView(APIView):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-class SendConfirmationCodeView(APIView):
+class SendConfirmationCodeView(BaseAPIView):
+    permission_classes = [IsAuthenticated]
+    
     def post(self, request):
         email = request.data.get("email")
         if not email:
@@ -115,7 +112,9 @@ class SendConfirmationCodeView(APIView):
 
         return Response({"message": "Confirmation code sent"}, status=status.HTTP_200_OK)
 
-class VerifyConfirmationCodeView(APIView):
+class VerifyConfirmationCodeView(BaseAPIView):
+    permission_classes = [IsAuthenticated]
+
     def post(self, request):
         email = request.data.get("email")
         code = request.data.get("code")
@@ -136,9 +135,7 @@ class VerifyConfirmationCodeView(APIView):
         else:
             return Response({"error": "Invalid code"}, status=status.HTTP_400_BAD_REQUEST)
         
-class UserRegistrationView(APIView):
-    throttle_classes = [AnonRateThrottle, UserRateThrottle]
-
+class UserRegistrationView(BaseAPIView):
     @swagger_auto_schema(
         operation_description="Проверка регистрации.",
 
@@ -209,9 +206,7 @@ class UserRegistrationView(APIView):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-class UserAuthorizationView(APIView):
-    throttle_classes = [AnonRateThrottle, UserRateThrottle]
-
+class UserAuthorizationView(BaseAPIView):
     @swagger_auto_schema(
         operation_description="Авторизация пользователя.",
         request_body=openapi.Schema(
@@ -284,9 +279,8 @@ class UserAuthorizationView(APIView):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-class ProtectedView(APIView):
-    permission_classes = [JWTAuthentication]
-    throttle_classes = [AnonRateThrottle, UserRateThrottle]
+class ProtectedView(BaseAPIView):
+    permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
         operation_description="Защищенное представление.",
@@ -294,6 +288,7 @@ class ProtectedView(APIView):
             200: "Вы авторизованы.",
             401: "Неавторизованный доступ."
         },
+        security=[{'Bearer': []}]
     )
     def get(self, request):
         return Response(

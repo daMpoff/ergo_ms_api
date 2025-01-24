@@ -10,7 +10,7 @@ import os
 
 from django.core.wsgi import get_wsgi_application
 
-from src.config.auto_config import get_env_deploy_type
+from src.core.utils.auto_api.auto_config import get_env_deploy_type
 
 deploy_type = get_env_deploy_type()
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', deploy_type)

@@ -63,6 +63,8 @@ LOGGING = {
             'level': 'INFO',
             'propagate': True,
         },
+
+        # Логгер для Poetry скриптов.
         'scripts': {
             'handlers': ['console'],
             'level': 'INFO',

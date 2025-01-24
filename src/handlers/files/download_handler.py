@@ -7,7 +7,7 @@ from django.utils.encoding import smart_str
 
 from rest_framework.exceptions import NotFound
 
-from src.core.utils.integration.base_handler import BaseHandler
+from src.core.utils.auto_api.base_handler import BaseHandler
 
 class HandlerClass(BaseHandler):
     def process(self):

@@ -13,9 +13,9 @@ from django.urls import (
 )
 
 from src.config.settings.integration import INTEGRATION_CONFIG_PATH
-from src.core.utils.integration.modules_integration import generate_routes_from_config
+from src.core.utils.auto_api.modules_integration import generate_routes_from_config
 
-from src.config.auto_config import discover_installed_app_urls
+from src.core.utils.auto_api.auto_config import discover_installed_app_urls
 from src.config.settings.apps import EXTERNAL_MODULES_DIR
 
 urlpatterns = [

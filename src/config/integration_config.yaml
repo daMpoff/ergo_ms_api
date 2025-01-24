@@ -49,6 +49,7 @@ ProcessGraphView:
   handler: statistic.tasks_graph_handler
   status_code: 200
   renderers: json, browsable
+  auth_required: true
   required_params: 
     - process_id
   optional_params:
@@ -124,6 +125,7 @@ FileUploadView:
   handler: files.upload_handler
   status_code: 201
   renderers: json, browsable
+  auth_required: true
   required_params:
     - file
   optional_params: {}
@@ -166,6 +168,7 @@ FileDownloadView:
   handler: files.download_handler
   status_code: 200
   renderers: json, browsable
+  auth_required: true
   required_params:
     - filename
   optional_params: {}
@@ -198,3 +201,9 @@ FileDownloadView:
       description: Ошибка в запросе
       example:
         error: "Имя файла не указано"
+
+Tasks1GraphView:
+  path: test-integration/tasks1/
+  method: GET
+  handler: statistic.tasks_graph_handler
+  auth_required: true

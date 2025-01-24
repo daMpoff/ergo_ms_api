@@ -6,9 +6,7 @@ import os
 import sys
 
 import psycopg2
-from psycopg2 import OperationalError
 
-from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 
@@ -19,7 +17,11 @@ from django.conf import settings
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 
-class CheckAPIView(APIView):
+from src.config.env import env
+from src.config.settings.base import BASE_DIR
+from src.core.utils.auto_api.base_views import BaseAPIView
+
+class CheckDatabaseConnectionView(BaseAPIView):
     """
     APIView для проверки подключения к базе данных и выполнения миграций.
 
@@ -34,23 +36,28 @@ class CheckAPIView(APIView):
             properties={
                 'host': openapi.Schema(
                     type=openapi.TYPE_STRING,
+                    default='localhost',
                     description='Хост'
                 ),
                 'port': openapi.Schema(
                     type=openapi.TYPE_STRING,
+                    default='5432',
                     description='Порт'
                 ),
                 'username': openapi.Schema(
                     type=openapi.TYPE_STRING,
+                    default='postgres',
                     description='Имя пользователя'
                 ),
                 'password': openapi.Schema(
                     type=openapi.TYPE_STRING,
                     format=openapi.FORMAT_PASSWORD,
+                    default='admin',
                     description='Пароль'
                 ),
                 'database': openapi.Schema(
                     type=openapi.TYPE_STRING,
+                    default='ergo_ms',
                     description='База данных'
                 ),
             },
@@ -98,17 +105,40 @@ class CheckAPIView(APIView):
             )
             connection.close()
 
-            # Создание .env файла с параметрами подключения
-            env_file_path = os.path.join(os.getcwd(), ".env")
-            env_content = (
-                f"DB_NAME={database}\n"
-                f"DB_USER={username}\n"
-                f"DB_PASSWORD={password}\n"
-                f"DB_HOST={host}\n"
-                f"DB_PORT={port}\n"
-            )
+            # Обновляем .env файл с параметрами подключения
+            env_file_path = os.path.join(BASE_DIR.parent.parent, '.env')
+            
+            # Сохраняем существующие переменные
+            existing_vars = {}
+            if os.path.exists(env_file_path):
+                with open(env_file_path, 'r') as env_file:
+                    for line in env_file:
+                        if '=' in line and not line.startswith(('DB_NAME=', 'DB_USER=', 'DB_PASSWORD=', 'DB_HOST=', 'DB_PORT=')):
+                            key, value = line.strip().split('=', 1)
+                            existing_vars[key] = value
+
+            # Добавляем новые параметры БД
+            env_content = ''
+            for key, value in existing_vars.items():
+                env_content += f"{key}={value}\n"
+                
+            # Добавляем параметры БД
+            db_vars = {
+                "DB_NAME": database,
+                "DB_USER": username,
+                "DB_PASSWORD": password,
+                "DB_HOST": host,
+                "DB_PORT": port,
+            }
+            for key, value in db_vars.items():
+                env_content += f"{key}={value}\n"
+
+            # Записываем обновленный файл
             with open(env_file_path, "w") as env_file:
                 env_file.write(env_content)
+
+            # Перезагружаем переменные окружения
+            env.read_env(env_file_path)
 
             # Обновление настроек базы данных в Django
             settings.DATABASES['default'].update({
@@ -130,5 +160,13 @@ class CheckAPIView(APIView):
             sys.stderr = sys.__stderr__
 
             return Response({"message": "Подключение успешно."}, status=status.HTTP_200_OK)
-        except OperationalError as e:
-            return Response({"message": "Нет подключения к базе данных."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        except (psycopg2.OperationalError, OperationalError) as e:
+            error_message = (
+                "Нет подключения к базе данных. "
+                "Пожалуйста, проверьте, что сервер PostgreSQL запущен "
+                "и доступен по указанным параметрам подключения."
+            )
+            return Response(
+                {"message": error_message}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

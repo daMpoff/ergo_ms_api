@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Type, Union, Callable
+from typing import Any, Dict, Type, Callable
 
 class BaseHandler(ABC):
     """Базовый класс для всех обработчиков."""

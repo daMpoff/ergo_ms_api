@@ -5,6 +5,7 @@
 import importlib
 import yaml
 import logging
+
 from typing import Any, Dict, Tuple, Type, List
 
 from django.urls import path
@@ -19,9 +20,10 @@ from rest_framework.exceptions import NotFound, ValidationError
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 
-from rest_framework import permissions, status
+from rest_framework import permissions
 from rest_framework.exceptions import PermissionDenied
-from rest_framework_simplejwt.authentication import JWTAuthentication
+
+from src.core.utils.auto_api.base_views import BaseAPIView
 
 logger = logging.getLogger('utils')
 
@@ -168,109 +170,13 @@ def create_handler_instance(handler_class, required_params, optional_params):
     """Создает экземпляр обработчика с параметрами из конфига."""
     return handler_class(required_params=required_params, optional_params=optional_params)
 
-def create_swagger_parameters(method: str, params_desc: Dict[str, Any], 
-                            required_params: list, optional_params: Dict[str, Any]):
-    """Создает параметры для swagger документации."""
-    parameters = []
-    
-    # Словарь соответствия типов из конфига к типам openapi
-    type_mapping = {
-        'string': openapi.TYPE_STRING,
-        'integer': openapi.TYPE_INTEGER,
-        'boolean': openapi.TYPE_BOOLEAN,
-        'file': openapi.TYPE_FILE,
-        'array': openapi.TYPE_ARRAY,
-        'object': openapi.TYPE_OBJECT,
-    }
-
-    def get_param_info(param_name, param_value):
-        """Получает информацию о параметре в унифицированном формате"""
-        if isinstance(param_value, dict):
-            return {
-                'description': param_value.get('description', ''),
-                'type': param_value.get('type', 'string')
-            }
-        return {
-            'description': param_value,
-            'type': 'string'
-        }
-    
-    # Для POST запросов с файлами создаем специальный параметр
-    if method in ["POST", "PUT", "PATCH"] and any(param == 'file' for param in required_params):
-        file_info = get_param_info('file', params_desc.get('file', 'Файл для загрузки'))
-        parameters.append(
-            openapi.Parameter(
-                name='file',
-                in_=openapi.IN_FORM,
-                description=file_info['description'],
-                type=openapi.TYPE_FILE,
-                required=True
-            )
-        )
-        return parameters
-    
-    # Для обычных POST запросов создаем единую схему для тела запроса
-    if method in ["POST", "PUT", "PATCH"]:
-        properties = {}
-        required = []
-        
-        for param_name, param_value in params_desc.items():
-            param_info = get_param_info(param_name, param_value)
-            is_required = param_name in required_params
-            if is_required:
-                required.append(param_name)
-            
-            param_type = type_mapping.get(param_info['type'], openapi.TYPE_STRING)
-            
-            if param_name in optional_params:
-                default_value = optional_params[param_name]
-                if default_value is None:
-                    properties[param_name] = openapi.Schema(type=param_type, nullable=True)
-                    continue
-            
-            properties[param_name] = openapi.Schema(
-                type=param_type,
-                description=param_info['description']
-            )
-        
-        body_schema = openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties=properties,
-            required=required
-        )
-        
-        parameters.append(
-            openapi.Parameter(
-                name='body',
-                in_=openapi.IN_BODY,
-                required=True,
-                schema=body_schema
-            )
-        )
-    else:
-        for param_name, param_value in params_desc.items():
-            param_info = get_param_info(param_name, param_value)
-            is_required = param_name in required_params
-            param_type = type_mapping.get(param_info['type'], openapi.TYPE_STRING)
-            
-            parameters.append(
-                openapi.Parameter(
-                    name=param_name,
-                    in_=openapi.IN_QUERY,
-                    description=param_info['description'],
-                    required=is_required,
-                    type=param_type
-                )
-            )
-    
-    return parameters
-
-class BaseDynamicAPIView(APIView):
+class BaseDynamicAPIView(BaseAPIView):
     """Базовый класс для динамических API views"""
     
     method = None
     handler = None
     status_code = None
+    permission_classes = None
     
     def get_renderer_context(self):
         """Получение контекста для рендерера"""
@@ -298,18 +204,33 @@ class BaseDynamicAPIView(APIView):
         # Если ничего не подошло, используем первый доступный рендерер
         return self.renderer_classes[0]()
         
+    def get_permissions(self):
+        """Переопределяем метод для корректной работы permissions"""
+        return [permission() for permission in self.permission_classes]
+    
+    def check_permissions(self, request):
+        """Проверяем разрешения перед выполнением запроса"""
+        for permission in self.get_permissions():
+            if not permission.has_permission(request, self):
+                self.permission_denied(
+                    request,
+                    message=getattr(permission, 'message', None),
+                    code=getattr(permission, 'code', None)
+                )
+
     def dispatch(self, request, *args, **kwargs):
         """Обработка входящего запроса"""
-        # Используем родительский dispatch для правильной инициализации
         self.args = args
         self.kwargs = kwargs
         self.headers = self.default_response_headers
         
-        # Позволяем DRF инициализировать request
         request = super().initialize_request(request, *args, **kwargs)
         self.request = request
-
+        
         try:
+            # Проверяем права доступа
+            self.check_permissions(request)
+            
             if request.method == 'OPTIONS':
                 response = self.options(request, *args, **kwargs)
             elif request.method != self.method:
@@ -317,6 +238,12 @@ class BaseDynamicAPIView(APIView):
             else:
                 handler = self.get_handler()
                 response = handler(request, *args, **kwargs)
+                
+        except PermissionDenied as e:
+            response = Response(
+                {"error": str(e) or "У вас нет прав для выполнения этого действия"}, 
+                status=403
+            )
         except Exception as exc:
             response = self.handle_exception(exc)
 
@@ -359,7 +286,7 @@ class BaseDynamicAPIView(APIView):
         return None
 
 def create_dynamic_api_view(method, renderers, handler, status_code, 
-                            swagger_description, swagger_params, swagger_responses):
+                          swagger_description, swagger_params, swagger_responses):
     """Фабрика для создания классов DynamicAPIView"""
     class_name = f'DynamicAPIView_{method}'
     
@@ -431,8 +358,6 @@ def create_dynamic_api_view(method, renderers, handler, status_code,
         'method': method.upper(),
         'handler': staticmethod(handler),
         'default_status_code': status_code,
-        'permission_classes': [permissions.IsAuthenticated],
-        'authentication_classes': [JWTAuthentication],
     }
 
     # Добавляем поддержку загрузки файлов для POST запросов
@@ -445,16 +370,16 @@ def create_dynamic_api_view(method, renderers, handler, status_code,
         manual_parameters=swagger_params,
         responses=swagger_response_schemas,
         tags=[IntegrationSettings.swagger_settings['DEFAULT_TAG']],
-        security=[{'Bearer': []}]
     )
     def method_func(self, request, *args, **kwargs):
         try:
-            if not request.user.is_authenticated:
+            # Проверяем аутентификацию перед выполнением запроса
+            if not request.user.is_authenticated and self.permission_classes == [permissions.IsAuthenticated]:
                 return Response(
-                    {"error": "Authentication required"}, 
-                    status=status.HTTP_401_UNAUTHORIZED
+                    {"detail": "Учетные данные не были предоставлены."}, 
+                    status=401
                 )
-
+                
             if method in ["GET", "DELETE"]:
                 query_params = request.query_params.dict()
                 response = self.handler(**query_params, **kwargs)
@@ -471,23 +396,22 @@ def create_dynamic_api_view(method, renderers, handler, status_code,
                     )
                 else:
                     body_data = request.data
-                    data = self.handler(user=request.user, **body_data, **kwargs)
+                    data = self.handler(
+                        user=request.user,
+                        **body_data, 
+                        **kwargs
+                    )
             else:
-                return Response({"error": "Unsupported method"}, status=400)
+                return Response({"error": "Неподдерживаемый метод"}, status=400)
             
-            response = Response(data, status=self.default_status_code)
-            response.accepted_renderer = self.get_renderer()
-            response.accepted_media_type = response.accepted_renderer.media_type
-            response.renderer_context = {}
-            
-            return response
+            return Response(data, status=self.default_status_code)
             
         except NotFound as e:
             return Response({"error": str(e)}, status=404)
         except ValidationError as e:
             return Response({"error": str(e)}, status=400)
         except PermissionDenied as e:
-            return Response({"error": str(e)}, status=403)
+            return Response({"error": "У вас нет прав для выполнения этого действия"}, status=403)
         except Exception as e:
             return Response(
                 {"error": f"Внутренняя ошибка сервера: {str(e)}"}, 
@@ -501,32 +425,35 @@ def create_dynamic_api_view(method, renderers, handler, status_code,
 
 def create_api_view(name: str, config: dict) -> Tuple[str, Type[APIView]]:
     """Создает APIView на основе конфигурации."""
+    # Обязательные параметры
     endpoint_config = config[name]
     path = endpoint_config["path"]
     handler_path = endpoint_config["handler"]
     method = endpoint_config["method"]
-    status_code = int(endpoint_config["status_code"])
+
+    # Необязательные параметры  
+    status_code = endpoint_config.get("status_code", None)
     description = endpoint_config.get("description", "")
-    
-    auth_required = endpoint_config.get("auth_required", True)
-    
+    # Получаем требование аутентификации из конфига
+    auth_required = endpoint_config.get("auth_required", False)
     required_params = endpoint_config.get("required_params", [])
     optional_params = endpoint_config.get("optional_params", {})
     params_description = endpoint_config.get("params_description", {})
     responses = endpoint_config.get("responses", {})
     
+    # Добавляем стандартные ответы для случаев с требованием аутентификации
     if auth_required:
         responses.update({
             "401": {
-                "description": "Unauthorized - Authentication credentials were not provided",
+                "description": "Не авторизован - Необходимо предоставить учетные данные",
                 "example": {
-                    "error": "Authentication credentials were not provided."
+                    "error": "Необходима аутентификация"
                 }
             },
             "403": {
-                "description": "Forbidden - You don't have permission to access this resource",
+                "description": "Запрещено - У вас нет прав для доступа к этому ресурсу",
                 "example": {
-                    "error": "You do not have permission to perform this action."
+                    "error": "У вас нет прав для выполнения этого действия"
                 }
             }
         })
@@ -544,7 +471,7 @@ def create_api_view(name: str, config: dict) -> Tuple[str, Type[APIView]]:
     
     handler = create_handler_instance(handler_class, required_params, optional_params)
 
-    swagger_params = create_swagger_parameters(
+    swagger_params = SwaggerSchemaBuilder.create_parameters(
         method, params_description, required_params, optional_params
     )
 
@@ -558,12 +485,17 @@ def create_api_view(name: str, config: dict) -> Tuple[str, Type[APIView]]:
         swagger_responses=responses
     )
 
-    if not auth_required:
-        DynamicAPIView.permission_classes = [permissions.AllowAny]
+    # Создаем новый класс с нужными permission_classes
+    class CustomDynamicAPIView(DynamicAPIView):
+        permission_classes = [permissions.IsAuthenticated] if auth_required else [permissions.AllowAny]
+        
+        def get_permissions(self):
+            """Переопределяем метод для корректной работы permissions"""
+            return [permission() for permission in self.permission_classes]
+
+    CustomDynamicAPIView.__name__ = name
     
-    DynamicAPIView.__name__ = name
-    
-    return path, DynamicAPIView
+    return path, CustomDynamicAPIView
 
 def generate_routes_from_config(config_path: str) -> list:
     """Генерирует маршруты из конфигурации."""

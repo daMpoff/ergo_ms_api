@@ -7,9 +7,9 @@ from django.urls import (
 )
 
 from src.core.utils.views import (
-    CheckAPIView,
+    CheckDatabaseConnectionView,
 )
 
 urlpatterns = [
-    path('check-database-connection/', CheckAPIView.as_view(), name='check-database-connection'),
+    path('check-database-connection/', CheckDatabaseConnectionView.as_view(), name='check-database-connection'),
 ]
