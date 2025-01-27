@@ -23,7 +23,9 @@ from drf_yasg import openapi
 from rest_framework import permissions
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
+from rest_framework.permissions import IsAuthenticated
 
+from src.core.utils.auto_api.api_classes_code import reconstruct_class_code
 from src.core.utils.auto_api.base_views import BaseAPIView
 
 logger = logging.getLogger('utils')
@@ -301,8 +303,8 @@ class BaseDynamicAPIView(BaseAPIView):
         return None
 
 def create_dynamic_api_view(method, renderers, handler, status_code, 
-                          swagger_description, swagger_params, swagger_responses,
-                          throttle_rates=None):
+                            swagger_description, swagger_params, swagger_responses,
+                            throttle_rates=None, tags=None):
     """Фабрика для создания классов DynamicAPIView"""
     class_name = f'DynamicAPIView_{method}'
     
@@ -399,12 +401,12 @@ def create_dynamic_api_view(method, renderers, handler, status_code,
         operation_description=swagger_description,
         manual_parameters=swagger_params,
         responses=swagger_response_schemas,  # Используем преобразованные схемы
-        tags=[IntegrationSettings.swagger_settings['DEFAULT_TAG']],
+        tags=tags,  # Используем извлеченные теги
     )
     def method_func(self, request, *args, **kwargs):
         try:
             # Проверяем аутентификацию перед выполнением запроса
-            if not request.user.is_authenticated and self.permission_classes == [permissions.IsAuthenticated]:
+            if not request.user.is_authenticated and self.permission_classes == [IsAuthenticated]:
                 return Response(
                     {"detail": "Учетные данные не были предоставлены."}, 
                     status=401
@@ -472,6 +474,9 @@ def create_api_view(name: str, config: dict) -> Tuple[str, Type[APIView]]:
     optional_params = endpoint_config.get("optional_params", {})
     params_description = endpoint_config.get("params_description", {})
     responses = endpoint_config.get("responses", {})
+
+    # Добавляем параметр tags в create_dynamic_api_view
+    tags = endpoint_config.get("tags", [IntegrationSettings.swagger_settings['DEFAULT_TAG']]),
     
     # Добавляем стандартные ответы для случаев с требованием аутентификации
     if auth_required:
@@ -515,18 +520,17 @@ def create_api_view(name: str, config: dict) -> Tuple[str, Type[APIView]]:
         swagger_description=description,
         swagger_params=swagger_params,
         swagger_responses=responses,
-        throttle_rates=throttle_rates  # Передаем настройки throttling
+        throttle_rates=throttle_rates,
+        tags=tags,
     )
 
     # Создаем новый класс с нужными permission_classes
     class CustomDynamicAPIView(DynamicAPIView):
-        permission_classes = [permissions.IsAuthenticated] if auth_required else [permissions.AllowAny]
-        
-        def get_permissions(self):
-            """Переопределяем метод для корректной работы permissions"""
-            return [permission() for permission in self.permission_classes]
+        permission_classes = [IsAuthenticated] if auth_required else [permissions.AllowAny]
 
     CustomDynamicAPIView.__name__ = name
+
+    #reconstructed_code = reconstruct_class_code(CustomDynamicAPIView)
     
     return path, CustomDynamicAPIView
 
