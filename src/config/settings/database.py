@@ -56,3 +56,23 @@ except (psycopg2.OperationalError, ImproperlyConfigured):
 Используется BigAutoField для автоматического создания больших целочисленных полей.
 """
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Конфиг для работы с БД
+class DBConfig:
+    def __init__(self) -> None:
+        self.USERNAME = DATABASES['default']['USER']
+        self.PASSWORD = DATABASES['default']['PASSWORD']
+        self.HOST = DATABASES['default']['HOST']
+        self.PORT = DATABASES['default']['PORT']
+        self.DB_NAME = DATABASES['default']['NAME']
+
+    def __repr__(self) -> str:
+        return self.SQLALCHEMY_URL
+
+    @property
+    def SQLALCHEMY_URL(self):
+        return f"postgresql+psycopg2://{self.USERNAME}:{self.PASSWORD}@{self.HOST}:{self.PORT}/{self.DB_NAME}"
+
+    @property
+    def POSTGRESQL_URL(self):
+        return f"postgresql://{self.USERNAME}:{self.PASSWORD}@{self.HOST}:{self.PORT}/{self.DB_NAME}"

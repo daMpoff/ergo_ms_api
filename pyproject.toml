@@ -27,6 +27,7 @@ django-environ = "^0.11.2"
 matplotlib = "^3.10.0"
 scikit-learn = "^1.6.0"
 pyyaml = "^6.0.2"
+sqlalchemy = "^2.0.37"
 
 [tool.poetry.scripts]
 cmd = "scripts.__main__:main"
