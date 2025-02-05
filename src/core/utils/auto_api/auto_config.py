@@ -68,7 +68,7 @@ def discover_installed_apps(apps_dir: str) -> List[str]:
 
     return installed_apps
 
-def discover_installed_app_urls(apps_dir: str) -> List[str]:
+def discover_installed_app_urls(apps_dir: str, prefix: str) -> List[str]:
     """
     Рекурсивно обходит директории и находит URL-конфигурации для установленных приложений.
 
@@ -85,7 +85,12 @@ def discover_installed_app_urls(apps_dir: str) -> List[str]:
         # Проверяем, является ли подпапка директорией
         if os.path.isdir(module_path):
             # Формируем путь для include
-            url_pattern = path(f"external/{module_name}/", include(f"src.external.{module_name}.urls"))
+            if prefix == None:
+                route = f"{prefix}/{module_name}/"
+            else: 
+                route = f"{module_name}/"
+
+            url_pattern = path(route, include(f"src.{prefix}.{module_name}.urls"))
             urlpatterns.append(url_pattern)
 
     return urlpatterns
@@ -118,7 +123,7 @@ def get_env_deploy_type():
     development = 'src.config.patterns.development'
     production = 'src.config.patterns.production'
 
-    deploy_type = env.str('API_DEPLOY_TYPE')
+    deploy_type = env.str('API_DEPLOY_TYPE', default='development')
 
     if deploy_type == 'production':
         return production

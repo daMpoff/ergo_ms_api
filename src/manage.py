@@ -19,7 +19,11 @@ def main():
     функцию execute_from_command_line из django.core.management и выполняет команду Django,
     переданную через аргументы командной строки.
     """
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'src.config.patterns.development')
+    
+    from src.core.utils.auto_api.auto_config import get_env_deploy_type
+
+    deploy_type = get_env_deploy_type()
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', deploy_type)
 
     try:
         from django.core.management import execute_from_command_line

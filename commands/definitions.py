@@ -2,26 +2,16 @@
 Файл для определения Poetry команд.
 """
 
-from scripts.base import PoetryCommand
-
-class CreateSuperuserCommand(PoetryCommand):
-    """
-    Команда для создания суперпользователя Django.
-
-    Используется для создания новых файлов миграций на основе изменений в моделях.
-    """
-    poetry_command_name = 'make_migrations'
-    django_command_name = 'makemigrations'
-
-    def __init__(self):
-        super().__init__(self.django_command_name)
+from commands.base import PoetryCommand
 
 class MakeMigrationsCommand(PoetryCommand):
     """
     Команда для создания миграций Django.
+
+    Используется для создания новых файлов миграций на основе изменений в моделях.
     """
-    poetry_command_name = 'create_superuser'
-    django_command_name = 'createsuperuser'
+    poetry_command_name = 'makemigrations'
+    django_command_name = 'makemigrations'
 
     def __init__(self):
         super().__init__(self.django_command_name)
@@ -116,7 +106,7 @@ class CollectStaticCommand(PoetryCommand):
 
     Копирует статические файлы из приложений в единую директорию.
     """
-    poetry_command_name = 'collect_static'
+    poetry_command_name = 'collectstatic'
     django_command_name = 'collectstatic'
 
     def __init__(self):
@@ -130,6 +120,58 @@ class AddModuleCommand(PoetryCommand):
     """
     poetry_command_name = 'add_module'
     django_command_name = 'add_module'
+
+    def __init__(self):
+        super().__init__(self.django_command_name)
+
+class CreateSuperuserCommand(PoetryCommand):
+    """
+    Команда для создания суперпользователя Django.
+
+    Позволяет создать нового суперпользователя с указанными именем и паролем.
+    """
+    poetry_command_name = 'createsuperuser'
+    django_command_name = 'createsuperuser'
+
+    def __init__(self):
+        super().__init__(self.django_command_name)
+
+class StartCeleryWorkerCommand(PoetryCommand):
+    """
+    Команда для запуска Celery.
+    """
+    poetry_command_name = 'celery_worker'
+    django_command_name = 'celery_worker'
+
+    def __init__(self):
+        super().__init__(self.django_command_name)
+
+class StartCeleryBeatCommand(PoetryCommand):
+    """
+    Команда для запуска Celery.
+    """
+    poetry_command_name = 'celery_beat'
+    django_command_name = 'celery_beat'
+
+    def __init__(self):
+        super().__init__(self.django_command_name)
+
+class StartRedisCommand(PoetryCommand):
+    """
+    Команда для запуска Redis.
+    """
+    poetry_command_name = 'start_redis'
+    django_command_name = 'start_redis'
+
+    def __init__(self):
+        super().__init__(self.django_command_name)
+
+class StopRedisCommand(PoetryCommand):
+    """
+    Команда для остановки Redis.
+    """
+    poetry_command_name = 'stop_redis'
+    django_command_name = 'stop_redis'
 
     def __init__(self):
         super().__init__(self.django_command_name)

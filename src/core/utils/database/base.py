@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from sqlalchemy.sql import text
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
 
-from src.config.settings.database import DBConfig
+from src.core.utils.database.dbconfig import DBConfig
 
 
 logger = logging.getLogger(__name__)
@@ -127,7 +127,7 @@ class SqlAlchemyManager(DBManagerInterface):
                     self.engine = self._create_engine()
         raise last_error
 
-    def fetchall(self, get_query, chunksize: int = 1000000, *args, **kwargs):
+    def fetchall(self, get_query, chunksize: int = 1000000, *args, **kwargs) -> pd.DataFrame:
         sql, params = self._get_query(get_query, *args, **kwargs)
         def _fetchall():
             full_df = pd.DataFrame()
@@ -157,6 +157,6 @@ class SqlAlchemyManager(DBManagerInterface):
             con=self.engine,
             if_exists="append",
             index=False,
-            dtype=dtype,  # pyright: ignore
+            dtype=dtype,
             chunksize=chunksize
         )

@@ -28,9 +28,17 @@ matplotlib = "^3.10.0"
 scikit-learn = "^1.6.0"
 pyyaml = "^6.0.2"
 sqlalchemy = "^2.0.37"
+sshtunnel = "^0.4.0"
+pyodbc = "^5.2.0"
+mysql-connector-python = "^9.2.0"
+celery = "^5.4.0"
+redis = "^5.2.1"
+mysqlclient = "^2.2.7"
+django-celery-beat = "^2.7.0"
+channels = "^4.2.0"
 
 [tool.poetry.scripts]
-cmd = "scripts.__main__:main"
+cmd = "commands.__main__:main"
 
 [build-system]
 requires = ["poetry-core>=2.0.0"]

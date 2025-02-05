@@ -16,16 +16,18 @@ from src.config.settings.integration import INTEGRATION_CONFIG_PATH
 from src.core.utils.auto_api.modules_integration import generate_routes_from_config
 
 from src.core.utils.auto_api.auto_config import discover_installed_app_urls
-from src.config.settings.apps import EXTERNAL_MODULES_DIR
+from src.config.settings.apps import EXTERNAL_MODULES_DIR, CORE_DIR
 
-urlpatterns = [
-    path("cms/adp/", include("src.core.cms.adp.urls")),
-    path("utils/", include("src.core.utils.urls")),
-]
+urlpatterns = []
+
+# Добавляем URL-конфигурации из ядра, автоматически 
+# обнаруженные в директории CORE_DIR
+core_modules_urlpatterns = discover_installed_app_urls(CORE_DIR, prefix='core')
+urlpatterns += core_modules_urlpatterns
 
 # Добавляем URL-конфигурации из внешних модулей, автоматически 
 # обнаруженные в директории EXTERNAL_MODULES_DIR
-external_modules_urlpatterns = discover_installed_app_urls(EXTERNAL_MODULES_DIR)
+external_modules_urlpatterns = discover_installed_app_urls(EXTERNAL_MODULES_DIR, prefix='external')
 urlpatterns += external_modules_urlpatterns
 
 config_urlpatterns = generate_routes_from_config(INTEGRATION_CONFIG_PATH)

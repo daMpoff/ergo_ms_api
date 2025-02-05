@@ -16,7 +16,7 @@ from django.urls import re_path
 from src.config.env import env
 
 # Получаем название системы из переменных окружения
-system_title = env.str('SYSTEM_TITLE')
+system_title = env.str('SYSTEM_TITLE', default='API')
 
 # Создаем представление схемы API
 schema_view = get_schema_view(
@@ -44,6 +44,8 @@ urlpatterns = [
         name="schema-swagger-ui",
     ),
     re_path(
-        r"^redoc/$", schema_view.with_ui("redoc", cache_timeout=0), name="schema-redoc"
+        r"^redoc/$", 
+        schema_view.with_ui("redoc", cache_timeout=0), 
+        name="schema-redoc",
     ),
 ]

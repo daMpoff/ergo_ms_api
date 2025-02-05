@@ -7,6 +7,19 @@ import os
 
 from src.config.settings.static import LOGS_ROOT
 
+# Создаем директорию для логов, если она не существует
+os.makedirs(LOGS_ROOT, exist_ok=True)
+
+# Проверяем права на запись
+log_file = os.path.join(LOGS_ROOT, 'debug.log')
+try:
+    with open(log_file, 'a') as f:
+        # Записываем пустую строку в файл
+        f.write('')
+except Exception as e:
+    print(f"ОШИБКА: Невозможно записать в файл лога {log_file}: {str(e)}")
+    raise
+
 # Конфигурация логирования для Django-приложения.
 LOGGING = {
     # Версия конфигурации логирования.
@@ -19,13 +32,14 @@ LOGGING = {
     'formatters': {
         # Подробный форматтер, включающий уровень логирования, время, модуль и сообщение.
         'verbose': {
-            'format': '{levelname} {asctime} {module} {message}',
+            'format': '[{levelname}] {asctime} {name} {module} {message}',
             'style': '{',
+            'datefmt': '%Y-%m-%d %H:%M:%S'
         },
 
         # Простой форматтер, включающий только уровень логирования и сообщение.
         'simple': {
-            'format': '{levelname} {message}',
+            'format': '[{levelname}] {name}: {message}',
             'style': '{',
         },
     },
@@ -38,6 +52,7 @@ LOGGING = {
             'class': 'logging.FileHandler',
             'filename': os.path.join(LOGS_ROOT, 'debug.log'),
             'formatter': 'verbose',
+            'encoding': 'utf-8',
         },
 
         # Обработчик для записи логов в консоль.
@@ -50,25 +65,36 @@ LOGGING = {
 
     # Логгеры для различных частей приложения.
     'loggers': {
-        # Логгер для Django.
+        # Корневой логгер
+        '': {
+            'handlers': ['console', 'file'],
+            'level': 'DEBUG',
+            'propagate': True,
+        },
         'django': {
-            'handlers': ['console'],
+            'handlers': ['console', 'file'],
             'level': 'INFO',
-            'propagate': True,
+            'propagate': False,
         },
-        
-        # Логгер для стандартных функций.
+        'config': {
+            'handlers': ['console', 'file'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+        'config.database': {
+            'handlers': ['console', 'file'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
         'utils': {
-            'handlers': ['console'],
+            'handlers': ['console', 'file'],
             'level': 'INFO',
-            'propagate': True,
+            'propagate': False,
         },
-
-        # Логгер для Poetry скриптов.
         'scripts': {
-            'handlers': ['console'],
+            'handlers': ['console', 'file'],
             'level': 'INFO',
-            'propagate': True,
+            'propagate': False,
         },
     },
 }

@@ -4,7 +4,7 @@
 Данный функционал взаимодействует с Poetry при помощи следующей секции pyproject.toml файла:
 
 [tool.poetry.scripts]
-cmd = "scripts.__main__:main"
+cmd = "commands.__main__:main"
 
 Пример команды для запуска сервера Django API:
 >>> poetry run cmd dev
@@ -14,11 +14,11 @@ import sys
 import inspect
 import logging
 
-from scripts.commands import PoetryCommand
+from commands.definitions import PoetryCommand
 from src.config.settings.logger import LOGGING
 
 # Настройка логгера для скриптов
-logger = logging.getLogger('scripts')
+logger = logging.getLogger('commands')
 
 # Использование форматтера из конфигурации
 formatter = logging.Formatter(
@@ -66,10 +66,10 @@ def main():
         - Выход с кодом `1`, если указана неизвестная команда.
 
     Зависимости:
-        - Модуль `scripts.commands` должен содержать классы команд, наследующие `PoetryCommand`.
+        -  `commands.definitions` должен содержать классы команд, наследующие `PoetryCommand`.
     """
     # Динамически получаем все классы, наследующие PoetryCommand
-    modules = sys.modules["scripts.commands"]
+    modules = sys.modules["commands.definitions"]
 
     # Создаем словарь команд
     commands = {}

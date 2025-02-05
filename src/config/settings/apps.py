@@ -9,7 +9,7 @@ Middleware (промежуточное ПО) в контексте Django — э
 как аутентификация, логирование, обработка ошибок, кэширование и многое другое, без необходимости изменять 
 основной код приложения.
 """
-
+from channels.middleware import BaseMiddleware
 from src.core.utils.auto_api.auto_config import discover_installed_apps
 
 # Определяем директории для основных и внешних модулей
@@ -25,7 +25,6 @@ DEVELOPED_APPS = CORE_APPS + EXTERNAL_MODULES_APPS
 # Определяем список установленных приложений
 INSTALLED_APPS = DEVELOPED_APPS + [
     'daphne',
-    'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
@@ -47,5 +46,5 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware'
 ]

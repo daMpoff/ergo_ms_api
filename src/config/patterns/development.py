@@ -12,4 +12,4 @@ SECRET_KEY = env.str('API_SECRET_KEY')
 
 DEBUG = True
 
-ALLOWED_HOSTS = env.list('API_ALLOWED_HOSTS', default=[])
+ALLOWED_HOSTS = env.list('API_ALLOWED_HOSTS', default=['localhost', '127.0.0.1'])

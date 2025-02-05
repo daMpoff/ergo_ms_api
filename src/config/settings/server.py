@@ -9,7 +9,7 @@ from src.config.env import env
 SERVER_PROCESS_NAME = 'daphne.exe'
 
 # Хост сервера, полученный из переменной окружения.
-SERVER_HOST = env.str('API_HOST') or 'localhost'
+SERVER_HOST = env.str('API_HOST', default='localhost')
 
 # Порт сервера, полученный из переменной окружения.
-SERVER_PORT = env.str('API_PORT') or '8000'
+SERVER_PORT = env.str('API_PORT', default='8000')

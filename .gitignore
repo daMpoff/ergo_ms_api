@@ -8,8 +8,18 @@ venv/
 
 __pycache__/
 
-/media
-/static
-/logs
+/redis
 
 TASKS.md
+
+celery/*
+!celery/.gitignore
+
+logs/*
+!logs/.gitignore
+
+static/*
+!static/.gitignore
+
+media/*
+!media/.gitignore

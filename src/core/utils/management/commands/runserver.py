@@ -19,11 +19,7 @@
 """
 
 from django.core.management.commands.runserver import Command as RunserverCommand
-
-from src.config.settings.server import (
-    SERVER_PORT, 
-    SERVER_HOST
-)
+from src.config.settings.server import SERVER_PORT, SERVER_HOST
 
 class Command(RunserverCommand):
     """
@@ -39,6 +35,8 @@ class Command(RunserverCommand):
                                         `addrport` (адрес и порт), и если нет, устанавливает его по умолчанию на основе
                                         значений `SERVER_HOST` и `SERVER_PORT`.
     """
+    poetry_command_name = 'start_dev'
+    help = 'Starts development server with all necessary services'
 
     def add_arguments(self, parser):
         """
@@ -62,5 +60,6 @@ class Command(RunserverCommand):
         """
         if not options['addrport']:
             options['addrport'] = f'{SERVER_HOST}:{SERVER_PORT}'
-
+        
+        # Используем родительский метод напрямую вместо call_command
         super().handle(*args, **options)

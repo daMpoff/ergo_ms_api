@@ -6,8 +6,17 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 
+from src.core.utils.database.main import OrderedDictQueryExecutor
+
 from django.contrib.auth import authenticate
 from django.utils.crypto import get_random_string
+
+from src.core.utils.database.dbconfig import DBConfig
+from src.core.utils.database.base import SqlAlchemyManager
+from src.core.cms.adp.queries import (
+    get_users, 
+    get_users_by_name
+)
 
 from src.core.utils.methods import (
     parse_errors_to_dict, 
@@ -24,7 +33,6 @@ from src.core.utils.auto_api.base_views import BaseAPIView
 class UserRegistrationValidationView(BaseAPIView):
     @swagger_auto_schema(
         operation_description="Регистрация нового пользователя.",
-
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
 
@@ -92,7 +100,10 @@ class UserRegistrationValidationView(BaseAPIView):
 
 class SendConfirmationCodeView(BaseAPIView):
     permission_classes = [IsAuthenticated]
-    
+
+    @swagger_auto_schema(
+        operation_description="Отправка кода подтверждения.",
+    )   
     def post(self, request):
         email = request.data.get("email")
         if not email:
@@ -110,35 +121,38 @@ class SendConfirmationCodeView(BaseAPIView):
         # Отправляем email
         send_confirmation_email(email, code)
 
-        return Response({"message": "Confirmation code sent"}, status=status.HTTP_200_OK)
+        return Response({"message": "Код подтверждения отправлен"}, status=status.HTTP_200_OK)
 
 class VerifyConfirmationCodeView(BaseAPIView):
     permission_classes = [IsAuthenticated]
 
+    @swagger_auto_schema(
+        operation_description="Проверка кода подтверждения.",
+    )
     def post(self, request):
         email = request.data.get("email")
         code = request.data.get("code")
 
+
         if not email or not code:
-            return Response({"error": "Email and code are required"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "Email и код обязательны"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             confirmation_code = EmailConfirmationCode.objects.get(email=email)
         except EmailConfirmationCode.DoesNotExist:
-            return Response({"error": "Invalid email or code"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "Неверный Email или код"}, status=status.HTTP_400_BAD_REQUEST)
 
         if confirmation_code.code == code:
             # Код верен, можно выполнить дальнейшие действия
             # Удаляем запись после успешной проверки
             confirmation_code.delete()
-            return Response({"message": "Code verified successfully"}, status=status.HTTP_200_OK)
+            return Response({"message": "Код успешно подтвержден"}, status=status.HTTP_200_OK)
         else:
-            return Response({"error": "Invalid code"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "Неверный код"}, status=status.HTTP_400_BAD_REQUEST)
         
 class UserRegistrationView(BaseAPIView):
     @swagger_auto_schema(
         operation_description="Проверка регистрации.",
-
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
 
@@ -293,5 +307,39 @@ class ProtectedView(BaseAPIView):
     def get(self, request):
         return Response(
             {"message": "Вы авторизованы."}, 
+            status=status.HTTP_200_OK
+        )
+
+class UserView(BaseAPIView):
+    @swagger_auto_schema(
+        operation_description="Получение информации о пользователе.",
+        manual_parameters=[
+            openapi.Parameter(
+                'id',
+                openapi.IN_QUERY,
+                type=openapi.TYPE_INTEGER,
+                required=True,
+                description="Идентификатор пользователя",
+                default=1,
+            )
+        ],
+        responses={
+            200: "Информация о пользователе.",
+            401: "Неавторизованный доступ."
+        }
+    )
+    def get(self, request):
+        user_id = request.query_params.get('id')
+
+        users = OrderedDictQueryExecutor.fetchall(
+            get_users, 
+            user_id=user_id
+        )
+
+        return Response(
+            {
+                "data": users,
+                "message": "Пользователи успешно получены."
+            },
             status=status.HTTP_200_OK
         )
