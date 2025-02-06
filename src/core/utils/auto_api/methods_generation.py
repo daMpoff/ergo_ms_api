@@ -25,7 +25,6 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 from rest_framework.permissions import IsAuthenticated
 
-from src.core.utils.auto_api.api_classes_code import reconstruct_class_code
 from src.core.utils.auto_api.base_views import BaseAPIView
 
 logger = logging.getLogger('utils')
@@ -36,7 +35,7 @@ class IntegrationSettings:
     standard_handlers_path: str = getattr(settings, 'STANDARD_HANDLERS_PATH', '')
     handler_method_name: str = getattr(settings, 'HANDLER_METHOD_NAME', '')
     available_renderers: Dict = getattr(settings, 'AVAILABLE_RENDERERS', {})
-    swagger_settings: Dict = getattr(settings, 'INTEGRATION_SWAGGER_SETTINGS', {})
+    swagger_settings: Dict = getattr(settings, 'AUTO_API_SWAGGER_SETTINGS', {})
 
 def load_handler(handler_path: str) -> Any:
     """

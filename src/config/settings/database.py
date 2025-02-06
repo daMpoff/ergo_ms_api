@@ -3,21 +3,24 @@
 Поддерживает множественные подключения к разным типам СУБД через YAML конфигурацию.
 """
 
-from pathlib import Path
 from typing import Dict
+
 import psycopg2
 import yaml
 import logging
 import sqlite3
+import os
 
 import mysql.connector
-
 import pyodbc
 
 from django.core.exceptions import ImproperlyConfigured
 
 import logging.config
+
 from src.config.settings.logger import LOGGING
+from src.config.settings.static import RESOURCES_DIR
+from src.config.settings.base import SYSTEM_DIR
 
 # Явная инициализация логирования
 logging.config.dictConfig(LOGGING)
@@ -39,10 +42,11 @@ def get_database_configs() -> Dict:
     """
     Получает конфигурации баз данных из YAML файла
     """
-    config_path = Path(__file__).parent.parent / 'database_config.yaml'
+    config_path = SYSTEM_DIR / 'databases.yaml'
     if not config_path.exists():
         error_msg = f"Файл конфигурации баз данных не найден: {config_path}"
         logger.error(error_msg)
+
         raise ImproperlyConfigured(error_msg)
     
     try:
@@ -126,6 +130,8 @@ except Exception as e:
         'default': {}
     }
 
+is_no_default_connection = True
+
 # Проверяем подключение к каждой базе данных
 for db_name, db_config in DATABASES.items():
     engine = db_config.get('ENGINE', '')
@@ -167,7 +173,25 @@ for db_name, db_config in DATABASES.items():
             connection = pyodbc.connect(connection_string)
             connection.close()
         logger.info(f"Успешное тестовое подключение к базе данных '{db_name}' (тип: {engine})")
-    except (psycopg2.Error, mysql.connector.Error, sqlite3.Error, 
-            pyodbc.Error, Exception) as e:
+        if db_name == 'default':
+            is_no_default_connection = False
+    except Exception as e:
         error_msg = f"Не удалось подключиться к базе данных '{db_name}' (тип: {engine}): {str(e)}"
         logger.error(error_msg)
+
+        if db_name == 'default':
+            DATABASES[db_name] = {
+                'ENGINE': 'django.db.backends.sqlite3',
+                'NAME': os.path.join(RESOURCES_DIR, 'db.sqlite3'),
+            }
+            logger.warning(f"База данных '{db_name}' переключена на SQLite для разработки")
+
+        # Не прерываем работу сервера при ошибке подключения
+        continue
+
+if is_no_default_connection and 'default' not in DATABASES:
+    DATABASES['default'] = {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': os.path.join(RESOURCES_DIR, 'db.sqlite3'),
+    }
+    logger.warning("Создано подключение к SQLite по умолчанию, так как нет рабочего подключения default")

@@ -21,3 +21,6 @@ static/*
 
 media/*
 !media/.gitignore
+
+resources/*
+!resources/.gitignore

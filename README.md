@@ -1,18 +1,5 @@
 # ERGO MS API
 
-## Технологии
-
-Poetry - управление библиотеками
-
-Python 12^, вообще 12.8
-
-Django - фреймворк
-
-Daphne - используется в качестве сервера для Django API проекта, преимущество данного решения в том, что 
-оно работает и на Linux и на Windows.
-
----
-
 ## РУКОВОДСТВО ПО УСТАНОВКЕ ПРОЕКТА
 
 ### Установка проекта на Windows
@@ -48,13 +35,7 @@ poetry config virtualenvs.in-project true
 poetry install
 ```
 
-#### 6. Создание директорий для медиафайлов и логов
-```bash
-mkdir media
-mkdir logs
-```
-
-#### 7. Сборка статических файлов
+#### 6. Сборка статических файлов
 ```bash
 poetry run cmd collectstatic
 ```
@@ -90,12 +71,7 @@ poetry config virtualenvs.in-project true
 poetry install
 ```
 
-#### 6. Создание директорий для медиафайлов и логов
-```bash
-mkdir media logs
-```
-
-#### 7. Сборка статических файлов
+#### 6. Сборка статических файлов
 ```bash
 poetry run cmd collectstatic
 ```

@@ -1,59 +1,54 @@
 """
 Файл для определения команды Django для очистки Python кэша.
 
-Этот файл содержит класс `Command`, который наследуется от `BaseCommand` и предоставляет команду для очистки
-Python кэша (директорий `__pycache__`) в Django проекте. Команда рекурсивно обходит все директории, начиная с
-корневой директории проекта, и удаляет все найденные директории `__pycache__`.
-
-Класс `Command`:
-- `help` (str): Краткое описание команды, которое будет отображаться в справке Django.
-- `handle(self, *args, **kwargs)`: Метод, который выполняет основную логику команды. В данном случае, он рекурсивно
-  обходит директории, удаляет все найденные директории `__pycache__` и выводит сообщение об успешном удалении.
+Этот файл содержит класс Command, который наследуется от BaseCommand и предоставляет 
+функциональность для рекурсивного удаления всех директорий __pycache__ в проекте.
 
 Пример использования:
-Для выполнения команды в терминале:
 >>> python src/manage.py clear_pycache
 """
 
 import os
 import shutil
+import logging
 
 from django.core.management.base import BaseCommand
+
+logger = logging.getLogger('core.utils.commands')
 
 class Command(BaseCommand):
     """
     Команда Django для очистки Python кэша.
-
-    Этот класс наследуется от `BaseCommand` и предоставляет команду для очистки Python кэша (директорий `__pycache__`)
-    в Django проекте. Команда рекурсивно обходит все директории, начиная с корневой директории проекта, и удаляет
-    все найденные директории `__pycache__`.
-
-    Атрибуты:
-        help (str): Краткое описание команды, которое будет отображаться в справке Django.
-
-    Методы:
-        handle(self, *args, **kwargs): Метод, который выполняет основную логику команды. В данном случае, он рекурсивно
-                                       обходит директории, удаляет все найденные директории `__pycache__` и выводит
-                                       сообщение об успешном удалении.
+    
+    Рекурсивно обходит все директории проекта и удаляет найденные
+    директории __pycache__.
     """
-    help = 'Очистка python кэша.'
+    help = 'Очистка python кэша'
 
-    def handle(self, *args, **kwargs):
+    def handle(self, *args: tuple, **options: dict) -> None:
         """
-        Выполняет основную логику команды.
+        Выполняет команду очистки Python кэша.
 
-        Рекурсивно обходит директории, начиная с корневой директории проекта, удаляет все найденные директории
-        `__pycache__` и выводит сообщение об успешном удалении.
-
-        Аргументы:
-            *args: Дополнительные аргументы, переданные в команду.
-            **kwargs: Дополнительные именованные аргументы, переданные в команду.
+        Args:
+            *args: Позиционные аргументы
+            **options: Именованные аргументы
         """
+        logger.info('Запуск команды clear_pycache')
         root_directory = '.'
 
         for root, dirs, _ in os.walk(root_directory):
             for dir_name in dirs:
                 if dir_name == '__pycache__':
+
                     dir_path = os.path.join(root, dir_name)
-                    shutil.rmtree(dir_path)
-                    self.stdout.write(self.style.SUCCESS(f'Удаленный файл: {dir_path}'))
+                    try:
+                        shutil.rmtree(dir_path)
+                        msg = f'Удалена директория: {dir_path}'
+
+                        logger.info(msg)
+                        self.stdout.write(self.style.SUCCESS(msg))
+                    except Exception as e:
+                        msg = f'Ошибка при удалении {dir_path}: {str(e)}'
+
+                        logger.error(msg)
+                        self.stdout.write(self.style.ERROR(msg))

@@ -67,32 +67,42 @@ LOGGING = {
     'loggers': {
         # Корневой логгер
         '': {
-            'handlers': ['console', 'file'],
+            'handlers': ['console'],
             'level': 'DEBUG',
             'propagate': True,
         },
         'django': {
-            'handlers': ['console', 'file'],
+            'handlers': ['console'],
             'level': 'INFO',
             'propagate': False,
         },
         'config': {
-            'handlers': ['console', 'file'],
+            'handlers': ['console'],
             'level': 'DEBUG',
             'propagate': False,
         },
         'config.database': {
-            'handlers': ['console', 'file'],
+            'handlers': ['console'],
             'level': 'DEBUG',
             'propagate': False,
         },
-        'utils': {
-            'handlers': ['console', 'file'],
+        'commands': {
+            'handlers': ['console'],
             'level': 'INFO',
             'propagate': False,
         },
-        'scripts': {
-            'handlers': ['console', 'file'],
+        'core.utils': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'core.utils.commands': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'core.utils.server': {
+            'handlers': ['console'],
             'level': 'INFO',
             'propagate': False,
         },

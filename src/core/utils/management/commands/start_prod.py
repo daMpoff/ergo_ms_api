@@ -1,58 +1,37 @@
 """
-Файл для определения команды Django для управления сервером Daphne (запуск).
+Файл для определения команды Django для запуска Daphne сервера.
 
-Этот файл содержит класс `Command`, который наследуется от `BaseCommand` и предоставляет команду для запуска
-сервера Daphne. Команда позволяет указать уровень логирования и запускает сервер Daphne с использованием класса `Daphne`.
-После запуска сервера команда проверяет, работает ли процесс сервера, и выводит соответствующее сообщение.
-
-Класс `Command`:
-- `help` (str): Краткое описание команды, которое будет отображаться в справке Django.
-- `add_arguments(self, parser)`: Метод, который добавляет аргументы командной строки для команды. В данном случае,
-  добавляется аргумент `--log-level` для указания уровня логирования.
-- `handle(self, *args, **options)`: Метод, который выполняет основную логику команды. В данном случае, он запускает
-  сервер Daphne с указанным уровнем логирования и проверяет, работает ли процесс сервера.
+Этот файл содержит класс Command, который наследуется от BaseCommand и предоставляет 
+функциональность для запуска Daphne сервера с настройкой уровня логирования.
 
 Пример использования:
-Для запуска сервера с уровнем логирования по умолчанию (info):
->>> python src/manage.py start_daphne
-
-Для запуска сервера с указанным уровнем логирования (например, warning):
->>> python src/manage.py start_daphne --log-level warning
+>>> python src/manage.py start_prod [--log-level=info]
 """
 
-from django.core.management.base import BaseCommand
+import logging
+
+from django.core.management.base import BaseCommand, CommandParser
 
 from src.core.utils.enums import LogLevel
 from src.core.utils.server.daphne import Daphne
 
+logger = logging.getLogger('core.utils.commands')
+
 class Command(BaseCommand):
     """
-    Команда Django для управления сервером Daphne (запуск).
-
-    Этот класс наследуется от `BaseCommand` и предоставляет команду для запуска сервера Daphne. Команда позволяет
-    указать уровень логирования и запускает сервер Daphne с использованием класса `Daphne`. После запуска сервера
-    команда проверяет, работает ли процесс сервера, и выводит соответствующее сообщение.
-
-    Атрибуты:
-        help (str): Краткое описание команды, которое будет отображаться в справке Django.
-
-    Методы:
-        add_arguments(self, parser): Метод, который добавляет аргументы командной строки для команды. В данном случае,
-                                     добавляется аргумент `--log-level` для указания уровня логирования.
-        handle(self, *args, **options): Метод, который выполняет основную логику команды. В данном случае, он запускает
-                                        сервер Daphne с указанным уровнем логирования и проверяет, работает ли процесс
-                                        сервера.
+    Команда Django для запуска production сервера.
+    
+    Запускает Daphne сервер с указанным уровнем логирования и проверяет
+    успешность запуска процесса.
     """
-    help = "Управление сервером Daphne (запуск)"
+    help = "Запуск production сервера (Daphne)"
 
-    def add_arguments(self, parser):
+    def add_arguments(self, parser: CommandParser) -> None:
         """
-        Добавляет аргументы командной строки для команды.
+        Добавляет аргументы командной строки.
 
-        В данном случае, добавляется аргумент `--log-level` для указания уровня логирования.
-
-        Аргументы:
-            parser: Объект парсера аргументов командной строки.
+        Args:
+            parser: Парсер аргументов командной строки
         """
         parser.add_argument(
             '--log-level',
@@ -62,23 +41,29 @@ class Command(BaseCommand):
             help='Уровень логирования (info, warning, error, none)'
         )
 
-    def handle(self, *args, **options):
+    def handle(self, *args: tuple, **options: dict) -> None:
         """
-        Выполняет основную логику команды.
+        Выполняет команду запуска сервера.
 
-        Запускает сервер Daphne с указанным уровнем логирования и проверяет, работает ли процесс сервера.
-
-        Аргументы:
-            *args: Дополнительные аргументы, переданные в команду.
-            **options: Дополнительные именованные аргументы, переданные в команду.
+        Args:
+            *args: Позиционные аргументы
+            **options: Именованные аргументы, включая log_level
         """
+        logger.info('Запуск команды start_prod')
+        
         log_level = LogLevel(options['log_level'])
         daphne = Daphne()
+        
+        logger.info(f'Запуск Daphne сервера с уровнем логирования: {log_level.value}')
         process = daphne.start_daphne(log_level)
 
         is_process_running = daphne.is_process_running(process)
 
         if is_process_running:
-            self.stdout.write(self.style.SUCCESS('Сервер успешно запущен.'))
+            msg = 'Сервер успешно запущен'
+            logger.info(msg)
+            self.stdout.write(self.style.SUCCESS(msg))
         else:
-            self.stdout.write(self.style.ERROR('Не удалось запустить сервер.'))
+            msg = 'Не удалось запустить сервер'
+            logger.error(msg)
+            self.stdout.write(self.style.ERROR(msg))

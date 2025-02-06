@@ -9,7 +9,6 @@ Middleware (промежуточное ПО) в контексте Django — э
 как аутентификация, логирование, обработка ошибок, кэширование и многое другое, без необходимости изменять 
 основной код приложения.
 """
-from channels.middleware import BaseMiddleware
 from src.core.utils.auto_api.auto_config import discover_installed_apps
 
 # Определяем директории для основных и внешних модулей

@@ -1,65 +1,71 @@
 """
-Файл для переопределения команды runserver в Django.
+Файл для определения команды Django для запуска development сервера.
 
-Этот файл содержит класс `Command`, который наследуется от `RunserverCommand` и переопределяет его методы для
-добавления аргументов командной строки и обработки команды. Команда позволяет запускать сервер Django с
-указанными хостом и портом по умолчанию, если они не были явно указаны в командной строке.
-
-Класс `Command`:
-- `add_arguments(self, parser)`: Переопределяет метод для добавления аргументов командной строки.
-- `handle(self, *args, **options)`: Переопределяет метод для обработки команды. Проверяет, установлен ли аргумент
-  `addrport` (адрес и порт), и если нет, устанавливает его по умолчанию на основе значений `SERVER_HOST` и `SERVER_PORT`.
+Этот файл содержит класс Command, который наследуется от RunserverCommand и предоставляет 
+функциональность для запуска сервера разработки с настройками хоста и порта из конфигурации.
 
 Пример использования:
-Для запуска сервера с хостом и портом по умолчанию:
->>> python src/manage.py runserver
-
-Для запуска сервера с явно указанным хостом и портом:
->>> python src/manage.py runserver 0.0.0.0:8000
+>>> python src/manage.py runserver [host:port]
 """
 
+import logging
+
 from django.core.management.commands.runserver import Command as RunserverCommand
-from src.config.settings.server import SERVER_PORT, SERVER_HOST
+from django.core.management.base import CommandParser
+
+from django.conf import settings
+
+logger = logging.getLogger('core.utils.commands')
 
 class Command(RunserverCommand):
     """
-    Переопределенная команда runserver для Django.
-
-    Этот класс наследуется от `RunserverCommand` и переопределяет его методы для добавления аргументов командной строки
-    и обработки команды. Команда позволяет запускать сервер Django с указанными хостом и портом по умолчанию, если они
-    не были явно указаны в командной строке.
-
-    Методы:
-        add_arguments(self, parser): Переопределяет метод для добавления аргументов командной строки.
-        handle(self, *args, **options): Переопределяет метод для обработки команды. Проверяет, установлен ли аргумент
-                                        `addrport` (адрес и порт), и если нет, устанавливает его по умолчанию на основе
-                                        значений `SERVER_HOST` и `SERVER_PORT`.
+    Команда Django для запуска development сервера.
+    
+    Расширяет стандартную команду runserver для использования
+    настроек хоста и порта из конфигурации проекта.
     """
     poetry_command_name = 'start_dev'
-    help = 'Starts development server with all necessary services'
+    help = 'Запускает development сервер с необходимыми сервисами'
 
-    def add_arguments(self, parser):
+    def add_arguments(self, parser: CommandParser) -> None:
         """
-        Переопределяет метод для добавления аргументов командной строки.
+        Добавляет аргументы командной строки.
 
-        Аргументы:
-            parser: Объект парсера аргументов командной строки.
+        Args:
+            parser: Парсер аргументов командной строки
         """
         super().add_arguments(parser)
 
-    def handle(self, *args, **options):
+    def handle(self, *args: tuple, **options: dict) -> None:
         """
-        Переопределяет метод для обработки команды.
+        Выполняет команду запуска сервера.
 
-        Проверяет, установлен ли аргумент `addrport` (адрес и порт), и если нет, устанавливает его по умолчанию на
-        основе значений `SERVER_HOST` и `SERVER_PORT`.
+        Если адрес и порт не указаны явно, использует значения из настроек.
 
-        Аргументы:
-            *args: Дополнительные аргументы, переданные в команду.
-            **options: Дополнительные именованные аргументы, переданные в команду.
+        Args:
+            *args: Позиционные аргументы
+            **options: Именованные аргументы
         """
-        if not options['addrport']:
-            options['addrport'] = f'{SERVER_HOST}:{SERVER_PORT}'
+        logger.info('Запуск команды runserver')
         
-        # Используем родительский метод напрямую вместо call_command
-        super().handle(*args, **options)
+        if not options['addrport']:
+            server_host = getattr(settings, 'SERVER_HOST', None)
+            server_port = getattr(settings, 'SERVER_PORT', None)
+
+            if not all([server_host, server_port]):
+                msg = 'SERVER_HOST или SERVER_PORT не настроены в конфигурации'
+                logger.error(msg)
+                raise ValueError(msg)
+
+            addrport = f'{server_host}:{server_port}'
+            logger.info(f'Используются настройки по умолчанию: {addrport}')
+            options['addrport'] = addrport
+        else:
+            logger.info(f'Используются пользовательские настройки: {options["addrport"]}')
+        
+        try:
+            super().handle(*args, **options)
+        except Exception as e:
+            msg = f'Ошибка при запуске сервера: {str(e)}'
+            logger.error(msg)
+            raise

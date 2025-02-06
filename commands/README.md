@@ -9,7 +9,7 @@ scripts/
 ├── __init__.py          # Инициализация пакета
 ├── __main__.py          # Точка входа для команд Poetry
 ├── base.py              # Базовые классы команд
-└── commands.py          # Определение конкретных команд
+└── definitions.py          # Определение конкретных команд
 ```
 
 ## Основные компоненты
@@ -17,17 +17,17 @@ scripts/
 ### 1. Базовый класс команд (`base.py`)
 
 `PoetryCommand` - базовый класс для всех команд, который обеспечивает:
-- Выполнение Django команд через `manage.py`
-- Выполнение пользовательских Python скриптов
+- Выполнение Django команд через `src/manage.py`
 - Обработку аргументов командной строки
 
-### 2. Система команд (`commands.py`)
+### 2. Система команд (`definitions.py`)
 
 Доступные команды:
 
 | Команда Poetry | Django команда | Описание |
 |---------------|----------------|-----------|
 | makemigrations | makemigrations | Создание миграций базы данных |
+
 | migrate | migrate | Применение миграций |
 | dev | runserver | Запуск сервера разработки |
 | prod | start_daphne | Запуск production сервера |
@@ -37,6 +37,13 @@ scripts/
 | clear_pycache | clear_pycache | Очистка Python кэша |
 | collectstatic | collectstatic | Сбор статических файлов |
 | add_module | add_module | Добавление нового модуля |
+| createsuperuser | createsuperuser | Создание суперпользователя |
+| celery_worker | celery_worker | Запуск Celery worker |
+| celery_beat | celery_beat | Запуск Celery beat |
+| start_redis | start_redis | Запуск Redis |
+| stop_redis | stop_redis | Остановка Redis |
+
+
 
 ## Использование
 

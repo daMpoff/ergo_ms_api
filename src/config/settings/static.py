@@ -27,3 +27,6 @@ LOGS_ROOT = os.path.join(BASE_DIR.parent, 'logs')
 
 # Хранилище для статических файлов, использующее Whitenoise для сжатия и кэширования.
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+# Корневая директория для ресурсов.
+RESOURCES_DIR = os.path.join(BASE_DIR.parent, 'resources')

@@ -58,8 +58,8 @@ class ProdServerCommand(PoetryCommand):
 
     Используется для запуска приложения в боевом режиме.
     """
-    poetry_command_name = 'prod'
-    django_command_name = 'start_daphne'
+    poetry_command_name = 'start_prod'
+    django_command_name = 'start_prod'
 
     def __init__(self):
         super().__init__(self.django_command_name)
@@ -71,7 +71,7 @@ class StopProdServerCommand(PoetryCommand):
     Используется для завершения работы продакшн-сервера.
     """
     poetry_command_name = 'stop_prod'
-    django_command_name = 'stop_daphne'
+    django_command_name = 'stop_prod'
 
     def __init__(self):
         super().__init__(self.django_command_name)
@@ -124,6 +124,18 @@ class AddModuleCommand(PoetryCommand):
     def __init__(self):
         super().__init__(self.django_command_name)
 
+class AddSubmoduleCommand(PoetryCommand):
+    """
+    Команда для добавления нового подмодуля в проект.
+
+    Полезна для автоматизации процесса создания нового приложения или модуля.
+    """
+    poetry_command_name = 'add_submodule'
+    django_command_name = 'add_submodule'
+
+    def __init__(self):
+        super().__init__(self.django_command_name)
+
 class CreateSuperuserCommand(PoetryCommand):
     """
     Команда для создания суперпользователя Django.
@@ -140,8 +152,19 @@ class StartCeleryWorkerCommand(PoetryCommand):
     """
     Команда для запуска Celery.
     """
-    poetry_command_name = 'celery_worker'
-    django_command_name = 'celery_worker'
+    poetry_command_name = 'start_celery_worker'
+    django_command_name = 'start_celery_worker'
+
+    def __init__(self):
+        super().__init__(self.django_command_name)
+
+class StopCeleryWorkerCommand(PoetryCommand):
+    """
+    Команда для остановки Celery worker.
+    """
+    poetry_command_name = 'stop_celery_worker'
+    django_command_name = 'stop_celery_worker'
+
 
     def __init__(self):
         super().__init__(self.django_command_name)
@@ -150,13 +173,24 @@ class StartCeleryBeatCommand(PoetryCommand):
     """
     Команда для запуска Celery.
     """
-    poetry_command_name = 'celery_beat'
-    django_command_name = 'celery_beat'
+    poetry_command_name = 'start_celery_beat'
+    django_command_name = 'start_celery_beat'
+
+    def __init__(self):
+        super().__init__(self.django_command_name)
+
+class StopCeleryBeatCommand(PoetryCommand):
+    """
+    Команда для остановки Celery beat.
+    """
+    poetry_command_name = 'stop_celery_beat'
+    django_command_name = 'stop_celery_beat'
 
     def __init__(self):
         super().__init__(self.django_command_name)
 
 class StartRedisCommand(PoetryCommand):
+
     """
     Команда для запуска Redis.
     """

@@ -1,60 +1,57 @@
 """
-Файл для определения команды Django для управления сервером Daphne (остановка).
+Файл для определения команды Django для остановки Daphne сервера.
 
-Этот файл содержит класс `Command`, который наследуется от `BaseCommand` и предоставляет команду для остановки
-сервера Daphne. Команда использует класс `Daphne` для управления процессом сервера и останавливает его, если
-процесс с указанным именем найден.
-
-Класс `Command`:
-- `help` (str): Краткое описание команды, которое будет отображаться в справке Django.
-- `handle(self, *args, **options)`: Метод, который выполняет основную логику команды. В данном случае, он останавливает
-  сервер Daphne и выводит сообщение об успешной остановке или ошибке.
+Этот файл содержит класс Command, который наследуется от BaseCommand и предоставляет 
+функциональность для остановки запущенного процесса Daphne сервера.
 
 Пример использования:
-Для выполнения команды в терминале:
->>> python src/manage.py stop_daphne
+>>> python src/manage.py stop_prod
 """
 
-from src.core.utils.server.daphne import Daphne
+import logging
 
 from django.core.management.base import BaseCommand
 from django.conf import settings
 
+from src.core.utils.server.daphne import Daphne
+
+logger = logging.getLogger('core.utils.commands')
+
 class Command(BaseCommand):
     """
-    Команда Django для управления сервером Daphne (остановка).
-
-    Этот класс наследуется от `BaseCommand` и предоставляет команду для остановки сервера Daphne. Команда использует
-    класс `Daphne` для управления процессом сервера и останавливает его, если процесс с указанным именем найден.
-
-    Атрибуты:
-        help (str): Краткое описание команды, которое будет отображаться в справке Django.
-
-    Методы:
-        handle(self, *args, **options): Метод, который выполняет основную логику команды. В данном случае, он
-                                       останавливает сервер Daphne и выводит сообщение об успешной остановке или
-                                       ошибке.
+    Команда Django для остановки production сервера.
+    
+    Находит и останавливает запущенный процесс Daphne сервера используя
+    имя процесса из настроек Django.
     """
-    help = "Управление сервером Daphne (остановка)"
+    help = "Остановка production сервера (Daphne)"
 
-    def handle(self, *args, **options):
+    def handle(self, *args: tuple, **options: dict) -> None:
         """
-        Выполняет основную логику команды.
+        Выполняет команду остановки сервера.
 
-        Останавливает сервер Daphne и выводит сообщение об успешной остановке или ошибке.
-
-        Аргументы:
-            *args: Дополнительные аргументы, переданные в команду.
-            **options: Дополнительные именованные аргументы, переданные в команду.
+        Args:
+            *args: Позиционные аргументы
+            **options: Именованные аргументы
         """
-        # Получаем имя процесса сервера из настроек Django
+        logger.info('Запуск команды stop_prod')
+        
         server_process_name = getattr(settings, 'SERVER_PROCESS_NAME', None)
+        if not server_process_name:
+            msg = 'SERVER_PROCESS_NAME не настроен в настройках Django'
+            logger.error(msg)
+            self.stdout.write(self.style.ERROR(msg))
+            return
 
         daphne = Daphne()
-
+        logger.info(f'Поиск процесса сервера: {server_process_name}')
         is_stopped = daphne.stop_process(server_process_name)
 
         if is_stopped:
-            self.stdout.write(self.style.SUCCESS('Сервер успешно остановлен.'))
+            msg = 'Сервер успешно остановлен'
+            logger.info(msg)
+            self.stdout.write(self.style.SUCCESS(msg))
         else:
-            self.stdout.write(self.style.ERROR('Не удалось остановить сервер.'))
+            msg = 'Не удалось остановить сервер'
+            logger.error(msg)
+            self.stdout.write(self.style.ERROR(msg))

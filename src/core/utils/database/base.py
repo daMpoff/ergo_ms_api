@@ -21,7 +21,6 @@ MAX_RETRIES = 3
 # в секундах
 RETRY_DELAY = 1
 
-
 class DBManagerInterface(abc.ABC):
     def _get_query(self, get_query, *args, **kwargs):
         params = tuple()
@@ -127,13 +126,12 @@ class SqlAlchemyManager(DBManagerInterface):
                     self.engine = self._create_engine()
         raise last_error
 
-    def fetchall(self, get_query, chunksize: int = 1000000, *args, **kwargs) -> pd.DataFrame:
+    def fetchall(self, get_query, *args, **kwargs) -> pd.DataFrame:
         sql, params = self._get_query(get_query, *args, **kwargs)
+        
         def _fetchall():
-            full_df = pd.DataFrame()
-            for chunk_df in pd.read_sql_query(sql, con=self.engine, params=params, chunksize=chunksize):
-                full_df = pd.concat([full_df, chunk_df], ignore_index=True)
-            return full_df
+            return pd.read_sql_query(sql, con=self.engine, params=params)
+        
         return self._execute_with_retry(_fetchall)
 
     def fetchone(self, get_query, *args, **kwargs):
