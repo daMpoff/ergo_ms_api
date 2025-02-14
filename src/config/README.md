@@ -19,7 +19,7 @@ src/config/
 │   ├── auth.py              # Аутентификация и авторизация
 │   ├── auto_api.py          # Настройки автогенерации API
 │   ├── base.py              # Базовые настройки и пути
-│   ├── celery.py            # Настройки Celery и Redis
+│   ├── celery.py            # Настройки Celery и SQLite
 │   ├── cors.py              # Настройки CORS
 │   ├── database.py          # Конфигурация БД
 │   ├── localization.py      # Локализация
@@ -97,11 +97,11 @@ src/config/
    - Параметры интернационализации
    - Форматы дат и чисел
 
-6. **Celery и Redis** (`settings/celery.py`)
-   - Настройки брокера сообщений Redis
+6. **Celery и SQLite** (`settings/celery.py`)
+   - Настройки брокера сообщений SQLite
    - Конфигурация сериализации задач
    - Настройки временной зоны
-   - Путь к Redis серверу
+   - Путь к SQLite серверу
    - Настройки повторных попыток
 
 7. **Логирование** (`settings/logger.py`)

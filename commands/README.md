@@ -40,9 +40,6 @@ scripts/
 | createsuperuser | createsuperuser | Создание суперпользователя |
 | celery_worker | celery_worker | Запуск Celery worker |
 | celery_beat | celery_beat | Запуск Celery beat |
-| start_redis | start_redis | Запуск Redis |
-| stop_redis | stop_redis | Остановка Redis |
-
 
 
 ## Использование

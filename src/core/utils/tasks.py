@@ -18,7 +18,7 @@ celery_app.conf.beat_schedule = {
 @shared_task
 def monitor_sqlite_status():
     """
-    Мониторинг статуса Redis сервера.
+    Мониторинг статуса SQLite брокера.
     Записывает текущий статус в лог-файл каждые 10 секунд.
     """
     logger.info("Начало выполнения задачи monitor_sqlite_status")
