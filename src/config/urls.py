@@ -17,12 +17,12 @@ urlpatterns = []
 
 # Добавляем URL-конфигурации из ядра, автоматически 
 # обнаруженные в директории CORE_DIR
-core_modules_urlpatterns = discover_installed_app_urls(CORE_DIR, prefix='core')
+core_modules_urlpatterns = discover_installed_app_urls(CORE_DIR, prefix='src.core')
 urlpatterns += core_modules_urlpatterns
 
 # Добавляем URL-конфигурации из внешних модулей, автоматически 
 # обнаруженные в директории EXTERNAL_MODULES_DIR
-external_modules_urlpatterns = discover_installed_app_urls(EXTERNAL_MODULES_DIR, prefix='external')
+external_modules_urlpatterns = discover_installed_app_urls(EXTERNAL_MODULES_DIR, prefix='src.external')
 urlpatterns += external_modules_urlpatterns
 
 # Добавляем URL-конфигурации из конфигурационного файла auto_api.yaml
