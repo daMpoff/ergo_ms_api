@@ -1,9 +1,12 @@
 import os
 import logging
+
 from typing import Any, Dict
 from textwrap import dedent
+
 from django.core.management.base import BaseCommand, CommandError
 from django.conf import settings
+
 from src.core.utils.auto_api.auto_config import check_app_config_name
 from src.core.utils.methods import convert_snake_to_camel
 
