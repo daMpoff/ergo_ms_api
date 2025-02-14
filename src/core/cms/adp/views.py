@@ -28,7 +28,7 @@ from src.core.cms.adp.serializers import (
     UserRegistrationSerializer,
     UserRegistrationValidationSerializer,
 )
-from src.core.utils.auto_api.base_views import BaseAPIView
+from src.core.utils.base.base_views import BaseAPIView
 
 class UserRegistrationValidationView(BaseAPIView):
     @swagger_auto_schema(

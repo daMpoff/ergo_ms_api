@@ -3,5 +3,4 @@ from django.urls import (
 )
 
 urlpatterns = [
-    path('adp/', include('src.core.cms.adp.urls')),
 ]

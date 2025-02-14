@@ -19,7 +19,7 @@ from drf_yasg import openapi
 
 from src.config.env import env
 from src.config.settings.base import BASE_DIR
-from src.core.utils.auto_api.base_views import BaseAPIView
+from src.core.utils.base.base_views import BaseAPIView
 
 class CheckDatabaseConnectionView(BaseAPIView):
     """

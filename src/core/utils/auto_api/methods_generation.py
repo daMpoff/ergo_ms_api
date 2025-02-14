@@ -25,7 +25,7 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 from rest_framework.permissions import IsAuthenticated
 
-from src.core.utils.auto_api.base_views import BaseAPIView
+from src.core.utils.base.base_views import BaseAPIView
 
 logger = logging.getLogger('utils')
 
