@@ -52,7 +52,7 @@ class CompetentionGetView(BaseAPIView):
 
         if competention_id:
             # Если передан 'id', получаем данные о конкретной технологии
-            competention_id = OrderedDictQueryExecutor.fetchall(
+            competention = OrderedDictQueryExecutor.fetchall(
                 get_competentions, competention_id = competention_id
             )
             if not competention:
