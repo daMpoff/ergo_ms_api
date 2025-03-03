@@ -29,5 +29,8 @@ class Competention(models.Model):
         description (TextField): Описание компетенции. Максимальная длина — 400 символов.
     """
     code = models.CharField(max_length=10)
-    name = models.CharField(max_length=60)
+    name = models.CharField(max_length=200)
     description = models.TextField(max_length=400)
+
+    def __str__(self):
+        return f"{self.code} ({self.name})"

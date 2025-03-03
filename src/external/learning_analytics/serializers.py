@@ -8,7 +8,10 @@ from rest_framework.serializers import (
 )
 
 # Импорт модели Technology из приложения learning_analytics
-from src.external.learning_analytics.models import Technology
+from src.external.learning_analytics.models import (
+    Technology,
+    Competention
+)
 
 # Создание сериализатора для модели Technology
 class TechnologySerializer(ModelSerializer):
@@ -33,3 +36,26 @@ class TechnologySerializer(ModelSerializer):
                 rating=validated_data['rating'],      # Устанавливаем рейтинг
             )
             return technology  # Возвращаем созданный объект
+
+# Создание сериализатора для модели Competention
+class CompetentionSerializer(ModelSerializer):
+    class Meta:
+        # Указываем модель, с которой работает сериализатор
+        model = Competention
+        # Указываем поля модели,которые будут сериализованы/десериализованы
+        fields = ['code','name','description']
+
+        def create(self, validated_data):
+            """
+            Создает новый объект Competention на основе валидированных данных.
+
+            :param validated_data: Данные, прошедшие валидацию
+            :return: Созданный объект Competention
+            """ 
+
+            competention = Competention.objects.create(
+                code=validated_data['code'],                # Устанавливаем код компетенции
+                name=validated_data['name'],                # Устанавливаем название компетенции
+                description=validated_data['description']   # Устанавливаем описание компетенции
+            )
+            return competention # Возвращаем созданный объект
