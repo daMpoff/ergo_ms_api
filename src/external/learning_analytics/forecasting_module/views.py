@@ -21,7 +21,7 @@ from src.external.learning_analytics.forecasting_module.scripts import(
     get_all_specialities
 )
 
-# Представление данных для получения информации о компетенциях
+# Представление данных для получения информации о специальностях
 class SpecialityGetView(BaseAPIView):
     @swagger_auto_schema(
         operation_description="Получение информации о направлениях подготовки. Если указан параметр 'id', возвращается конкретное направление. Если параметр 'id' не указан, возвращаются все направления",
@@ -48,28 +48,28 @@ class SpecialityGetView(BaseAPIView):
         speciality_id = request.query_params.get('id') # Получаем параметр 'id' из query-строки
 
         if speciality_id:
-            # Если передан 'id', получаем данные о конкретной технологии
+            # Если передан 'id', получаем данные о конкретной специальности
             speciality = OrderedDictQueryExecutor.fetchall(
                 get_specialities, speciality_id = speciality_id
             )
             if not speciality:
-                # Если компетенция не обнаружена - возвращаем ошибку 404
+                # Если специальность не обнаружена - возвращаем ошибку 404
                 return Response(
                     {"message": "Направление подготовки (специальность) с указанным ID не найдена"},
                     status = status.HTTP_404_NOT_FOUND
                 )
-            # Формируем успешный ответ с данными о технологии
+            # Формируем успешный ответ с данными о специальности
             response_data = {
                 "data": speciality,
-                "message": "Компетенция получена успешно"
+                "message": "Специальность получена успешно"
             }
         else:
-            # Если 'id' не передан, получаем данные обо всех технологиях
+            # Если 'id' не передан, получаем данные обо всех специальностях
             specialities = OrderedDictQueryExecutor.fetchall(get_all_specialities)
-            # Формируем успешный ответ с данными обо всех технологиях
+            # Формируем успешный ответ с данными обо всех специальностях
             response_data = {
                 "data": specialities,
-                "message": "Все технологии получены успешно"
+                "message": "Все специальности получены успешно"
             }
 
         # Возвращаем ответ с данными и статусом 200
@@ -129,12 +129,12 @@ class SendSpecialityView(BaseAPIView):
     def post(self, request):
         """
         Обрабатывает POST-запрос для создания новой специальности.
-        Проверяет валидность данных и сохраняет компетенцию в базе данных.
+        Проверяет валидность данных и сохраняет специальность в базе данных.
         """
         serializer = SpecialitySerializer(data=request.data)  # Создаем сериализатор с данными из запроса
 
         if serializer.is_valid():
-            # Если данные валидны, сохраняем технологию
+            # Если данные валидны, сохраняем специальность
             serializer.save()
             # Возвращаем успешный ответ
             successful_response = Response(

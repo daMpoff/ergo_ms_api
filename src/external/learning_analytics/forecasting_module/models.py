@@ -2,7 +2,7 @@ from django.db import models
 
 class Speciality(models.Model):
     """
-    Модель Speciality представляет собой информацию о дисциплине.
+    Модель Speciality представляет собой информацию о специальности (направлении подготовки).
 
     Attributes:
         code (CharField): Код специальности. Максимальная длина — 20 символов.
