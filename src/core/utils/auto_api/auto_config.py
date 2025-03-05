@@ -136,7 +136,7 @@ def check_app_config_name(directory: str, config_name: str) -> bool:
             if file == 'apps.py':
                 file_path = os.path.join(root, file)
 
-                with open(file_path, 'r') as f:
+                with open(file_path, 'r', encoding='utf-8') as f:
                     content = f.read()
 
                     searched_class_signature = rf'class\s+{config_name}Config\s*\(AppConfig\):'

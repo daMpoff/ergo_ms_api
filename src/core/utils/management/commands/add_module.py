@@ -35,8 +35,7 @@ from src.core.utils.auto_api.auto_config import check_app_config_name
 from src.core.utils.methods import convert_snake_to_camel
 
 # Настройка логгера
-logger = logging.getLogger(__name__)
-
+logger = logging.getLogger('utils')
 
 class Command(BaseCommand):
     """
@@ -89,6 +88,7 @@ class Command(BaseCommand):
         logger.info(f'Начало создания модулей: {module_names}')
 
         external_modules_directory = getattr(settings, 'EXTERNAL_MODULES_DIR', None)
+        core_modules_directory = getattr(settings, 'CORE_DIR', None)
 
         if not os.path.exists(external_modules_directory):
             os.makedirs(external_modules_directory)
@@ -102,20 +102,21 @@ class Command(BaseCommand):
         # Форматируем путь для вывода (заменяем обратные слэши на прямые)
         formatted_path = module_directory.replace("\\", "/")
         
-        # В методе handle, где выводится сообщение об ошибке
-        if os.path.exists(module_directory):
-            logger.error(f'Модуль {module_names[-1]} уже существует: {formatted_path}')
-            self.stdout.write(self.style.ERROR(
-                f'Модуль {module_names[-1]} с иерархией {formatted_module_names} уже существует по пути: {formatted_path}'
-            ))
-            return
-
         # Проверка конфликта имен для конфига
         camel_module_name = convert_snake_to_camel(module_names[-1])
-        if check_app_config_name(external_modules_directory, camel_module_name):
-            logger.error(f'Конфликт имен: {camel_module_name}Config уже существует')
-            self.stdout.write(self.style.ERROR(f'Уже существует модуль c именем класса конфига - {camel_module_name}Config.'))
-            self.stdout.write(self.style.ERROR(f'Попробуйте другое название модуля.'))
+        if (
+           os.path.exists(module_directory) or 
+           check_app_config_name(external_modules_directory, camel_module_name) or 
+           check_app_config_name(core_modules_directory, camel_module_name)
+           ):
+            if len(module_names) == 1:
+                message = f'Модуль {module_names[-1]} уже существует по пути: {formatted_path}'
+            else:
+                message = f'Модуль {module_names[-1]} с иерархией {formatted_module_names} уже существует по пути: {formatted_path}'
+
+            logger.error(message)
+            self.stdout.write(self.style.ERROR(message))
+                
             return
 
         try:
