@@ -2,7 +2,7 @@ from django.db import models
 
 class Technology(models.Model):
     """
-    Модель Technology представляет технологию, которая используется в проекте.
+    Модель Technology представляет ту или иную технологию, осваиваемую в процессе изучения дисциплин.
 
     Attributes:
         name (CharField): Название технологии. Максимальная длина — 60 символов.
