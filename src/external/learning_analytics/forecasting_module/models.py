@@ -74,7 +74,7 @@ class AcademicCompetenceMatrix(models.Model):
 
     speciality_id = models.PositiveIntegerField(unique=True, verbose_name="Код специальности")
     discipline_list = models.JSONField(verbose_name="Перечень изучаемых дисциплин")
-    technology_stack  = models.JSONField(verbose_name="Перечень изучаемых технологий в течение времеи")
+    technology_stack  = models.JSONField(verbose_name="Перечень изучаемых технологий в течение времени")
 
     def __str__(self):
         return f"Матрица академических компетенций № {self.speciality_id}"

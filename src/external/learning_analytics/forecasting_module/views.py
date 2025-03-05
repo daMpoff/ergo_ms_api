@@ -290,3 +290,131 @@ class SendDisciplineView(BaseAPIView):
                 errors,
                 status=status.HTTP_400_BAD_REQUEST
             ) 
+
+
+# Представление данных для получения информации об академических матрицах компетенций
+
+class AcademicCompetenceMatrixGetView(BaseAPIView):
+    @swagger_auto_schema(
+        operation_description="Получение информации об академической матрице компетенций. Если указан параметр 'id', возвращается конкретная матрица. Если параметр 'id' не указан, возвращаются все существующие матрицы.",
+        manual_parameters=[
+            openapi.Parameter(
+                'id', # Имя параметра
+                openapi.IN_QUERY, # Параметр передается в query-строке
+                type = openapi.TYPE_INTEGER, # Тип параметра (целочисленынй)
+                required=False,
+                description="Идентификатор академической матрицы компетенций (опционально)", # Описание параметра
+            )
+        ],
+        responses={
+            200: "Информация о матрицах академических компетенций", # Успешный ответ
+            400: "Ошибка" # Ошибка
+        }
+    )
+    def get(self, request):
+        """
+        Обработка GET-запроса для получения информации о матрицах академических компетенций.
+        В случае передачи параметра 'id', возвращает данные о матрицах академических компетенций.
+        Если параметр 'id' не передан - возвращаются все данные о матрицах академических компетенций.
+        """
+
+        matrix_id = request.query_params.get('id') # Полчаем параметр 'id' из query-строки
+
+        if matrix_id:
+            # Если передан 'id', получаем данные о конкретной дисциплине
+            matrix = OrderedDictQueryExecutor.fetchall(
+                get_academicCompetenceMatrix, matrix_id = matrix_id
+            )
+            if not matrix:
+                # Если дисциплина не обнаружена - возвращаем ошибку 404
+                return Response(
+                    {"message": "Матрица академических компетенций с указанным ID не найдена"},
+                    status = status.HTTP_404_NOT_FOUND
+                )
+            response_data = {
+                "data": matrix,
+                "message": "Матрица академических компетенций получена успешно."
+            }
+        else:
+            # Если 'id' не передан, получаем данные обо всех специальностях
+            matrices = OrderedDictQueryExecutor.fetchall(get_allAcademicCompetenceMatrix)
+            # Формируем успешный ответ с данными обо всех специальностях
+            response_data = {
+                "data": matrices,
+                "message": "Все матрицы академических компетенций получены успешно"
+            }
+
+        # Возвращаем ответ с данными и статусом 200
+        return Response(response_data, status=status.HTTP_200_OK)
+
+class SendAcademicCompetenceMatrixView(BaseAPIView):
+    @swagger_auto_schema(
+        operation_description="Проверка ввода матрицы академических компетенций",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT, # Тип тела запроса (объект JSON)
+            properties={
+                'speciality_id': openapi.Schema(
+                    type=openapi.TYPE_INTEGER,  # Тип поля (целочисленный)
+                    description='Код специальности'  # Описание поля
+                ),
+                'discipline_list': openapi.Schema(
+                    type=openapi.TYPE_OBJECT,  # Тип поля (объект)
+                    description='Перечень изучаемых дисциплин'  # Описание поля
+                ),
+                'technology_stack': openapi.Schema(
+                    type=openapi.TYPE_OBJECT, # Тип поля (строка)
+                    description='Перечень изучаемых технологий в течение времени' # Описание поля
+                ),                
+            },
+            required=['speciality_id', 'discipline_list', 'technology_stack'], # Обязательные поля
+            example={
+                'speciality_id': 1,
+                'discipline_list': {
+                    'code': 'Б1.О.45',
+                    'name': 'Формализованные модели и методы решения аналитических задач',
+                    'semesters': '7,8',
+                    'contact_work_hours': 192,
+                    'independent_work_hours': 60,
+                    'controle_work_hours': 36,
+                    'competencies': {
+                        'code': 'ОПК-1.2',
+                        'name': '. Способен оценивать роль информации, информационных технологий и информационной безопасности в современном обществе.'
+                    }
+                },
+                'technology_stack': {
+                    "name": "Python",
+                    "description": "Python — это высокоуровневый язык программирования общего назначения, который широко используется для разработки веб-приложений, анализа данных, искусственного интеллекта и др.",
+                    "popularity": 95,
+                    "rating": 5
+                }
+            }
+        ),
+            responses={
+                201: "Матрица академических компетенций успешно сохранена", # Успешный ответ
+                400: "Произошла ошибка" # Ошибка
+            },
+        )
+    def post(self, request):
+            """
+            Обрабатывает POST-запрос для создания новой матрицы академических компетенций.
+            Проверяет валидность данных и сохраняет матрицы академических компетенций в базе данных.
+            """
+
+            serializer = AcademicCompetenceMatrixSerializer(data=request.data) # Создаем сериализатор с данными из запроса
+
+            if serializer.is_valid():
+                # Если данные валидны, сохраняем дисциплину
+                serializer.save()
+                # Возвращаем успешным ответ
+                successful_response = Response(
+                    {"message": "Матрица академических компетенций сохранена успешно"},
+                    status= status.HTTP_200_OK
+                )
+                return successful_response
+            
+            # Если данные не валидны, преобразуем ошибки в словарь и возвращаем ошибку 400
+            errors = parse_errors_to_dict(serializer.errors)
+            return Response(
+                errors,
+                status=status.HTTP_400_BAD_REQUEST
+            ) 
