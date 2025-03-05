@@ -29,7 +29,7 @@ class Speciality(models.Model):
         verbose_name_plural = "Специальности"
 
 
-class Discpiline(models.Model):
+class Discipline(models.Model):
     """
     Модель Discipline представляет собой информацию о дисциплине.
     
