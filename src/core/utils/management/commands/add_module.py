@@ -24,6 +24,7 @@
 
 import os
 import logging
+
 from typing import Any, Dict
 from textwrap import dedent
 
@@ -53,7 +54,7 @@ class Command(BaseCommand):
         Args:
             parser: Парсер аргументов Django.
         """
-        parser.add_argument('name', help='Имя создаваемого модуля')
+        parser.add_argument('names', nargs='+', help='Имена создаваемых модулей (через пробел, например, module1 module2 module3)')
 
     def create_file_structure(self, module_directory: str, files_to_create: Dict[str, str]) -> None:
         """
@@ -79,13 +80,13 @@ class Command(BaseCommand):
 
         Args:
             *args: Позиционные аргументы
-            **options: Именованные аргументы, включая name
+            **options: Именованные аргументы, включая names
 
         Raises:
             CommandError: Если модуль уже существует или возникла ошибка при создании
         """
-        module_name = options['name']
-        logger.info(f'Начало создания модуля {module_name}')
+        module_names = options['names']
+        logger.info(f'Начало создания модулей: {module_names}')
 
         external_modules_directory = getattr(settings, 'EXTERNAL_MODULES_DIR', None)
 
@@ -93,14 +94,24 @@ class Command(BaseCommand):
             os.makedirs(external_modules_directory)
             logger.debug(f'Создана директория: {external_modules_directory}')
 
-        module_directory = os.path.normpath(os.path.join(external_modules_directory, module_name))
+        # Создаем иерархию директорий на основе переданных имен
+        module_directory = os.path.normpath(os.path.join(external_modules_directory, *module_names))
 
+        # Форматируем список модулей в строку с разделителями через точку
+        formatted_module_names = " -> ".join(module_names)
+        # Форматируем путь для вывода (заменяем обратные слэши на прямые)
+        formatted_path = module_directory.replace("\\", "/")
+        
+        # В методе handle, где выводится сообщение об ошибке
         if os.path.exists(module_directory):
-            logger.error(f'Модуль {module_name} уже существует: {module_directory}')
-            self.stdout.write(self.style.ERROR(f'Модуль {module_name} уже существует по пути - {module_directory}.'))
+            logger.error(f'Модуль {module_names[-1]} уже существует: {formatted_path}')
+            self.stdout.write(self.style.ERROR(
+                f'Модуль {module_names[-1]} с иерархией {formatted_module_names} уже существует по пути: {formatted_path}'
+            ))
             return
 
-        camel_module_name = convert_snake_to_camel(module_name)
+        # Проверка конфликта имен для конфига
+        camel_module_name = convert_snake_to_camel(module_names[-1])
         if check_app_config_name(external_modules_directory, camel_module_name):
             logger.error(f'Конфликт имен: {camel_module_name}Config уже существует')
             self.stdout.write(self.style.ERROR(f'Уже существует модуль c именем класса конфига - {camel_module_name}Config.'))
@@ -108,10 +119,12 @@ class Command(BaseCommand):
             return
 
         try:
+            # Создаем все директории в иерархии
             os.makedirs(module_directory)
             os.makedirs(os.path.join(module_directory, 'migrations'))
-            logger.debug(f'Создана структура директорий для модуля {module_name}')
+            logger.debug(f'Создана структура директорий для модуля {module_names}')
 
+            # Создаем файлы в каждой директории
             files_to_create = {
                 '__init__.py': '',
                 'apps.py': dedent(f"""
@@ -119,7 +132,7 @@ class Command(BaseCommand):
 
                     class {camel_module_name}Config(AppConfig):
                         default_auto_field = 'django.db.models.BigAutoField'
-                        name = 'src.external.{module_name}'
+                        name = 'src.external.{".".join(module_names)}'
                 """),
                 'urls.py': dedent("""
                     from django.urls import path
@@ -153,13 +166,13 @@ class Command(BaseCommand):
 
                     # Создавайте свои представления здесь
                 """),
-                'migrations/__init__.py': '',
+                os.path.join('migrations', '__init__.py'): '',
             }
 
             self.create_file_structure(module_directory, files_to_create)
             
-            logger.info(f'Модуль {module_name} успешно создан')
-            self.stdout.write(self.style.SUCCESS(f'Модуль {module_name} успешно создан по пути - {module_directory}'))
+            logger.info(f'Модуль {module_names[-1]} успешно создан')
+            self.stdout.write(self.style.SUCCESS(f'Модуль {module_names[-1]} с иерархией {formatted_module_names} успешно создан по пути - {module_directory}'))
 
         except Exception as e:
             logger.error(f'Ошибка при создании модуля: {str(e)}')
