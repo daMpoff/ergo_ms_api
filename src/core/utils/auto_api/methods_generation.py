@@ -550,3 +550,5 @@ def generate_routes_from_config(configs_path: List[str]) -> list:
                 routes.append(path(path_s, view.as_view()))
 
             return routes
+        
+    return []

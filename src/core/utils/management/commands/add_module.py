@@ -101,9 +101,13 @@ class Command(BaseCommand):
 
         # Формирование названия модуля в формате camel
         camel_module_name = ""
+        standard_module_name = ""
         for module_name in module_names:
             camel_module_name += convert_snake_to_camel(module_name)
+            standard_module_name += module_name + "_"
 
+        standard_module_name = standard_module_name.rstrip('_')
+        
         # Создаем иерархию директорий на основе переданных имен
         module_directory = os.path.normpath(os.path.join(external_modules_directory, *module_names))
         
@@ -154,7 +158,7 @@ class Command(BaseCommand):
                     class {camel_module_name}Config(AppConfig):
                         default_auto_field = 'django.db.models.BigAutoField'
                         name = 'src.external.{".".join(module_names)}'
-                        label = '{camel_module_name}'
+                        label = '{standard_module_name}'
                 """),
                 'urls.py': dedent("""
                     from django.urls import path
