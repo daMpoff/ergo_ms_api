@@ -1,7 +1,7 @@
 TasksGraphView:
   path: test-integration/tasks/
   method: GET
-  handler: statistic.tasks_graph_handler
+  handler: examples.statistic.tasks_graph_handler
   status_code: 200
   renderers: json, browsable
   auth_required: true
@@ -50,7 +50,7 @@ TasksGraphView:
 ProcessGraphView:
   path: test-integration/processes/
   method: GET
-  handler: statistic.tasks_graph_handler
+  handler: examples.statistic.tasks_graph_handler
   status_code: 200
   renderers: json, browsable
   auth_required: true
@@ -94,7 +94,7 @@ ProcessGraphView:
 MessagesView:
   path: test-integration/messages/
   method: GET
-  handler: messages.messages_handler
+  handler: examples.messages.messages_handler
   status_code: 200
   renderers: json, browsable
   auth_required: false
@@ -132,7 +132,7 @@ MessagesView:
 FileUploadView:
   path: test-integration/upload/
   method: POST
-  handler: files.upload_handler
+  handler: examples.files.upload_handler
   status_code: 201
   renderers: json, browsable
   auth_required: true
@@ -178,7 +178,7 @@ FileUploadView:
 FileDownloadView:
   path: test-integration/download/
   method: GET
-  handler: files.download_handler
+  handler: examples.files.download_handler
   status_code: 200
   renderers: json, browsable
   auth_required: true
@@ -221,7 +221,7 @@ FileDownloadView:
 Tasks1GraphView:
   path: test-integration/tasks1/
   method: GET
-  handler: statistic.tasks_graph_handler
+  handler: examples.statistic.tasks_graph_handler
   auth_required: true
   throttle_rates:
     anon: 100/minute
