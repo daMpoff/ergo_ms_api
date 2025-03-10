@@ -82,3 +82,30 @@ class AcademicCompetenceMatrix(models.Model):
     class Meta:
         verbose_name = "Матрица академических компетенций"
         verbose_name_plural = "Матрицы академических компетенций"
+
+class CompetencyProfileOfVacancy(models.Model):
+    """
+    Модель CompetencyProfileOfVacancy - модель, представляющая компетентностный профиль вакансии, на основании
+    которой в дальнейшем будет формироваться дополнительный вектор индивидуальных траекторий обучения, соотевтствующий
+    запросам работодателей.
+
+    Attributes:
+        vacancy_name (CharField): Название вакансии, отражающее содержание компетентностного профиля
+        employer_id  (PositiveSmallIntegerField): ID работодателя, сформировавшего вакансию
+        competencies_stack  (JSONField): Перечень запрашиваемых компетенций работодателем
+        technology_stack (JSONField): Перечень технологий, запрашиваемых работодателем
+        descr (TextField): Описание вакансии
+    """
+
+    vacancy_name = models.CharField(max_length=255, verbose_name="Название вакансии")
+    employer_id = models.PositiveSmallIntegerField(verbose_name="ID работодателя")
+    competencies_stack = models.JSONField(verbose_name="Перечень требующихся компетенций")
+    technology_stack = models.JSONField(verbose_name="Стек требуемых технологий")
+    descr = models.TextField(max_length=400, verbose_name="Описание вакансии")
+
+    def __str__(self):
+        return f"Компетентностный профиль вакансии {self.vacancy_name}"
+    
+    class Meta:
+        verbose_name = "Компетентностный профиль вакансии"
+        verbose_name_plural = "Компетентностные профили вакансии"
