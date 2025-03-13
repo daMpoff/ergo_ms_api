@@ -11,7 +11,7 @@ from rest_framework.serializers import (
 from src.external.learning_analytics.forecasting_module.models import (
     Speciality,                 # Модель специальностией
     Discipline,                 # Модель дисциплины
-    AcademicCompetenceMatrix,    # Модель матрицы академических компетенций
+    AcademicCompetenceMatrix,   # Модель матрицы академических компетенций
     CompetencyProfileOfVacancy  # Модель компетентностного профиля вакансии
 )
 

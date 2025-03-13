@@ -7,13 +7,13 @@ class Technology(models.Model):
     Attributes:
         name (CharField): Название технологии. Максимальная длина — 60 символов.
         description (TextField): Описание технологии. Максимальная длина — 400 символов.
-        popularity (PositiveIntegerField): Уровень популярности технологии.
-        rating (IntegerField): Рейтинг технологии.
+        popularity (DecimalField): Уровень популярности технологии от 0 до 100, %.
+        rating (DecimalField): Рейтинг технологии от 0 до 5.
     """
     name = models.CharField(max_length=60)
     description = models.TextField(max_length=400)
-    popularity = models.PositiveIntegerField()
-    rating = models.IntegerField()
+    popularity = models.DecimalField(max_digits=4, decimal_places=2)
+    rating = models.DecimalField(max_digits=3, decimal_places=2)
 
     def __str__(self):
         return f"{self.name} - {self.description}"

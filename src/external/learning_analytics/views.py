@@ -73,7 +73,7 @@ class EmployerGetView(BaseAPIView):
             # Формируем успешный ответ с данными обо всех технологиях
             response_data = {
                 "data": employers,
-                "message": "Все работодатедли получены успешно"
+                "message": "Все работодатели получены успешно"
             }
 
         # Возвращаем ответ с данными и статусом 200
@@ -187,7 +187,8 @@ class TechnologyGetView(BaseAPIView):
         # Возвращаем ответ с данными и статусом 200
         return Response(response_data, status=status.HTTP_200_OK)
 
-# Представление данных для создания (POST) работодателей
+
+
 class SendEmployerView(APIView):
     @swagger_auto_schema(
         operation_description="Создание нового работодателя",
@@ -320,11 +321,11 @@ class SendTechnologyView(BaseAPIView):
                     description='Описание'  # Описание поля
                 ),
                 'popularity': openapi.Schema(
-                    type=openapi.TYPE_INTEGER,  # Тип поля (целое число)
+                    type=openapi.TYPE_NUMBER,  # Тип поля (вещественное число)
                     description='Популярность'  # Описание поля
                 ),
                 'rating': openapi.Schema(
-                    type=openapi.TYPE_INTEGER,  # Тип поля (целое число)
+                    type=openapi.TYPE_NUMBER,  # Тип поля (вещественное число)
                     description='Рейтинг'  # Описание поля
                 ),
             },
@@ -332,8 +333,8 @@ class SendTechnologyView(BaseAPIView):
             example={
                 "name": "Python",
                 "description": "Python — это высокоуровневый язык программирования общего назначения, который широко используется для разработки веб-приложений, анализа данных, искусственного интеллекта и др.",
-                "popularity": 95,
-                "rating": 5
+                "popularity": 95.83,
+                "rating": 4.95
             }
         ),
         responses={
