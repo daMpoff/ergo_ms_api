@@ -11,7 +11,8 @@ from rest_framework.serializers import (
 from src.external.learning_analytics.forecasting_module.models import (
     Speciality,                 # Модель специальностией
     Discipline,                 # Модель дисциплины
-    AcademicCompetenceMatrix    # Модель матрицы академических компетенций
+    AcademicCompetenceMatrix,    # Модель матрицы академических компетенций
+    CompetencyProfileOfVacancy  # Модель компетентностного профиля вакансии
 )
 
 # Создание сериализатора для модели Speciality
@@ -94,3 +95,29 @@ class AcademicCompetenceMatrixSerializer(ModelSerializer):
             )
 
             return AcademicCompetenceMatrix # Возвращаем созданный объект
+
+class CompetencyProfileOfVacancySerializer(ModelSerializer):
+    class Meta:
+        # Указываем модель, с которой будет работать сериализатор
+        model = CompetencyProfileOfVacancy
+        # Указываем поля модели, которые будут серилаизованы/десериализованы
+        fields = ['vacancy_name', 'employer_id', 'competencies_stack', 'technology_stack', 'descr']
+
+        # Метод для создания нового объекта CompetencyProfileOfVacancy
+        def create(self, validated_data):
+            """
+            Создает новый объект CompetencyProfileOfVacancy на основе валидированных данных
+
+            :param validated_data: Данные, прошедшие валидацию
+            :return: Созданный объект CompetencyProfileOfVacancy
+            """
+
+            CompetencyProfileOfVacancy = CompetencyProfileOfVacancy.objects.create(
+                vacancy_name = validated_data['vacancy_name'],
+                employer_id = validated_data['employer_id'],
+                competencies_stack = validated_data['competencies_stack'],
+                technology_stack = validated_data['technology_stack'],
+                descr = validated_data['descr'],
+            )
+
+            return CompetencyProfileOfVacancy # Возвращаем созданный объект

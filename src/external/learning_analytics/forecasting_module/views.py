@@ -11,23 +11,204 @@ from drf_yasg import openapi
 from src.external.learning_analytics.forecasting_module.models import(
     Speciality,
     Discipline,
-    AcademicCompetenceMatrix
+    AcademicCompetenceMatrix,
+    CompetencyProfileOfVacancy
 )
 
 from src.external.learning_analytics.forecasting_module.serializers import(
     SpecialitySerializer,
     DisciplineSerializer,
-    AcademicCompetenceMatrixSerializer
+    AcademicCompetenceMatrixSerializer,
+    CompetencyProfileOfVacancySerializer
 )
 
 from src.external.learning_analytics.forecasting_module.scripts import(
     get_specialities,
-    get_all_specialities,
     get_disciplines,
-    get_all_disciplines,
     get_academicCompetenceMatrix,
-    get_allAcademicCompetenceMatrix
+    get_competencyProfileOfVacancy
 )
+
+# Представление данных для получения информации о компетентностных профилях вакансий
+
+class CompetencyProfileOfVacancyGetView(BaseAPIView):
+    @swagger_auto_schema(
+        operation_description="Получение информации о компетентностных профилях вакансий. Если указан параметр 'id', возвращается конкретный профиль. Если указан параметр 'employer_id', возвращаются профили для конкретного работодателя. Если ни один параметр не указан, возвращаются все профили.",
+        manual_parameters=[
+            openapi.Parameter(
+                'id',  # Имя параметра
+                openapi.IN_QUERY,  # Параметр передается в query-строке
+                type=openapi.TYPE_INTEGER,  # Тип параметра (целочисленный)
+                required=False,
+                description="Идентификатор компетентностного профиля вакансии (опционально)",  # Описание параметра
+            ),
+            openapi.Parameter(
+                'employer_id',  # Имя параметра
+                openapi.IN_QUERY,  # Параметр передается в query-строке
+                type=openapi.TYPE_INTEGER,  # Тип параметра (целочисленный)
+                required=False,
+                description="Идентификатор работодателя (опционально)",  # Описание параметра
+            )
+        ],
+        responses={
+            200: "Информация о компетентностных профилях вакансий",  # Успешный ответ
+            404: "Профиль с указанным ID не найден",  # Ошибка 404
+            400: "Ошибка"  # Ошибка
+        }
+    )
+    def get(self, request):
+        """
+        Обработка GET-запроса для получения информации о компетентностных профилях вакансий.
+        В случае передачи параметра 'id', возвращает данные о конкретном профиле.
+        В случае передачи параметра 'employer_id', возвращает данные о профилях для конкретного работодателя.
+        Если ни один параметр не передан - возвращаются все профили.
+        """
+        cp_id = request.query_params.get('id')  # Получаем параметр 'id' из query-строки
+        employer_id = request.query_params.get('employer_id')  # Получаем параметр 'employer_id' из query-строки
+
+        if cp_id:
+            # Если передан 'id', получаем данные о конкретном профиле
+            profile = OrderedDictQueryExecutor.fetchall(
+                get_competencyProfileOfVacancy, cp_id=cp_id
+            )
+            if not profile:
+                # Если профиль не обнаружен - возвращаем ошибку 404
+                return Response(
+                    {"message": "Компетентностный профиль вакансии с указанным ID не найден"},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            # Формируем успешный ответ с данными о профиле
+            response_data = {
+                "data": profile,
+                "message": "Компетентностный профиль вакансии получен успешно"
+            }
+        elif employer_id:
+            # Если передан 'employer_id', получаем данные о профилях для конкретного работодателя
+            profiles = OrderedDictQueryExecutor.fetchall(
+                get_competencyProfileOfVacancy, employer_id=employer_id
+            )
+            if not profiles:
+                # Если профили не обнаружены - возвращаем ошибку 404
+                return Response(
+                    {"message": "Компетентностные профили вакансий для указанного работодателя не найдены"},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            # Формируем успешный ответ с данными о профилях
+            response_data = {
+                "data": profiles,
+                "message": "Компетентностные профили вакансий для указанного работодателя получены успешно"
+            }
+        else:
+            # Если ни один параметр не передан, получаем данные обо всех профилях
+            profiles = OrderedDictQueryExecutor.fetchall(get_competencyProfileOfVacancy)
+            # Формируем успешный ответ с данными обо всех профилях
+            response_data = {
+                "data": profiles,
+                "message": "Все компетентностные профили вакансий получены успешно"
+            }
+
+        # Возвращаем ответ с данными и статусом 200
+        return Response(response_data, status=status.HTTP_200_OK)
+
+class SendCompetencyProfileOfVacancy(BaseAPIView):
+    @swagger_auto_schema(
+        operation_description="Проверка ввода компетентностного профиля вакансий",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,  # Тип тела запроса (объект JSON)
+            properties={
+                'vacancy_name': openapi.Schema(
+                    type=openapi.TYPE_STRING,  # Тип поля (строка)
+                    description='Наименование специальности'  # Описание поля
+                ),
+                'employer_id': openapi.Schema(
+                    type=openapi.TYPE_INTEGER,  # Тип поля (строка)
+                    description='ID работодателя'  # Описание поля
+                ),
+                'competencies_stack': openapi.Schema(
+                    type=openapi.TYPE_OBJECT,  # Тип поля (строка)
+                    description='Перечень компетенций'  # Описание поля
+                ),
+                'technology_stack': openapi.Schema(
+                    type=openapi.TYPE_OBJECT,  # Тип поля (строка)
+                    description='Перечень технологий'  # Описание поля
+                ),
+                'descr': openapi.Schema(
+                    type=openapi.TYPE_STRING,  # Тип поля (строка)
+                    description='Описание компетентностного профиля вакансии'  # Описание поля
+                ),
+            },
+            required=['vacancy_name', 'employer_id', 'competencies_stack', 'technology_stack', 'descr'],  # Обязательные поля
+            example = {
+                "vacancy_name": "Python Developer",
+                "employer_id": 123,
+                "competencies_stack": [
+                    {
+                        "id": 1,
+                        "code": "ОПК-1",
+                        "name": "Способность разрабатывать алгоритмы",
+                        "description": "Умение разрабатывать и анализировать алгоритмы."
+                    },
+                    {
+                        "id": 2,
+                        "code": "ОПК-2",
+                        "name": "Способность работать с базами данных",
+                        "description": "Умение проектировать и использовать базы данных."
+                    }
+                ],
+                "technology_stack": [
+                    {
+                        "id": 1,
+                        "name": "Python",
+                        "description": "Высокоуровневый язык программирования.",
+                        "popularity": 95,
+                        "rating": 5
+                    },
+                    {
+                        "id": 2,
+                        "name": "Django",
+                        "description": "Фреймворк для веб-разработки на Python.",
+                        "popularity": 85,
+                        "rating": 4
+                    },
+                    {
+                        "id": 3,
+                        "name": "PostgreSQL",
+                        "description": "Реляционная система управления базами данных.",
+                        "popularity": 90,
+                        "rating": 5
+                    }
+                ],
+                "descr": "Ищем опытного Python-разработчика с навыками работы с базами данных и веб-фреймворками."
+            }
+        ),
+        responses={
+            201: "Специальность успешно сохранена",  # Успешный ответ
+            400: "Произошла ошибка"  # Ошибка
+        },
+    )
+    def post(self, request):
+        """
+        Обрабатывает POST-запрос для создания нового компетентностного профиля вакансии.
+        Проверяет валидность данных и сохраняет КПВ в базе данных.
+        """
+        serializer = CompetencyProfileOfVacancySerializer(data=request.data)  # Создаем сериализатор с данными из запроса
+
+        if serializer.is_valid():
+            # Если данные валидны, сохраняем специальность
+            serializer.save()
+            # Возвращаем успешный ответ
+            successful_response = Response(
+                {"message": "Компетентностный профиль вакансии сохранен успешно"},
+                status=status.HTTP_200_OK
+            )
+            return successful_response
+
+        # Если данные не валидны, преобразуем ошибки в словарь и возвращаем ошибку 400
+        errors = parse_errors_to_dict(serializer.errors)
+        return Response(
+            errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
 # Представление данных для получения информации о специальностях
 class SpecialityGetView(BaseAPIView):
@@ -73,7 +254,7 @@ class SpecialityGetView(BaseAPIView):
             }
         else:
             # Если 'id' не передан, получаем данные обо всех специальностях
-            specialities = OrderedDictQueryExecutor.fetchall(get_all_specialities)
+            specialities = OrderedDictQueryExecutor.fetchall(get_specialities)
             # Формируем успешный ответ с данными обо всех специальностях
             response_data = {
                 "data": specialities,
@@ -83,6 +264,7 @@ class SpecialityGetView(BaseAPIView):
         # Возвращаем ответ с данными и статусом 200
         return Response(response_data, status=status.HTTP_200_OK)
 
+# Представление данных для создания (POST) специальностей
 class SendSpecialityView(BaseAPIView):
     @swagger_auto_schema(
         operation_description="Проверка ввода специальности",
@@ -202,7 +384,7 @@ class DisciplineGetView(BaseAPIView):
             }
         else:
             # Если 'id' не передан, получаем данные обо всех специальностях
-            disciplines = OrderedDictQueryExecutor.fetchall(get_all_disciplines)
+            disciplines = OrderedDictQueryExecutor.fetchall(get_disciplines)
             # Формируем успешный ответ с данными обо всех специальностях
             response_data = {
                 "data": disciplines,
@@ -212,6 +394,7 @@ class DisciplineGetView(BaseAPIView):
         # Возвращаем ответ с данными и статусом 200
         return Response(response_data, status=status.HTTP_200_OK)
 
+# Представление данных для создания (POST) дисциплины
 class SendDisciplineView(BaseAPIView):
     @swagger_auto_schema(
         operation_description="Проверка ввода дисциплины",
@@ -337,7 +520,7 @@ class AcademicCompetenceMatrixGetView(BaseAPIView):
             }
         else:
             # Если 'id' не передан, получаем данные обо всех специальностях
-            matrices = OrderedDictQueryExecutor.fetchall(get_allAcademicCompetenceMatrix)
+            matrices = OrderedDictQueryExecutor.fetchall(get_academicCompetenceMatrix)
             # Формируем успешный ответ с данными обо всех специальностях
             response_data = {
                 "data": matrices,

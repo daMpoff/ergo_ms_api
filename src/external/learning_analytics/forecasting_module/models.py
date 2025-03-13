@@ -94,7 +94,7 @@ class CompetencyProfileOfVacancy(models.Model):
         employer_id  (PositiveSmallIntegerField): ID работодателя, сформировавшего вакансию
         competencies_stack  (JSONField): Перечень запрашиваемых компетенций работодателем
         technology_stack (JSONField): Перечень технологий, запрашиваемых работодателем
-        descr (TextField): Описание вакансии
+        descr (TextField): Описание вакансии (исходное)
     """
 
     vacancy_name = models.CharField(max_length=255, verbose_name="Название вакансии")

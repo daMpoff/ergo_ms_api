@@ -8,21 +8,76 @@ from src.external.learning_analytics.models import (
 )
 from src.external.learning_analytics.serializers import (
     TechnologySerializer,
-    CompetentionSerializer
+    CompetentionSerializer,
+    EmployerSerializer
 )
 from src.core.utils.methods import parse_errors_to_dict
 from src.core.utils.base.base_views import BaseAPIView
 from src.external.learning_analytics.scripts import (
     get_technologies,
-    get_all_technologies,
     get_competentions,
-    get_all_competentions
+    get_employers
 )
 
 from src.core.utils.database.main import OrderedDictQueryExecutor
 
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
+
+# Представление данных для получения информации о работодателях
+
+class EmployerGetView(BaseAPIView):
+    @swagger_auto_schema(
+        operation_description="Получение информации о работодателях. Если указан параметр 'id', возвращается конкретный работодатель. Если параметр 'id' не указан, возвращаются все работодатели",
+        manual_parameters=[
+            openapi.Parameter(
+                'id', # Имя параметра
+                openapi.IN_QUERY, # Параметр передается в query-строке
+                type = openapi.TYPE_INTEGER, # Тип параметра (целочисленный)
+                required=False,
+                description="Идентификатор работодателя (опционально)", # Описание параметра
+            )
+        ],
+        responses={
+            200: "Информация о работодателях", # Успешный ответ
+            400: "Ошибка" # Ошибка
+        }
+    )
+    def get(self, request):
+        """
+        Обработка GET-запроса для получения информации о работодателях
+        В случае передачи параметра 'id', возвращает данные о конкретном работодателе.
+        Если параметр 'id' не передан - возвращаются все данные о работодателях.
+        """
+        employer_id = request.query_params.get('id') # Получаем параметр 'id' из query-строки
+
+        if employer_id:
+            # Если передан 'id', получаем данные о конкретном работодателе
+            employer = OrderedDictQueryExecutor.fetchall(
+                get_employers, employer_id = employer_id
+            )
+            if not employer:
+                # Если работодатель не обнаружена - возвращаем ошибку 404
+                return Response(
+                    {"message": "Работодатель с указанным ID не найден"},
+                    status = status.HTTP_404_NOT_FOUND
+                )
+            # Формируем успешный ответ с данными о работодателе
+            response_data = {
+                "data": employer,
+                "message": "Компетенция получена успешно"
+            }
+        else:
+            # Если 'id' не передан, получаем данные обо всех технологиях
+            employers = OrderedDictQueryExecutor.fetchall(get_employers)
+            # Формируем успешный ответ с данными обо всех технологиях
+            response_data = {
+                "data": employers,
+                "message": "Все работодатедли получены успешно"
+            }
+
+        # Возвращаем ответ с данными и статусом 200
+        return Response(response_data, status=status.HTTP_200_OK)
 
 # Представление данных для получения информации о компетенциях
 class CompetentionGetView(BaseAPIView):
@@ -68,7 +123,7 @@ class CompetentionGetView(BaseAPIView):
             }
         else:
             # Если 'id' не передан, получаем данные обо всех технологиях
-            competentions = OrderedDictQueryExecutor.fetchall(get_all_competentions)
+            competentions = OrderedDictQueryExecutor.fetchall(get_competentions)
             # Формируем успешный ответ с данными обо всех технологиях
             response_data = {
                 "data": competentions,
@@ -122,7 +177,7 @@ class TechnologyGetView(BaseAPIView):
             }
         else:
             # Если 'id' не передан, получаем данные обо всех технологиях
-            technologies = OrderedDictQueryExecutor.fetchall(get_all_technologies)
+            technologies = OrderedDictQueryExecutor.fetchall(get_technologies)
             # Формируем успешный ответ с данными обо всех технологиях
             response_data = {
                 "data": technologies,
@@ -131,6 +186,67 @@ class TechnologyGetView(BaseAPIView):
 
         # Возвращаем ответ с данными и статусом 200
         return Response(response_data, status=status.HTTP_200_OK)
+
+# Представление данных для создания (POST) работодателей
+class SendEmployerView(APIView):
+    @swagger_auto_schema(
+        operation_description="Создание нового работодателя",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,  # Тип тела запроса (объект JSON)
+            properties={
+                'company_name': openapi.Schema(
+                    type=openapi.TYPE_STRING,  # Тип поля (строка)
+                    description='Название компании',  # Описание поля
+                ),
+                'description': openapi.Schema(
+                    type=openapi.TYPE_STRING,  # Тип поля (строка)
+                    description='Описание компании',  # Описание поля
+                ),
+                'email': openapi.Schema(
+                    type=openapi.TYPE_STRING,  # Тип поля (строка)
+                    format=openapi.FORMAT_EMAIL,  # Указываем формат email
+                    description='Контактный email компании',  # Описание поля
+                ),
+                'rating': openapi.Schema(
+                    type=openapi.TYPE_NUMBER,  # Тип поля (число)
+                    format=openapi.FORMAT_DECIMAL,  # Указываем формат числа с плавающей точкой
+                    description='Рейтинг компании от 0 до 5',  # Описание поля
+                ),
+            },
+            required=['company_name', 'description', 'email', 'rating'],  # Обязательные поля
+            example={
+                "company_name": "Tech Innovations Inc.",
+                "description": "Компания, специализирующаяся на разработке инновационных технологий в области искусственного интеллекта и машинного обучения.",
+                "email": "info@techinnovations.com",
+                "rating": 4.75
+            }
+        ),
+        responses={
+            201: "Работодатель успешно создан",  # Успешный ответ
+            400: "Произошла ошибка"  # Ошибка
+        },
+    )
+    def post(self, request):
+        """
+        Обрабатывает POST-запрос для создания нового работодателя.
+        Проверяет валидность данных и сохраняет работодателя в базе данных.
+        """
+        serializer = EmployerSerializer(data=request.data)  # Создаем сериализатор с данными из запроса
+
+        if serializer.is_valid():
+            # Если данные валидны, сохраняем работодателя
+            serializer.save()
+            # Возвращаем успешный ответ
+            return Response(
+                {"message": "Работодатель успешно создан"},
+                status=status.HTTP_201_CREATED
+            )
+
+        # Если данные не валидны, возвращаем ошибку 400
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
 # Представление данных для создания (POST) компетенций
 class SendCompetentionView(BaseAPIView):
