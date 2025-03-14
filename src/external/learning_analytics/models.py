@@ -56,7 +56,7 @@ class Employer(models.Model):
     rating = models.DecimalField(max_digits=3, decimal_places=2)
 
     def __str__(self):
-        return f"{sefl.company_name}"
+        return f"{self.company_name}"
     
     class Meta:
         verbose_name = "Работодатель"

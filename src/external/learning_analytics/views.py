@@ -20,7 +20,6 @@ from src.external.learning_analytics.scripts import (
 )
 
 from src.core.utils.database.main import OrderedDictQueryExecutor
-
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 

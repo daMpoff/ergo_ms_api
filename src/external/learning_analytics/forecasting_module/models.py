@@ -1,4 +1,7 @@
 from django.db import models
+from src.external.learning_analytics.models import (
+    Employer
+)
 
 class Speciality(models.Model):
     """
@@ -59,7 +62,6 @@ class Discipline(models.Model):
         verbose_name = "Дисциплина"
         verbose_name_plural = "Дисциплины"
 
-
 class AcademicCompetenceMatrix(models.Model):
     """
     Модель AcademicCompetenceMatrix - модель, представляющая матрицу академических компетенций, на основании
@@ -67,17 +69,24 @@ class AcademicCompetenceMatrix(models.Model):
 
 
     Attributes:
-        speciality_id (PositiveIntegerField): Код специальности, для которой формируется матрица академических компетенций
+
+        speciality (ForeignKey): Внешний ключ, связывающий матрицу с моделью специальности
         discipline_list  (JSONField): Перечень осваиваемых дисциплин (хранит указатели на дисциплины)
         technology_stack  (JSONField): Изучаемый стек технологий (подразумевается дублирование для дальнейшего приоритета и распределения)
     """
 
-    speciality_id = models.PositiveIntegerField(unique=True, verbose_name="Код специальности")
+
+    speciality = models.ForeignKey(
+        Speciality,
+        on_delete=models.SET_NULL,
+        verbose_name="Специальность",
+        blank = True,
+        null = True)  
     discipline_list = models.JSONField(verbose_name="Перечень изучаемых дисциплин")
     technology_stack  = models.JSONField(verbose_name="Перечень изучаемых технологий в течение времени")
 
     def __str__(self):
-        return f"Матрица академических компетенций № {self.speciality_id}"
+        return f"Матрица академических компетенций для {self.speciality}"
 
     class Meta:
         verbose_name = "Матрица академических компетенций"
@@ -91,14 +100,19 @@ class CompetencyProfileOfVacancy(models.Model):
 
     Attributes:
         vacancy_name (CharField): Название вакансии, отражающее содержание компетентностного профиля
-        employer_id  (PositiveSmallIntegerField): ID работодателя, сформировавшего вакансию
+        employer  (PositiveSmallIntegerField): ID работодателя, сформировавшего вакансию
         competencies_stack  (JSONField): Перечень запрашиваемых компетенций работодателем
         technology_stack (JSONField): Перечень технологий, запрашиваемых работодателем
         descr (TextField): Описание вакансии (исходное)
     """
 
     vacancy_name = models.CharField(max_length=255, verbose_name="Название вакансии")
-    employer_id = models.PositiveSmallIntegerField(verbose_name="ID работодателя")
+    employer = models.ForeignKey(
+        Employer, 
+        on_delete=models.SET_NULL,
+        verbose_name="ID работодателя",
+        blank = True,
+        null = True)
     competencies_stack = models.JSONField(verbose_name="Перечень требующихся компетенций")
     technology_stack = models.JSONField(verbose_name="Стек требуемых технологий")
     descr = models.TextField(max_length=400, verbose_name="Описание вакансии")
