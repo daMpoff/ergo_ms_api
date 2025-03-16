@@ -61,3 +61,5 @@ class Employer(models.Model):
     class Meta:
         verbose_name = "Работодатель"
         verbose_name_plural = "Работодатели"
+
+

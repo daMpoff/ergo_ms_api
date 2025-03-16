@@ -1,10 +1,12 @@
 from django.shortcuts import render
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework.exceptions import NotFound
 from rest_framework import status
 from src.external.learning_analytics.models import (
     Technology,
-    Competention
+    Competention,
+    Employer
 )
 from src.external.learning_analytics.serializers import (
     TechnologySerializer,
@@ -20,11 +22,118 @@ from src.external.learning_analytics.scripts import (
 )
 
 from src.core.utils.database.main import OrderedDictQueryExecutor
-from drf_yasg.utils import swagger_auto_schema
-from drf_yasg import openapi
+from drf_yasg.utils import swagger_auto_schema # type: ignore
+from drf_yasg import openapi # type: ignore
+
+# Представление данных для удаления информации о работодателе
+class EmployerDeleteView(BaseAPIView):
+    @swagger_auto_schema(
+        operation_description="Удаление работодателя по идентификатору",
+        manual_parameters=[
+            openapi.Parameter(
+                'id',
+                openapi.IN_QUERY,
+                type=openapi.TYPE_INTEGER,
+                required=True,
+                description="Идентификатор работодателя"
+            )
+        ],
+        responses={
+            204: "Работодатель успешно удален",  # Успешный ответ (без содержимого)
+            400: "Идентификатор работодателя не указан",  # Ошибка
+            404: "Работодатель не найден"  # Ошибка
+        }
+    )
+    def delete(self, request):
+        """
+        Обработка DELETE-запроса для удаления работодателя.
+        """
+        employer_id = request.query_params.get('id')  # Получаем параметр 'id' из query-строки
+
+        if not employer_id:
+            return Response(
+                {"message": "Идентификатор работодателя не указан"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            employer = Employer.objects.get(id=employer_id)  # Ищем работодателя по ID
+        except Employer.DoesNotExist:
+            return Response(
+                {"message": "Работодатель с указанным ID не найден"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        employer.delete()  # Удаляем работодателя из базы данных
+
+        return Response(
+            {"message": "Работодатель успешно удален"},
+            status=status.HTTP_204_NO_CONTENT
+        )
+
+# Представление данных для обновления информации о работодателях
+class EmployerPutView(BaseAPIView):
+    @swagger_auto_schema(
+        operation_description="Обновление информации о работодателе",
+        request_body=EmployerSerializer,
+        manual_parameters=[
+            openapi.Parameter(
+                'id',
+                openapi.IN_QUERY,
+                type=openapi.TYPE_INTEGER,
+                required=True,
+                description="Идентификатор работодателя"
+            )
+        ],
+        responses={
+            200: "Информация о работодателе обновлена успешно",
+            400: "Ошибка валидации данных",
+            404: "Работодатель не найден"
+        }
+    )
+    def put(self, request):
+        """
+        Обновление информации о работодателе (обработка PUT-запроса).
+        """
+        employer_id = request.query_params.get('id')
+        if not employer_id:
+            return Response(
+                {"message": "Идентификатор работодателя не указан"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            employer = Employer.objects.get(id=employer_id)
+        except Employer.DoesNotExist:
+            return Response(
+                {"message": "Работодатель с указанным ID не найден"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = EmployerSerializer(employer, data=request.data, partial=False)
+        if not serializer.is_valid():
+            return Response(
+                {"message": "Ошибка валидации данных", "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Обновляем данные работодателя
+        serializer.save()
+
+        # Получаем обновленные данные
+        updated_employer = OrderedDictQueryExecutor.fetchall(
+            get_employers, employer_id=employer_id
+        )
+
+        response_data = {
+            "data": updated_employer,
+            "message": "Информация о работодателе обновлена успешно"
+        }
+
+        return Response(response_data, status=status.HTTP_200_OK)
+
 
 # Представление данных для получения информации о работодателях
-
 class EmployerGetView(BaseAPIView):
     @swagger_auto_schema(
         operation_description="Получение информации о работодателях. Если указан параметр 'id', возвращается конкретный работодатель. Если параметр 'id' не указан, возвращаются все работодатели",
@@ -77,6 +186,7 @@ class EmployerGetView(BaseAPIView):
 
         # Возвращаем ответ с данными и статусом 200
         return Response(response_data, status=status.HTTP_200_OK)
+    
 
 # Представление данных для получения информации о компетенциях
 class CompetentionGetView(BaseAPIView):
