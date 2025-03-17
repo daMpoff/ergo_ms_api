@@ -1,5 +1,6 @@
 from django.db import models
 
+# Модель Technology представляет ту или иную технологию, осваиваемую в процессе изучения дисциплин.
 class Technology(models.Model):
     """
     Модель Technology представляет ту или иную технологию, осваиваемую в процессе изучения дисциплин.
@@ -18,7 +19,7 @@ class Technology(models.Model):
     def __str__(self):
         return f"{self.name} - {self.description}"
 
-
+# Модель Competention представляет компетенции 
 class Competention(models.Model):
     """
     Модель Competention представляет компетенции.
@@ -35,6 +36,7 @@ class Competention(models.Model):
     def __str__(self):
         return f"{self.code} ({self.name})"
 
+# Модель Employer представляет работодателя
 class Employer(models.Model):
     """
     Модель Employer представляет работодателя
