@@ -187,6 +187,113 @@ class EmployerGetView(BaseAPIView):
         # Возвращаем ответ с данными и статусом 200
         return Response(response_data, status=status.HTTP_200_OK)
     
+# Представление данных для удаления информации о компетенции
+class CompetentionDeleteView(BaseAPIView):
+    @swagger_auto_schema(
+        operation_description="Удаление компетенции по идентификатору",
+        manual_parameters=[
+            openapi.Parameter(
+                'id',
+                openapi.IN_QUERY,
+                type=openapi.TYPE_INTEGER,
+                required=True,
+                description="Идентификатор компетенции"
+            )
+        ],
+        responses={
+            204: "Компетенция успешно удален",  # Успешный ответ (без содержимого)
+            400: "Идентификатор компетенции не указан",  # Ошибка
+            404: "Компетенция не найдена"  # Ошибка
+        }
+    )
+    def delete(self, request):
+        """
+        Обработка DELETE-запроса для удаления компетенции.
+        """
+        competention_id = request.query_params.get('id')  # Получаем параметр 'id' из query-строки
+
+        if not competention_id:
+            return Response(
+                {"message": "Идентификатор компетенции не указан"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            competention = Competention.objects.get(id=competention_id)  # Ищем компетенцию по ID
+        except Competention.DoesNotExist:
+            return Response(
+                {"message": "Компетенция с указанным ID не найдена"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        competention.delete()  # Удаляем компетенцию из базы данных
+
+        return Response(
+            {"message": "Компетенция успешно удалена"},
+            status=status.HTTP_204_NO_CONTENT
+        )
+
+# Представление данных для обновления информации о работодателях
+class CompetentionPutView(BaseAPIView):
+    @swagger_auto_schema(
+        operation_description="Обновление информации о компетенции",
+        request_body=CompetentionSerializer,
+        manual_parameters=[
+            openapi.Parameter(
+                'id',
+                openapi.IN_QUERY,
+                type=openapi.TYPE_INTEGER,
+                required=True,
+                description="Идентификатор компетенции"
+            )
+        ],
+        responses={
+            200: "Информация о компетенции обновлена успешно",
+            400: "Ошибка валидации данных",
+            404: "Компетенция не найдена"
+        }
+    )
+    def put(self, request):
+        """
+        Обновление информации о компетенции (обработка PUT-запроса).
+        """
+        competention_id = request.query_params.get('id')
+        if not competention_id:
+            return Response(
+                {"message": "Идентификатор компетенции не указан"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            competention = Competention.objects.get(id=competention_id)
+        except Competention.DoesNotExist:
+            return Response(
+                {"message": "Компетенция с указанным ID не найдена"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = CompetentionSerializer(competention, data=request.data, partial=False)
+        if not serializer.is_valid():
+            return Response(
+                {"message": "Ошибка валидации данных", "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Обновляем данные работодателя
+        serializer.save()
+
+        # Получаем обновленные данные
+        updated_competention = OrderedDictQueryExecutor.fetchall(
+            get_competentions, competention_id=competention_id
+        )
+
+        response_data = {
+            "data": updated_competention,
+            "message": "Информация о компетенции обновлена успешно"
+        }
+
+        return Response(response_data, status=status.HTTP_200_OK)
+
 
 # Представление данных для получения информации о компетенциях
 class CompetentionGetView(BaseAPIView):
