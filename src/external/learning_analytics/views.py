@@ -626,58 +626,125 @@ class TechnologyGetView(BaseAPIView):
         return Response(response_data, status=status.HTTP_200_OK)
 
 # Представление данных для создания (POST) технологий
-class TechnologySendView(BaseAPIView):
+class TechnologySendView(APIView):
+    """
+    Представление для создания одной или нескольких технологий.
+    Поддерживает как одиночные объекты, так и массивы объектов.
+    """
     @swagger_auto_schema(
-        operation_description="Проверка ввода технологии",
+        operation_description="Создание одной или нескольких технологий",
         request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,  # Тип тела запроса (объект JSON)
-            properties={
-                'name': openapi.Schema(
-                    type=openapi.TYPE_STRING,  # Тип поля (строка)
-                    description='Название'  # Описание поля
-                ),
-                'description': openapi.Schema(
-                    type=openapi.TYPE_STRING,  # Тип поля (строка)
-                    description='Описание'  # Описание поля
-                ),
-                'popularity': openapi.Schema(
-                    type=openapi.TYPE_NUMBER,  # Тип поля (вещественное число)
-                    description='Популярность'  # Описание поля
-                ),
-                'rating': openapi.Schema(
-                    type=openapi.TYPE_NUMBER,  # Тип поля (вещественное число)
-                    description='Рейтинг'  # Описание поля
-                ),
-            },
-            required=['name', 'description', 'popularity', 'rating'],  # Обязательные поля
-            example={
-                "name": "Python",
-                "description": "Python — это высокоуровневый язык программирования общего назначения, который широко используется для разработки веб-приложений, анализа данных, искусственного интеллекта и др.",
-                "popularity": 95.83,
-                "rating": 4.95
-            }
+            type=openapi.TYPE_ARRAY,  # Указываем, что это массив
+            items=openapi.Schema(  # Описываем элементы массива
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'name': openapi.Schema(
+                        type=openapi.TYPE_STRING,
+                        description='Название технологии'
+                    ),
+                    'description': openapi.Schema(
+                        type=openapi.TYPE_STRING,
+                        description='Описание технологии'
+                    ),
+                    'popularity': openapi.Schema(
+                        type=openapi.TYPE_NUMBER,
+                        description='Популярность технологии (вещественное число)'
+                    ),
+                    'rating': openapi.Schema(
+                        type=openapi.TYPE_NUMBER,
+                        description='Рейтинг технологии (вещественное число)'
+                    ),
+                },
+                required=['name', 'description', 'popularity', 'rating'],  # Обязательные поля
+                example={
+                    "name": "Python",
+                    "description": "Python — это высокоуровневый язык программирования общего назначения, который широко используется для разработки веб-приложений, анализа данных, искусственного интеллекта и др.",
+                    "popularity": 95.83,
+                    "rating": 4.95
+                }
+            ),
+            example=[  # Пример массива объектов
+                {
+                    "name": "Python",
+                    "description": "Python — это высокоуровневый язык программирования общего назначения, который широко используется для разработки веб-приложений, анализа данных, искусственного интеллекта и др.",
+                    "popularity": 95.83,
+                    "rating": 4.95
+                },
+                {
+                    "name": "Django",
+                    "description": "Django — это мощный веб-фреймворк для Python, который позволяет быстро создавать безопасные и масштабируемые веб-приложения.",
+                    "popularity": 90.12,
+                    "rating": 4.85
+                }
+            ]
         ),
         responses={
-            201: "Технология успешно сохранена",  # Успешный ответ
-            400: "Произошла ошибка"  # Ошибка
+            201: openapi.Response(
+                description="Технология/технологии успешно сохранены",
+                examples={
+                    "application/json": {
+                        "message": "Технология/технологии сохранены успешно"
+                    }
+                }
+            ),
+            400: openapi.Response(
+                description="Ошибка валидации",
+                examples={
+                    "application/json": {
+                        "name": ["Это поле обязательно."],
+                        "popularity": ["Это поле должно быть числом."]
+                    }
+                }
+            )
         },
     )
     def post(self, request):
         """
-        Обрабатывает POST-запрос для создания новой технологии.
-        Проверяет валидность данных и сохраняет технологию в базе данных.
+        Обрабатывает POST-запрос для создания одной или нескольких технологий.
+        Проверяет валидность данных и сохраняет технологии в базе данных.
+        
+        Пример запроса для одной технологии:
+        {
+            "name": "Python",
+            "description": "Python — это высокоуровневый язык программирования общего назначения...",
+            "popularity": 95.83,
+            "rating": 4.95
+        }
+
+        Пример запроса для нескольких технологий:
+        [
+            {
+                "name": "Python",
+                "description": "Python — это высокоуровневый язык программирования общего назначения...",
+                "popularity": 95.83,
+                "rating": 4.95
+            },
+            {
+                "name": "Django",
+                "description": "Django — это мощный веб-фреймворк для Python...",
+                "popularity": 90.12,
+                "rating": 4.85
+            }
+        ]
         """
-        serializer = TechnologySerializer(data=request.data)  # Создаем сериализатор с данными из запроса
+        data = request.data  # Получаем данные из запроса
+
+        # Проверяем, является ли data списком
+        if isinstance(data, list):
+            # Если это список, обрабатываем каждый элемент
+            serializer = TechnologySerializer(data=data, many=True)  # Указываем many=True для списка
+        else:
+            # Если это одиночный объект, обрабатываем его
+            serializer = TechnologySerializer(data=data)
 
         if serializer.is_valid():
-            # Если данные валидны, сохраняем технологию
+            # Если данные валидны, сохраняем технологии
             serializer.save()
             # Возвращаем успешный ответ
-            successful_response = Response(
-                {"message": "Технология сохранена успешно"},
-                status=status.HTTP_200_OK
+            return Response(
+                {"message": "Технология/технологии сохранены успешно"},
+                status=status.HTTP_201_CREATED
             )
-            return successful_response
 
         # Если данные не валидны, преобразуем ошибки в словарь и возвращаем ошибку 400
         errors = parse_errors_to_dict(serializer.errors)
