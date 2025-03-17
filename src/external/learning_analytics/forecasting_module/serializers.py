@@ -43,7 +43,6 @@ class SpecialitySerializer(ModelSerializer):
 
             return speciality # Возвращаем созданный объект
 
-
 # Создание сериализатора для модели Discipline
 class DisciplineSerializer(ModelSerializer):
     class Meta:
@@ -72,6 +71,7 @@ class DisciplineSerializer(ModelSerializer):
 
             return discipline # Возвращаем созданный объект
 
+# Создание сериализатора для модели AcademicCompetenceMatrix
 class AcademicCompetenceMatrixSerializer(ModelSerializer):
     class Meta:
         # Указываем модель, с которой работает сериализатор
@@ -96,12 +96,13 @@ class AcademicCompetenceMatrixSerializer(ModelSerializer):
 
             return AcademicCompetenceMatrix # Возвращаем созданный объект
 
+# Создание сериализатора для модели CompetencyProfileOfVacancy
 class CompetencyProfileOfVacancySerializer(ModelSerializer):
     class Meta:
         # Указываем модель, с которой будет работать сериализатор
         model = CompetencyProfileOfVacancy
         # Указываем поля модели, которые будут серилаизованы/десериализованы
-        fields = ['vacancy_name', 'employer_id', 'competencies_stack', 'technology_stack', 'descr']
+        fields = ['vacancy_name', 'employer_id', 'competencies_stack', 'technology_stack', 'description']
 
         # Метод для создания нового объекта CompetencyProfileOfVacancy
         def create(self, validated_data):
@@ -117,7 +118,7 @@ class CompetencyProfileOfVacancySerializer(ModelSerializer):
                 employer_id = validated_data['employer_id'],
                 competencies_stack = validated_data['competencies_stack'],
                 technology_stack = validated_data['technology_stack'],
-                descr = validated_data['descr'],
+                description = validated_data['description'],
             )
 
             return CompetencyProfileOfVacancy # Возвращаем созданный объект

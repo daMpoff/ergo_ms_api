@@ -3,6 +3,7 @@ from src.external.learning_analytics.models import (
     Employer
 )
 
+# Модель специальности
 class Speciality(models.Model):
     """
     Модель Speciality представляет собой информацию о специальности (направлении подготовки).
@@ -31,7 +32,7 @@ class Speciality(models.Model):
         verbose_name = "Специальность"
         verbose_name_plural = "Специальности"
 
-
+# Модель дисциплины
 class Discipline(models.Model):
     """
     Модель Discipline представляет собой информацию о дисциплине.
@@ -62,14 +63,13 @@ class Discipline(models.Model):
         verbose_name = "Дисциплина"
         verbose_name_plural = "Дисциплины"
 
+# Модель матрицы академических компетенций
 class AcademicCompetenceMatrix(models.Model):
     """
     Модель AcademicCompetenceMatrix - модель, представляющая матрицу академических компетенций, на основании
     которой в дальнейшем будет формироваться основной вектор индивидуальной траектории обучения.
 
-
     Attributes:
-
         speciality (ForeignKey): Внешний ключ, связывающий матрицу с моделью специальности
         discipline_list  (JSONField): Перечень осваиваемых дисциплин (хранит указатели на дисциплины)
         technology_stack  (JSONField): Изучаемый стек технологий (подразумевается дублирование для дальнейшего приоритета и распределения)
@@ -92,6 +92,7 @@ class AcademicCompetenceMatrix(models.Model):
         verbose_name = "Матрица академических компетенций"
         verbose_name_plural = "Матрицы академических компетенций"
 
+# Модель компетентностного профиля вакансии
 class CompetencyProfileOfVacancy(models.Model):
     """
     Модель CompetencyProfileOfVacancy - модель, представляющая компетентностный профиль вакансии, на основании
@@ -100,7 +101,7 @@ class CompetencyProfileOfVacancy(models.Model):
 
     Attributes:
         vacancy_name (CharField): Название вакансии, отражающее содержание компетентностного профиля
-        employer  (PositiveSmallIntegerField): ID работодателя, сформировавшего вакансию
+        employer  (ForeignKey): Внешний ключ, связывающий компетентностный профиль вакансии с моделью работодателя
         competencies_stack  (JSONField): Перечень запрашиваемых компетенций работодателем
         technology_stack (JSONField): Перечень технологий, запрашиваемых работодателем
         descr (TextField): Описание вакансии (исходное)
@@ -115,7 +116,7 @@ class CompetencyProfileOfVacancy(models.Model):
         null = True)
     competencies_stack = models.JSONField(verbose_name="Перечень требующихся компетенций")
     technology_stack = models.JSONField(verbose_name="Стек требуемых технологий")
-    descr = models.TextField(max_length=400, verbose_name="Описание вакансии")
+    description = models.TextField(max_length=400, verbose_name="Описание вакансии")
 
     def __str__(self):
         return f"Компетентностный профиль вакансии {self.vacancy_name}"

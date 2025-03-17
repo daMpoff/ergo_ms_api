@@ -2,7 +2,6 @@ import json
 import string
 
 # SQL-запрос для получения информации о специальностях
-
 def get_specialities(speciality_id: int = None):
     """
     Возвращает SQL-запрос и параметры для получения данных о специальностях.
@@ -45,7 +44,6 @@ def get_specialities(speciality_id: int = None):
         )
 
 # SQL-запрос для получения информации о дисциплинах
-
 def get_disciplines(discipline_id: int = None):
     """
     Возвращает SQL-запрос и параметры для получения данных о дисциплинах.
@@ -87,8 +85,7 @@ def get_disciplines(discipline_id: int = None):
             (),  # Пустой кортеж параметров, так как запрос не требует параметров
         )
 
-# SQL-запросы для получения информации о матрице компетенций
-
+# SQL-запрос для получения информации о матрице компетенций
 def get_academicCompetenceMatrix(matrix_id: int = None):
     """
     Возвращает SQL-запрос и параметры для получения данных о матрице компетенций.
@@ -126,6 +123,7 @@ def get_academicCompetenceMatrix(matrix_id: int = None):
             (),  # Пустой кортеж параметров, так как запрос не требует параметров
         )
 
+# SQL-запрос для получения информации о компетентностном профиле вакансии
 def get_competencyProfileOfVacancy(cp_id: int = None, employer_id: int = None):
     """
     Возвращает SQL-запрос и параметры для получения данных о компетентностном профиле вакансии.

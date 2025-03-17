@@ -5,8 +5,8 @@ from rest_framework import status
 from src.core.utils.methods import parse_errors_to_dict
 from src.core.utils.base.base_views import BaseAPIView
 from src.core.utils.database.main import OrderedDictQueryExecutor
-from drf_yasg.utils import swagger_auto_schema
-from drf_yasg import openapi
+from drf_yasg.utils import swagger_auto_schema # type: ignore
+from drf_yasg import openapi # type: ignore
 
 from src.external.learning_analytics.forecasting_module.models import(
     Speciality,
@@ -29,8 +29,7 @@ from src.external.learning_analytics.forecasting_module.scripts import(
     get_competencyProfileOfVacancy
 )
 
-# Представление данных для получения информации о компетентностных профилях вакансий
-
+# Представление данных для получения (GET) компетентностных профилях вакансий
 class CompetencyProfileOfVacancyGetView(BaseAPIView):
     @swagger_auto_schema(
         operation_description="Получение информации о компетентностных профилях вакансий. Если указан параметр 'id', возвращается конкретный профиль. Если указан параметр 'employer_id', возвращаются профили для конкретного работодателя. Если ни один параметр не указан, возвращаются все профили.",
@@ -110,7 +109,8 @@ class CompetencyProfileOfVacancyGetView(BaseAPIView):
         # Возвращаем ответ с данными и статусом 200
         return Response(response_data, status=status.HTTP_200_OK)
 
-class SendCompetencyProfileOfVacancy(BaseAPIView):
+# Представление данных для создания (POST) компетентностного профиля вакансии
+class CompetencyProfileOfVacancySendView(BaseAPIView):
     @swagger_auto_schema(
         operation_description="Проверка ввода компетентностного профиля вакансий",
         request_body=openapi.Schema(
@@ -132,12 +132,12 @@ class SendCompetencyProfileOfVacancy(BaseAPIView):
                     type=openapi.TYPE_OBJECT,  # Тип поля (строка)
                     description='Перечень технологий'  # Описание поля
                 ),
-                'descr': openapi.Schema(
+                'description': openapi.Schema(
                     type=openapi.TYPE_STRING,  # Тип поля (строка)
                     description='Описание компетентностного профиля вакансии'  # Описание поля
                 ),
             },
-            required=['vacancy_name', 'employer_id', 'competencies_stack', 'technology_stack', 'descr'],  # Обязательные поля
+            required=['vacancy_name', 'employer_id', 'competencies_stack', 'technology_stack', 'description'],  # Обязательные поля
             example = {
                 "vacancy_name": "Python Developer",
                 "employer_id": 123,
@@ -178,7 +178,7 @@ class SendCompetencyProfileOfVacancy(BaseAPIView):
                         "rating": 5
                     }
                 ],
-                "descr": "Ищем опытного Python-разработчика с навыками работы с базами данных и веб-фреймворками."
+                "description": "Ищем опытного Python-разработчика с навыками работы с базами данных и веб-фреймворками."
             }
         ),
         responses={
@@ -210,7 +210,114 @@ class SendCompetencyProfileOfVacancy(BaseAPIView):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-# Представление данных для получения информации о специальностях
+# Представление данных для обновления (PUT) компетентностного профиля вакансии
+class CompetencyProfileOfVacancyPutView(BaseAPIView):
+    @swagger_auto_schema(
+        operation_description="Обновление информации о компетентностном профиле вакансии",
+        request_body=CompetencyProfileOfVacancySerializer,
+        manual_parameters=[
+            openapi.Parameter(
+                'id',
+                openapi.IN_QUERY,
+                type=openapi.TYPE_INTEGER,
+                required=True,
+                description="Идентификатор компетентностного профиля вакансии"
+            )
+        ],
+        responses={
+            200: "Информация о компетентностном профиле вакансии обновлена успешно",
+            400: "Ошибка валидации данных",
+            404: "Компетентностный профиль вакансии не найден"
+        }
+    )
+    def put(self, request):
+        """
+        Обновление информации о компетентностном профиле вакансии (обработка PUT-запроса).
+        """
+        cp_id = request.query_params.get('id')
+        if not cp_id:
+            return Response(
+                {"message": "Идентификатор компетентностного профиля вакансии не указан"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            cp = CompetencyProfileOfVacancy.objects.get(id=cp_id)
+        except CompetencyProfileOfVacancy.DoesNotExist:
+            return Response(
+                {"message": "Компетентностный профиль вакансии с указанным ID не найден"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = CompetencyProfileOfVacancySerializer(cp, data=request.data, partial=False)
+        if not serializer.is_valid():
+            return Response(
+                {"message": "Ошибка валидации данных", "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Обновляем данные компетентностного профиля вакансии
+        serializer.save()
+    
+        # Получаем обновленные данные
+        updated_competency_profile_of_vacancy = OrderedDictQueryExecutor.fetchall(
+            get_competencyProfileOfVacancy, cp_id=cp_id
+        )
+
+        response_data = {
+            "data": updated_competency_profile_of_vacancy,
+            "message": "Информация о компетентностном профиле вакансии обновлена успешно"
+        }
+
+        return Response(response_data, status=status.HTTP_200_OK)
+
+# Представление данных для удаления (DELETE) компетентностного профиля вакансии
+class CompetencyProfileOfVacancyDeleteView(BaseAPIView):
+    @swagger_auto_schema(
+        operation_description="Удаление компетентностного профиля вакансии по идентификатору",
+        manual_parameters=[
+            openapi.Parameter(
+                'id',
+                openapi.IN_QUERY,
+                type=openapi.TYPE_INTEGER,
+                required=True,
+                description="Идентификатор компетентностного профиля вакансии"
+            )
+        ],
+        responses={
+            204: "Компетентностный профиль вакансии успешно удален",  # Успешный ответ (без содержимого)
+            400: "Идентификатор компетентностного профиля вакансии не указан",  # Ошибка
+            404: "Компетентностный профиль вакансии не найден"  # Ошибка
+        }
+    )
+    def delete(self, request):
+        """
+        Обработка DELETE-запроса для удаления компетентностного профиля вакансии.
+        """
+        cp_id = request.query_params.get('id')  # Получаем параметр 'id' из query-строки
+
+        if not cp_id:
+            return Response(
+                {"message": "Идентификатор компетентностного профиля вакансии не указан"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            cp = CompetencyProfileOfVacancy.objects.get(id=cp_id)  # Ищем компетенцию по ID
+        except CompetencyProfileOfVacancy.DoesNotExist:
+            return Response(
+                {"message": "Компетентностный профиль вакансии с указанным ID не найден"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        cp.delete()  # Удаляем компетенцию из базы данных
+
+        return Response(
+            {"message": "Компетентностный профиль вакансии успешно удален"},
+            status=status.HTTP_204_NO_CONTENT
+        )
+
+# Представление данных для получения (GET) специальностей
 class SpecialityGetView(BaseAPIView):
     @swagger_auto_schema(
         operation_description="Получение информации о направлениях подготовки. Если указан параметр 'id', возвращается конкретное направление. Если параметр 'id' не указан, возвращаются все направления",
@@ -265,7 +372,7 @@ class SpecialityGetView(BaseAPIView):
         return Response(response_data, status=status.HTTP_200_OK)
 
 # Представление данных для создания (POST) специальностей
-class SendSpecialityView(BaseAPIView):
+class SpecialitySendView(BaseAPIView):
     @swagger_auto_schema(
         operation_description="Проверка ввода специальности",
         request_body=openapi.Schema(
@@ -340,6 +447,113 @@ class SendSpecialityView(BaseAPIView):
             status=status.HTTP_400_BAD_REQUEST
         )
 
+# Представление данных для обновления (PUT) специальностей
+class SpecialityPutView(BaseAPIView):
+    @swagger_auto_schema(
+        operation_description="Обновление информации о специальности",
+        request_body=SpecialitySerializer,
+        manual_parameters=[
+            openapi.Parameter(
+                'id',
+                openapi.IN_QUERY,
+                type=openapi.TYPE_INTEGER,
+                required=True,
+                description="Идентификатор специальности"
+            )
+        ],
+        responses={
+            200: "Информация о специальности обновлена успешно",
+            400: "Ошибка валидации данных",
+            404: "Специальность не найдена"
+        }
+    )
+    def put(self, request):
+        """
+        Обновление информации о специальности (обработка PUT-запроса).
+        """
+        speciality_id = request.query_params.get('id')
+        if not speciality_id:
+            return Response(
+                {"message": "Идентификатор специальности не указан"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            speciality = Speciality.objects.get(id=speciality_id)
+        except Speciality.DoesNotExist:
+            return Response(
+                {"message": "Специальность с указанным ID не найдена"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = SpecialitySerializer(speciality, data=request.data, partial=False)
+        if not serializer.is_valid():
+            return Response(
+                {"message": "Ошибка валидации данных", "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Обновляем данные специальности
+        serializer.save()
+    
+        # Получаем обновленные данные
+        updated_speciality = OrderedDictQueryExecutor.fetchall(
+            get_speciality, speciality_id=speciality_id
+        )
+
+        response_data = {
+            "data": updated_speciality,
+            "message": "Информация о специальности обновлена успешно"
+        }
+
+        return Response(response_data, status=status.HTTP_200_OK)
+
+# Представление данных для удаления (DELETE) специальностей
+class SpecialityDeleteView(BaseAPIView):
+    @swagger_auto_schema(
+        operation_description="Удаление специальности по идентификатору",
+        manual_parameters=[
+            openapi.Parameter(
+                'id',
+                openapi.IN_QUERY,
+                type=openapi.TYPE_INTEGER,
+                required=True,
+                description="Идентификатор специальности"
+            )
+        ],
+        responses={
+            204: "Специальность успешно удалена",  # Успешный ответ (без содержимого)
+            400: "Идентификатор специальности не указан",  # Ошибка
+            404: "Специальность не найдена"  # Ошибка
+        }
+    )
+    def delete(self, request):
+        """
+        Обработка DELETE-запроса для удаления специальности.
+        """
+        speciality_id = request.query_params.get('id')  # Получаем параметр 'id' из query-строки
+
+        if not speciality_id:
+            return Response(
+                {"message": "Идентификатор специальности не указан"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            speciality = Speciality.objects.get(id=speciality_id)  # Ищем специальность по ID
+        except Speciality.DoesNotExist:
+            return Response(
+                {"message": "Специальность с указанным ID не найдена"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        speciality.delete()  # Удаляем специальность из базы данных
+
+        return Response(
+            {"message": "Специальность успешно удалена"},
+            status=status.HTTP_204_NO_CONTENT
+        )
+
 # Представление данных для получения информации о дисциплинах
 class DisciplineGetView(BaseAPIView):
     @swagger_auto_schema(
@@ -395,7 +609,7 @@ class DisciplineGetView(BaseAPIView):
         return Response(response_data, status=status.HTTP_200_OK)
 
 # Представление данных для создания (POST) дисциплины
-class SendDisciplineView(BaseAPIView):
+class DisciplineSendView(BaseAPIView):
     @swagger_auto_schema(
         operation_description="Проверка ввода дисциплины",
         request_body=openapi.Schema(
@@ -474,9 +688,114 @@ class SendDisciplineView(BaseAPIView):
                 status=status.HTTP_400_BAD_REQUEST
             ) 
 
+# Представление данных для обновления (PUT) дисциплины
+class DisciplinePutView(BaseAPIView):
+    @swagger_auto_schema(
+        operation_description="Обновление информации о дисциплине",
+        request_body=DisciplineSerializer,
+        manual_parameters=[
+            openapi.Parameter(
+                'id',
+                openapi.IN_QUERY,
+                type=openapi.TYPE_INTEGER,
+                required=True,
+                description="Идентификатор дисциплины"
+            )
+        ],
+        responses={
+            200: "Информация о дисциплине обновлена успешно",
+            400: "Ошибка валидации данных",
+            404: "Дисциплина не найдена"
+        }
+    )
+    def put(self, request):
+        """
+        Обновление информации о дисциплине (обработка PUT-запроса).
+        """
+        discipline_id = request.query_params.get('id')
+        if not discipline_id:
+            return Response(
+                {"message": "Идентификатор дисциплины не указан"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            discipline = Discipline.objects.get(id=discipline_id)
+        except Discipline.DoesNotExist:
+            return Response(
+                {"message": "Дисциплина с указанным ID не найдена"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = DisciplineSerializer(discipline, data=request.data, partial=False)
+        if not serializer.is_valid():
+            return Response(
+                {"message": "Ошибка валидации данных", "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Обновляем данные специальности
+        serializer.save()
+    
+        # Получаем обновленные данные
+        updated_discipline = OrderedDictQueryExecutor.fetchall(
+            get_discipline, discipline_id=discipline_id
+        )
+
+        response_data = {
+            "data": updated_discipline,
+            "message": "Информация о дисциплине обновлена успешно"
+        }
+
+        return Response(response_data, status=status.HTTP_200_OK)
+
+# Представление данных для удаления (DELETE) дисциплины
+class DisciplineDeleteView(BaseAPIView):
+    @swagger_auto_schema(
+        operation_description="Удаление дисциплины по идентификатору",
+        manual_parameters=[
+            openapi.Parameter(
+                'id',
+                openapi.IN_QUERY,
+                type=openapi.TYPE_INTEGER,
+                required=True,
+                description="Идентификатор дисциплины"
+            )
+        ],
+        responses={
+            204: "Специальность успешно удалена",  # Успешный ответ (без содержимого)
+            400: "Идентификатор дисциплины не указан",  # Ошибка
+            404: "Дисциплина не найдена"  # Ошибка
+        }
+    )
+    def delete(self, request):
+        """
+        Обработка DELETE-запроса для удаления дисциплины.
+        """
+        discipline_id = request.query_params.get('id')  # Получаем параметр 'id' из query-строки
+
+        if not discipline_id:
+            return Response(
+                {"message": "Идентификатор дисциплины не указан"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            discipline = Discipline.objects.get(id=discipline_id)  # Ищем дисциплину по ID
+        except Discipline.DoesNotExist:
+            return Response(
+                {"message": "Дисциплина с указанным ID не найдена"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        discipline.delete()  # Удаляем дисциплину из базы данных
+
+        return Response(
+            {"message": "Дисциплина успешно удалена"},
+            status=status.HTTP_204_NO_CONTENT
+        )
 
 # Представление данных для получения информации об академических матрицах компетенций
-
 class AcademicCompetenceMatrixGetView(BaseAPIView):
     @swagger_auto_schema(
         operation_description="Получение информации об академической матрице компетенций. Если указан параметр 'id', возвращается конкретная матрица. Если параметр 'id' не указан, возвращаются все существующие матрицы.",
@@ -530,7 +849,8 @@ class AcademicCompetenceMatrixGetView(BaseAPIView):
         # Возвращаем ответ с данными и статусом 200
         return Response(response_data, status=status.HTTP_200_OK)
 
-class SendAcademicCompetenceMatrixView(BaseAPIView):
+# Представление данных для создания (POST) матрицы академических компетенций
+class AcademicCompetenceMatrixSendView(BaseAPIView):
     @swagger_auto_schema(
         operation_description="Проверка ввода матрицы академических компетенций",
         request_body=openapi.Schema(
@@ -601,3 +921,110 @@ class SendAcademicCompetenceMatrixView(BaseAPIView):
                 errors,
                 status=status.HTTP_400_BAD_REQUEST
             ) 
+
+# Представление данных для обновления (PUT) матрицы академических компетенций
+class AcademicCompetenceMatrixPutView(BaseAPIView):
+    @swagger_auto_schema(
+        operation_description="Обновление информации о матрице академических компетенций",
+        request_body=AcademicCompetenceMatrixSerializer,
+        manual_parameters=[
+            openapi.Parameter(
+                'id',
+                openapi.IN_QUERY,
+                type=openapi.TYPE_INTEGER,
+                required=True,
+                description="Идентификатор матрицы академических компетенций"
+            )
+        ],
+        responses={
+            200: "Информация о матрице академических компетенций обновлена успешно",
+            400: "Ошибка валидации данных",
+            404: "Матрица академических компетенций не найдена"
+        }
+    )
+    def put(self, request):
+        """
+        Обновление информации о матрице академических компетенций (обработка PUT-запроса).
+        """
+        matrix_id = request.query_params.get('id')
+        if not matrix_id:
+            return Response(
+                {"message": "Идентификатор матрицы академических компетенций не указан"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            matrix = AcademicCompetenceMatrix.objects.get(id=matrix_id)
+        except AcademicCompetenceMatrix.DoesNotExist:
+            return Response(
+                {"message": "Матрица академических компетенций с указанным ID не найдена"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = AcademicCompetenceMatrixSerializer(matrix, data=request.data, partial=False)
+        if not serializer.is_valid():
+            return Response(
+                {"message": "Ошибка валидации данных", "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Обновляем данные специальности
+        serializer.save()
+    
+        # Получаем обновленные данные
+        updated_matrix = OrderedDictQueryExecutor.fetchall(
+            get_academicCompetenceMatrix, matrix_id=matrix_id
+        )
+
+        response_data = {
+            "data": updated_matrix,
+            "message": "Информация о матрице академических компетенций обновлена успешно"
+        }
+
+        return Response(response_data, status=status.HTTP_200_OK)
+
+# Представление данных для удаления (DELETE) матрицы академических компетенций
+class AcademicCompetenceMatrixDeleteView(BaseAPIView):
+    @swagger_auto_schema(
+        operation_description="Удаление матрицы академических компетенций по идентификатору",
+        manual_parameters=[
+            openapi.Parameter(
+                'id',
+                openapi.IN_QUERY,
+                type=openapi.TYPE_INTEGER,
+                required=True,
+                description="Идентификатор матрицы академических компетенций"
+            )
+        ],
+        responses={
+            204: "Специальность успешно удалена",  # Успешный ответ (без содержимого)
+            400: "Идентификатор матрицы академических компетенций не указан",  # Ошибка
+            404: "Матрица академических компетенций не найдена"  # Ошибка
+        }
+    )
+    def delete(self, request):
+        """
+        Обработка DELETE-запроса для удаления матрицы академических компетенций.
+        """
+        matrix_id = request.query_params.get('id')  # Получаем параметр 'id' из query-строки
+
+        if not matrix_id:
+            return Response(
+                {"message": "Идентификатор матрицы академических компетенций не указан"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            matrix = AcademicCompetenceMatrix.objects.get(id=matrix_id)  # Ищем матрицу академических компетенций по ID
+        except AcademicCompetenceMatrix.DoesNotExist:
+            return Response(
+                {"message": "Матрица академических компетенций с указанным ID не найдена"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        matrix.delete()  # Удаляем матрицу академических компетенций из базы данных
+
+        return Response(
+            {"message": "Матрица академических компетенций успешно удалена"},
+            status=status.HTTP_204_NO_CONTENT
+        )

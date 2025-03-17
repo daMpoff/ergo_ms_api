@@ -85,5 +85,5 @@ class EmployerSerializer(ModelSerializer):
         Проверяет, что рейтинг находится в диапазоне от 1 до 5.
         """
         if value < 0 or value > 5:
-            raise serializers.ValidationError("Рейтинг должен быть от 1 до 5.")
+            raise Serializer.ValidationError("Рейтинг должен быть от 1 до 5.")
         return value
