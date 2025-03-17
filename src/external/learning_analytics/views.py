@@ -25,7 +25,7 @@ from src.core.utils.database.main import OrderedDictQueryExecutor
 from drf_yasg.utils import swagger_auto_schema # type: ignore
 from drf_yasg import openapi # type: ignore
 
-# Представление данных для удаления информации о работодателе
+# Представление данных для удаления (DELETE) работодателей
 class EmployerDeleteView(BaseAPIView):
     @swagger_auto_schema(
         operation_description="Удаление работодателя по идентификатору",
@@ -71,7 +71,7 @@ class EmployerDeleteView(BaseAPIView):
             status=status.HTTP_204_NO_CONTENT
         )
 
-# Представление данных для обновления информации о работодателях
+# Представление данных для обновления (PUT) работодателей
 class EmployerPutView(BaseAPIView):
     @swagger_auto_schema(
         operation_description="Обновление информации о работодателе",
@@ -132,8 +132,7 @@ class EmployerPutView(BaseAPIView):
 
         return Response(response_data, status=status.HTTP_200_OK)
 
-
-# Представление данных для получения информации о работодателях
+# Представление данных для получения (GET) работодателей
 class EmployerGetView(BaseAPIView):
     @swagger_auto_schema(
         operation_description="Получение информации о работодателях. Если указан параметр 'id', возвращается конкретный работодатель. Если параметр 'id' не указан, возвращаются все работодатели",
@@ -187,7 +186,68 @@ class EmployerGetView(BaseAPIView):
         # Возвращаем ответ с данными и статусом 200
         return Response(response_data, status=status.HTTP_200_OK)
     
-# Представление данных для удаления информации о компетенции
+# Представление данных для создания (POST) работодателей
+class EmployerSendView(APIView):
+    @swagger_auto_schema(
+        operation_description="Создание нового работодателя",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,  # Тип тела запроса (объект JSON)
+            properties={
+                'company_name': openapi.Schema(
+                    type=openapi.TYPE_STRING,  # Тип поля (строка)
+                    description='Название компании',  # Описание поля
+                ),
+                'description': openapi.Schema(
+                    type=openapi.TYPE_STRING,  # Тип поля (строка)
+                    description='Описание компании',  # Описание поля
+                ),
+                'email': openapi.Schema(
+                    type=openapi.TYPE_STRING,  # Тип поля (строка)
+                    format=openapi.FORMAT_EMAIL,  # Указываем формат email
+                    description='Контактный email компании',  # Описание поля
+                ),
+                'rating': openapi.Schema(
+                    type=openapi.TYPE_NUMBER,  # Тип поля (число)
+                    format=openapi.FORMAT_DECIMAL,  # Указываем формат числа с плавающей точкой
+                    description='Рейтинг компании от 0 до 5',  # Описание поля
+                ),
+            },
+            required=['company_name', 'description', 'email', 'rating'],  # Обязательные поля
+            example={
+                "company_name": "Tech Innovations Inc.",
+                "description": "Компания, специализирующаяся на разработке инновационных технологий в области искусственного интеллекта и машинного обучения.",
+                "email": "info@techinnovations.com",
+                "rating": 4.75
+            }
+        ),
+        responses={
+            201: "Работодатель успешно создан",  # Успешный ответ
+            400: "Произошла ошибка"  # Ошибка
+        },
+    )
+    def post(self, request):
+        """
+        Обрабатывает POST-запрос для создания нового работодателя.
+        Проверяет валидность данных и сохраняет работодателя в базе данных.
+        """
+        serializer = EmployerSerializer(data=request.data)  # Создаем сериализатор с данными из запроса
+
+        if serializer.is_valid():
+            # Если данные валидны, сохраняем работодателя
+            serializer.save()
+            # Возвращаем успешный ответ
+            return Response(
+                {"message": "Работодатель успешно создан"},
+                status=status.HTTP_201_CREATED
+            )
+
+        # Если данные не валидны, возвращаем ошибку 400
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+# Представление данных для удаления (DELETE) компетенций
 class CompetentionDeleteView(BaseAPIView):
     @swagger_auto_schema(
         operation_description="Удаление компетенции по идентификатору",
@@ -233,7 +293,7 @@ class CompetentionDeleteView(BaseAPIView):
             status=status.HTTP_204_NO_CONTENT
         )
 
-# Представление данных для обновления информации о работодателях
+# Представление данных для обновления (PUT) компетенций
 class CompetentionPutView(BaseAPIView):
     @swagger_auto_schema(
         operation_description="Обновление информации о компетенции",
@@ -294,8 +354,7 @@ class CompetentionPutView(BaseAPIView):
 
         return Response(response_data, status=status.HTTP_200_OK)
 
-
-# Представление данных для получения информации о компетенциях
+# Представление данных для получения (GET) компетенций
 class CompetentionGetView(BaseAPIView):
     @swagger_auto_schema(
         operation_description="Получение информации о компетенциях. Если указан параметр 'id', возвращается конкретная компетенция. Если параметр 'id' не указан, возвращаются все компетенции",
@@ -349,7 +408,170 @@ class CompetentionGetView(BaseAPIView):
         # Возвращаем ответ с данными и статусом 200
         return Response(response_data, status=status.HTTP_200_OK)
 
-# Представление данных для получения информации о технологиях 
+# Представление данных для создания (POST) компетенций
+class CompetentionSendView(BaseAPIView):
+    @swagger_auto_schema(
+        operation_description="Проверка ввода компетенции",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,  # Тип тела запроса (объект JSON)
+            properties={
+                'code': openapi.Schema(
+                    type=openapi.TYPE_STRING,  # Тип поля (целое число)
+                    description='Код'  # Описание поля
+                ),
+                'name': openapi.Schema(
+                    type=openapi.TYPE_STRING,  # Тип поля (строка)
+                    description='Наименование'  # Описание поля
+                ),
+                'description': openapi.Schema(
+                    type=openapi.TYPE_STRING,  # Тип поля (строка)
+                    description='Описание'  # Описание поля
+                ),
+            },
+            required=['code', 'name', 'description'],  # Обязательные поля
+            example={
+                "code": "ОПК-8",
+                "name": "Способен применять методы научных исследований при разработке информационно-аналитических систем безопасности",
+                "description": "В этом случае компетенции соответствуют умения применять методы алгоритмизации, языки и технологии программирования при решении задач профессиональной деятельности, программировать, отлаживать и тестировать прототипы программно-технических комплексов, пригодные для практического применения"
+            }
+        ),
+        responses={
+            201: "Компетенция успешно сохранена",  # Успешный ответ
+            400: "Произошла ошибка"  # Ошибка
+        },
+    )
+    def post(self, request):
+        """
+        Обрабатывает POST-запрос для создания новой компетенции.
+        Проверяет валидность данных и сохраняет компетенцию в базе данных.
+        """
+        serializer = CompetentionSerializer(data=request.data)  # Создаем сериализатор с данными из запроса
+
+        if serializer.is_valid():
+            # Если данные валидны, сохраняем технологию
+            serializer.save()
+            # Возвращаем успешный ответ
+            successful_response = Response(
+                {"message": "Компетенция сохранена успешно"},
+                status=status.HTTP_200_OK
+            )
+            return successful_response
+
+        # Если данные не валидны, преобразуем ошибки в словарь и возвращаем ошибку 400
+        errors = parse_errors_to_dict(serializer.errors)
+        return Response(
+            errors,
+            status=status.HTTP_400_BAD_REQUEST
+        ) 
+
+#Представление данных для удаления (DELETE) технологий
+class TechnologyDeleteView(BaseAPIView):
+    @swagger_auto_schema(
+        operation_description="Удаление технологии по идентификатору",
+        manual_parameters=[
+            openapi.Parameter(
+                'id',   
+                openapi.IN_QUERY,
+                type=openapi.TYPE_INTEGER,
+                required=True,
+                description="Идентификатор технологии"
+            )
+        ],
+        responses={
+            204: "Технология успешно удалена",  # Успешный ответ (без содержимого)
+            400: "Идентификатор технологии не указан",  # Ошибка
+            404: "Технология не найдена"  # Ошибка
+        }
+    )
+    def delete(self, request):
+        """
+        Обработка DELETE-запроса для удаления технологии.
+        """
+        technology_id = request.query_params.get('id')  # Получаем параметр 'id' из query-строки
+
+        if not technology_id:
+            return Response(
+                {"message": "Идентификатор технологии не указан"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            technology = Technology.objects.get(id=technology_id)  # Ищем технологию по ID
+        except Technology.DoesNotExist:
+            return Response(
+                {"message": "Технология с указанным ID не найдена"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        technology.delete()  # Удаляем технологию из базы данных
+
+        return Response(
+            {"message": "Технология успешно удалена"},
+            status=status.HTTP_204_NO_CONTENT
+        )
+
+# Представление данных для обновления (PUT) технологий
+class TechnologyPutView(BaseAPIView):
+    @swagger_auto_schema(
+        operation_description="Обновление информации о технологии",
+        request_body=TechnologySerializer,
+        manual_parameters=[
+            openapi.Parameter(
+                'id',
+                openapi.IN_QUERY,
+                type=openapi.TYPE_INTEGER,
+                required=True,
+                description="Идентификатор технологии"
+            )
+        ],
+        responses={
+            200: "Информация о технологии обновлена успешно",
+            400: "Ошибка валидации данных",
+            404: "Технология не найдена"
+        }
+    )
+    def put(self, request):
+        """
+        Обновление информации о технологии (обработка PUT-запроса).
+        """
+        technology_id = request.query_params.get('id')
+        if not technology_id:
+            return Response(
+                {"message": "Идентификатор технологии не указан"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            technology = Technology.objects.get(id=technology_id)
+        except Technology.DoesNotExist:
+            return Response(
+                {"message": "Технология с указанным ID не найдена"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = TechnologySerializer(technology, data=request.data, partial=False)
+        if not serializer.is_valid():
+            return Response(
+                {"message": "Ошибка валидации данных", "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Обновляем данные работодателя
+        serializer.save()
+
+        # Получаем обновленные данные
+        updated_technology = OrderedDictQueryExecutor.fetchall(
+            get_technologies, technology_id=technology_id
+        )
+
+        response_data = {
+            "data": updated_technology,
+            "message": "Информация о технологии обновлена успешно"
+        }
+
+        return Response(response_data, status=status.HTTP_200_OK)
+    
+# Представление данных для получения (GET) технологий 
 class TechnologyGetView(BaseAPIView):
     @swagger_auto_schema(
         operation_description="Получение информации о технологиях. Если указан параметр 'id', возвращается конкретная технология. Если параметр 'id' не указан, возвращаются все технологии.",
@@ -403,126 +625,8 @@ class TechnologyGetView(BaseAPIView):
         # Возвращаем ответ с данными и статусом 200
         return Response(response_data, status=status.HTTP_200_OK)
 
-
-
-class SendEmployerView(APIView):
-    @swagger_auto_schema(
-        operation_description="Создание нового работодателя",
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,  # Тип тела запроса (объект JSON)
-            properties={
-                'company_name': openapi.Schema(
-                    type=openapi.TYPE_STRING,  # Тип поля (строка)
-                    description='Название компании',  # Описание поля
-                ),
-                'description': openapi.Schema(
-                    type=openapi.TYPE_STRING,  # Тип поля (строка)
-                    description='Описание компании',  # Описание поля
-                ),
-                'email': openapi.Schema(
-                    type=openapi.TYPE_STRING,  # Тип поля (строка)
-                    format=openapi.FORMAT_EMAIL,  # Указываем формат email
-                    description='Контактный email компании',  # Описание поля
-                ),
-                'rating': openapi.Schema(
-                    type=openapi.TYPE_NUMBER,  # Тип поля (число)
-                    format=openapi.FORMAT_DECIMAL,  # Указываем формат числа с плавающей точкой
-                    description='Рейтинг компании от 0 до 5',  # Описание поля
-                ),
-            },
-            required=['company_name', 'description', 'email', 'rating'],  # Обязательные поля
-            example={
-                "company_name": "Tech Innovations Inc.",
-                "description": "Компания, специализирующаяся на разработке инновационных технологий в области искусственного интеллекта и машинного обучения.",
-                "email": "info@techinnovations.com",
-                "rating": 4.75
-            }
-        ),
-        responses={
-            201: "Работодатель успешно создан",  # Успешный ответ
-            400: "Произошла ошибка"  # Ошибка
-        },
-    )
-    def post(self, request):
-        """
-        Обрабатывает POST-запрос для создания нового работодателя.
-        Проверяет валидность данных и сохраняет работодателя в базе данных.
-        """
-        serializer = EmployerSerializer(data=request.data)  # Создаем сериализатор с данными из запроса
-
-        if serializer.is_valid():
-            # Если данные валидны, сохраняем работодателя
-            serializer.save()
-            # Возвращаем успешный ответ
-            return Response(
-                {"message": "Работодатель успешно создан"},
-                status=status.HTTP_201_CREATED
-            )
-
-        # Если данные не валидны, возвращаем ошибку 400
-        return Response(
-            serializer.errors,
-            status=status.HTTP_400_BAD_REQUEST
-        )
-
-# Представление данных для создания (POST) компетенций
-class SendCompetentionView(BaseAPIView):
-    @swagger_auto_schema(
-        operation_description="Проверка ввода компетенции",
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,  # Тип тела запроса (объект JSON)
-            properties={
-                'code': openapi.Schema(
-                    type=openapi.TYPE_STRING,  # Тип поля (целое число)
-                    description='Код'  # Описание поля
-                ),
-                'name': openapi.Schema(
-                    type=openapi.TYPE_STRING,  # Тип поля (строка)
-                    description='Наименование'  # Описание поля
-                ),
-                'description': openapi.Schema(
-                    type=openapi.TYPE_STRING,  # Тип поля (строка)
-                    description='Описание'  # Описание поля
-                ),
-            },
-            required=['code', 'name', 'description'],  # Обязательные поля
-            example={
-                "code": "ОПК-8",
-                "name": "Способен применять методы научных исследований при разработке информационно-аналитических систем безопасности",
-                "description": "В этом случае компетенции соответствуют умения применять методы алгоритмизации, языки и технологии программирования при решении задач профессиональной деятельности, программировать, отлаживать и тестировать прототипы программно-технических комплексов, пригодные для практического применения"
-            }
-        ),
-        responses={
-            201: "Компетенция успешно сохранена",  # Успешный ответ
-            400: "Произошла ошибка"  # Ошибка
-        },
-    )
-    def post(self, request):
-        """
-        Обрабатывает POST-запрос для создания новой компетенции.
-        Проверяет валидность данных и сохраняет компетенцию в базе данных.
-        """
-        serializer = CompetentionSerializer(data=request.data)  # Создаем сериализатор с данными из запроса
-
-        if serializer.is_valid():
-            # Если данные валидны, сохраняем технологию
-            serializer.save()
-            # Возвращаем успешный ответ
-            successful_response = Response(
-                {"message": "Компетенция сохранена успешно"},
-                status=status.HTTP_200_OK
-            )
-            return successful_response
-
-        # Если данные не валидны, преобразуем ошибки в словарь и возвращаем ошибку 400
-        errors = parse_errors_to_dict(serializer.errors)
-        return Response(
-            errors,
-            status=status.HTTP_400_BAD_REQUEST
-        )
-
 # Представление данных для создания (POST) технологий
-class SendTechnologyView(BaseAPIView):
+class TechnologySendView(BaseAPIView):
     @swagger_auto_schema(
         operation_description="Проверка ввода технологии",
         request_body=openapi.Schema(
