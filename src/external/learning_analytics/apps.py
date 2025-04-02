@@ -24,3 +24,6 @@ class LearningAnalyticsConfig(AppConfig):
     # Полное Python-имя приложения, включая путь.
     # Это имя используется Django для корректного подключения приложения.
     name = 'src.external.learning_analytics'
+
+    # Уникальная метка Django приложения (модуля)
+    label = 'learning_analytics'
