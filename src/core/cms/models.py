@@ -1,6 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
-import datetime
+from django.utils import timezone
 
 class Tag(models.Model):
     name = models.CharField(max_length=100, default='')
@@ -21,8 +21,8 @@ class ShortCode(models.Model):
     name = models.CharField(max_length=100, default='')
     content = models.TextField(default='')
     ispage = models.BooleanField(default=False)
-    date_of_creation = models.DateField(default=datetime.datetime.now())
-    last_update = models.DateTimeField(default=datetime.datetime.now())
+    date_of_creation = models.DateField(default=timezone.now)
+    last_update = models.DateTimeField(default=timezone.now)
     user =models.ForeignKey(User, on_delete=models.CASCADE)
 
 class ShortCode_Parameter(models.Model):
