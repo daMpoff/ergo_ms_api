@@ -27,8 +27,8 @@ scripts/
 | Команда Poetry | Django команда | Описание |
 |---------------|----------------|-----------|
 | makemigrations | makemigrations | Создание миграций базы данных |
-
 | migrate | migrate | Применение миграций |
+| showmigrations | showmigrations | Просмотр состояния миграций |
 | dev | runserver | Запуск сервера разработки |
 | prod | start_daphne | Запуск production сервера |
 | stop_prod | stop_daphne | Остановка production сервера |
@@ -75,6 +75,14 @@ poetry run cmd collectstatic --no-input
 5. Запуск production сервера:
 ```bash
 poetry run cmd prod
+```
+
+6. Создание модулей:
+```bash
+poetry run cmd add_module cms
+poetry run cmd add_module cms adp
+poetry run cmd add_module cms adp superuser
+poetry run cmd add_module cms adp roles
 ```
 
 ### Интеграция с Poetry
