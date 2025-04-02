@@ -28,6 +28,17 @@ class MigrateCommand(PoetryCommand):
     def __init__(self):
         super().__init__(self.django_command_name)
 
+class ShowMigrationsCommand(PoetryCommand):
+    """
+    Команда для отображения состояния миграций Django.
+    Показывает, какие миграции были применены и какие ещё нет, для отслеживания состояния базы данных.
+    """
+    poetry_command_name = 'showmigrations'
+    django_command_name = 'showmigrations'
+
+    def __init__(self):
+        super().__init__(self.django_command_name)
+
 class DevServerCommand(PoetryCommand):
     """
     Команда для запуска локального Django сервера в режиме разработки.
