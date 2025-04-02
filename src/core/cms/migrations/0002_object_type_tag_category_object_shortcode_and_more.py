@@ -8,61 +8,62 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
 
-    initial = True
-
     dependencies = [
+        ('cms', '0001_initial'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='Calendar',
-            fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('text', models.TextField(default='')),
-                ('time', models.DateTimeField(default=datetime.datetime(2025, 4, 1, 17, 9, 23, 955310))),
-                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL)),
-            ],
-        ),
-        migrations.CreateModel(
-            name='Project',
+            name='Object_Type',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('name', models.CharField(default='', max_length=100)),
-                ('dateofcreation', models.DateField(default=datetime.date.today)),
-                ('creator', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL)),
             ],
         ),
         migrations.CreateModel(
-            name='Section',
+            name='Tag',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('name', models.CharField(default='', max_length=100)),
-                ('Project', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='crm.project')),
             ],
         ),
         migrations.CreateModel(
-            name='Task',
+            name='Category',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('text', models.TextField(default='')),
-                ('isdone', models.BooleanField(default=False)),
-                ('description', models.TextField(default='')),
-                ('dateofcreation', models.DateField(default=datetime.date.today)),
-                ('deadline', models.DateField(default=datetime.date.today)),
-                ('priority', models.IntegerField(default=0)),
-                ('parenttask', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='crm.task')),
-                ('section', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='crm.section')),
+                ('name', models.CharField(default='', max_length=100)),
+                ('parentcategory', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, to='cms.category')),
+            ],
+        ),
+        migrations.CreateModel(
+            name='Object',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('objectlink', models.CharField(default='', max_length=255)),
+                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL)),
+                ('type', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='cms.object_type')),
+            ],
+        ),
+        migrations.CreateModel(
+            name='ShortCode',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('name', models.CharField(default='', max_length=100)),
+                ('content', models.TextField(default='')),
+                ('ispage', models.BooleanField(default=False)),
+                ('date_of_creation', models.DateField(default=datetime.datetime(2025, 4, 1, 17, 9, 23, 952310))),
+                ('last_update', models.DateTimeField(default=datetime.datetime(2025, 4, 1, 17, 9, 23, 952310))),
                 ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL)),
             ],
         ),
         migrations.CreateModel(
-            name='User_Project',
+            name='ShortCode_Parameter',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('isnew', models.BooleanField(default=True)),
-                ('project', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='crm.project')),
-                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL)),
+                ('key', models.CharField(default='', max_length=100)),
+                ('value', models.TextField(default='')),
+                ('shortcode', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='cms.shortcode')),
             ],
         ),
     ]

@@ -11,7 +11,7 @@ from django.utils.crypto import get_random_string
 
 from src.core.utils.methods import (
     parse_errors_to_dict, 
-    send_confirmation_email
+    send_confirmation_email,
 )
 from src.core.cms.adp.models import EmailConfirmationCode
 from src.core.cms.adp.serializers import (
@@ -20,7 +20,9 @@ from src.core.cms.adp.serializers import (
     UserRegistrationValidationSerializer,
 )
 from src.core.utils.base.base_views import BaseAPIView
-
+from django.contrib.auth.models import User
+from src.core.cms.adp.queries import (get_users, get_users_by_name)
+from src.core.utils.database.main import OrderedDictQueryExecutor
 class UserRegistrationValidationView(BaseAPIView):
     @swagger_auto_schema(
         operation_description="Регистрация нового пользователя.",
@@ -66,14 +68,17 @@ class UserRegistrationValidationView(BaseAPIView):
     )
     def post(self, request):
         serializer = UserRegistrationValidationSerializer(data=request.data)
-
+        
+        #Command.handle('createsuperuser',username='myusername', email='myemail@example.com', password='mypassword')
+        
         if serializer.is_valid():
+            #User.objects.create_user(username=serializer.field_name, email= serializer.email, password= serializer.password, is_superuser=True).save()
             successful_response = Response(
                 {"message": "Валидация успешна."}, 
                 status=status.HTTP_200_OK
             )
             return successful_response
-
+        
         errors = parse_errors_to_dict(serializer.errors)
         return Response(
             errors, 
@@ -179,7 +184,7 @@ class UserRegistrationView(BaseAPIView):
         serializer = UserRegistrationSerializer(data=request.data)
 
         if serializer.is_valid():
-            serializer.save()
+            User.objects.create_superuser(username=serializer.validated_data['username'], email= serializer.validated_data['email'], password= serializer.validated_data['password']).save()
 
             successful_response = Response(
                 {"message": "Регистрация успешна."}, 
