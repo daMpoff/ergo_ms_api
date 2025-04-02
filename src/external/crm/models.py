@@ -14,7 +14,7 @@ class User_Project(models.Model):
 
 class Section(models.Model):
     name = models.CharField(max_length=100, default='')
-    Project = models.ForeignKey(Project, on_delete= models.CASCADE)
+    project = models.ForeignKey(Project, on_delete= models.CASCADE)
 
 class Task(models.Model):
     text = models.TextField(default="")
