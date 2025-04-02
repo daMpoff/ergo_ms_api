@@ -20,9 +20,11 @@ from src.core.cms.adp.serializers import (
     UserRegistrationValidationSerializer,
 )
 from src.core.utils.base.base_views import BaseAPIView
+
 from django.contrib.auth.models import User
-from src.core.cms.adp.queries import (get_users, get_users_by_name)
+
 from src.core.utils.database.main import OrderedDictQueryExecutor
+
 class UserRegistrationValidationView(BaseAPIView):
     @swagger_auto_schema(
         operation_description="Регистрация нового пользователя.",
