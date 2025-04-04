@@ -47,15 +47,6 @@ class GetUserPermissions(BaseAPIView):
             get_users_permissions,
             name,
         )
-
-        # config = DBConfig()
-        # dbmanager = SqlAlchemyManager(config=config)
-
-        # result1 = dbmanager.fetchall(
-        #     get_users_permissions,
-        #     id
-        # )
-        # print(result1)
         
         return Response(
             result,

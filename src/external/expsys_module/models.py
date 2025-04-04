@@ -31,3 +31,10 @@ class Competence_Course(models.Model):
     competence = models.ForeignKey(Competence, on_delete=models.CASCADE)
     subject = models.ForeignKey(Subject, on_delete=models.CASCADE, default=0)
     sat_coef = models.FloatField(default=0)
+    knowledge = models.TextField(default='')
+    ability = models.TextField(default='')
+    mastered = models.TextField(default='')
+
+class Grade_Coef(models.Model):
+    grade = models.IntegerField(default=0)
+    coef = models.FloatField(default=0)
