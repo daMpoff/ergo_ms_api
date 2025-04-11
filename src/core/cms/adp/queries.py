@@ -79,7 +79,15 @@ def add_new_section(section_name, project_id):
         """,
         (section_name, project_id),
     )
-
+def add_new_project(project_name, creator_id):
+    return (
+        """
+        INSERT INTO crm_project (name, dateofcreation, creator_id)
+        VALUES (%s, CURRENT_DATE, %s)
+        RETURNING id, name, dateofcreation, creator_id;
+        """,
+        (project_name, creator_id),
+    )
 def add_new_task(task_data):
     # Базовые обязательные поля
     fields = ["text", "section_id"]
