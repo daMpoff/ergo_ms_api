@@ -187,3 +187,15 @@ class StopCeleryBeatCommand(PoetryCommand):
 
     def __init__(self):
         super().__init__(self.django_command_name)
+        
+class FlushDatabaseCommand(PoetryCommand):
+    """
+    Команда для полной очистки базы данных (flush).
+
+    Удаляет все данные из базы и сбрасывает ID автоинкрементов.
+    """
+    poetry_command_name = 'flush'
+    django_command_name = 'flush'
+
+    def __init__(self):
+        super().__init__(self.django_command_name)
