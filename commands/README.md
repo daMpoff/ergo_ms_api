@@ -40,6 +40,8 @@ scripts/
 | createsuperuser | createsuperuser | Создание суперпользователя |
 | celery_worker | celery_worker | Запуск Celery worker |
 | celery_beat | celery_beat | Запуск Celery beat |
+| flush | flush | Запуск очистки базы данных (flush) |
+| test | test | Запуск модульных тестов |
 
 
 ## Использование
