@@ -199,3 +199,15 @@ class FlushDatabaseCommand(PoetryCommand):
 
     def __init__(self):
         super().__init__(self.django_command_name)
+
+class RunTestsCommand(PoetryCommand):
+    """
+    Команда для запуска unit-тестов Django.
+
+    Запускает все тесты в проекте или указанных приложениях.
+    """
+    poetry_command_name = 'test'
+    django_command_name = 'test'
+
+    def __init__(self):
+        super().__init__(self.django_command_name)
