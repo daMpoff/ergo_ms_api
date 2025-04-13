@@ -1,42 +1,44 @@
-from django.shortcuts import render
+from django.utils.dateparse import parse_datetime
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import status
 from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
-from django.utils.dateparse import parse_datetime
+from rest_framework.permissions import IsAuthenticated
 
 from .models import GenericStorage
 from .serializers import GenericStorageSerializer
 from .services.file_parser import auto_parse_uploaded_file
 
-# Создавайте свои представления здесь
+
 class GenericStorageView(APIView):
     parser_classes = [JSONParser, MultiPartParser, FormParser]
+    permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
-    operation_summary="Сохранить JSON или файл",
-    operation_description="Можно загрузить JSON-файл, CSV или Excel. Данные будут сохранены автоматически.",
-    request_body=GenericStorageSerializer,
-    responses={
-        201: openapi.Response("Успех", GenericStorageSerializer),
-        400: openapi.Response("Ошибка валидации"),
-        500: openapi.Response("Внутренняя ошибка сервера")
-    }
-)
+        operation_summary="Сохранить JSON или файл",
+        operation_description="Можно загрузить JSON-файл, CSV или Excel. Данные будут сохранены автоматически.",
+        request_body=GenericStorageSerializer,
+        responses={
+            201: openapi.Response("Успех", GenericStorageSerializer),
+            400: openapi.Response("Ошибка валидации"),
+            500: openapi.Response("Внутренняя ошибка сервера")
+        }
+    )
     def post(self, request):
         data = request.data.copy()
         file = request.FILES.get('file')
+
         if file and not data.get('json_data'):
             try:
                 parsed = auto_parse_uploaded_file(file)
                 data['json_data'] = parsed
             except Exception as e:
                 return Response({'error': f'Ошибка чтения файла: {str(e)}'}, status=400)
+
         serializer = GenericStorageSerializer(data=data)
         if serializer.is_valid():
-            instance = serializer.save()
+            instance = serializer.save(owner=request.user)
             return Response(GenericStorageSerializer(instance).data, status=201)
         return Response(serializer.errors, status=400)
 
@@ -50,13 +52,13 @@ class GenericStorageView(APIView):
         operation_summary="Получить список сохранённых объектов",
         operation_description="Поддерживает фильтрацию по типу хранения, имени и дате создания.",
         responses={
-            201: openapi.Response("Успех", GenericStorageSerializer),
+            200: openapi.Response("Успех", GenericStorageSerializer(many=True)),
             400: openapi.Response("Ошибка валидации"),
             500: openapi.Response("Внутренняя ошибка сервера"),
         }
     )
     def get(self, request):
-        queryset = GenericStorage.objects.all()
+        queryset = GenericStorage.objects.filter(owner=request.user)
 
         if storage_type := request.query_params.get('storage_type'):
             queryset = queryset.filter(storage_type=storage_type)
@@ -73,8 +75,10 @@ class GenericStorageView(APIView):
         serializer = GenericStorageSerializer(queryset.order_by('-created_at'), many=True)
         return Response(serializer.data)
 
+
 class FileUploadView(APIView):
     parser_classes = [MultiPartParser, FormParser]
+    permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
         operation_summary="Загрузка файла (CSV, JSON, Excel)",
@@ -102,7 +106,6 @@ class FileUploadView(APIView):
         except Exception as e:
             return Response({"error": f"Ошибка при разборе файла: {str(e)}"}, status=400)
 
-        # Сбор данных из формы
         record_data = {
             "storage_type": request.data.get("storage_type"),
             "name": request.data.get("name"),
@@ -113,6 +116,6 @@ class FileUploadView(APIView):
 
         serializer = GenericStorageSerializer(data=record_data)
         if serializer.is_valid():
-            instance = serializer.save()
+            instance = serializer.save(owner=request.user)
             return Response(GenericStorageSerializer(instance).data, status=201)
         return Response(serializer.errors, status=400)

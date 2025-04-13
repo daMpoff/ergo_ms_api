@@ -1,4 +1,5 @@
 from django.db import models
+from django.contrib.auth import get_user_model
 
 # Создавайте свои модели здесь
 
@@ -15,6 +16,7 @@ class GenericStorage(models.Model): # Модель классификации д
     )
 
     name = models.CharField(max_length=255)  # имя или ID источника
+    owner = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, related_name='storage_data')
     description = models.TextField(blank=True, null=True)
 
     # Поля для разных типов
