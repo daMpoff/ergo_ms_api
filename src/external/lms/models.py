@@ -5,22 +5,22 @@ from django.utils import timezone
 class Subject(models.Model):
     name = models.CharField(max_length=100, default='')
     description = models.TextField(default='')
-    creationdate = models.DateField(default=timezone.now)
-    lastupdate = models.DateTimeField(default=timezone.now)
+    creationdate = models.DateField(default=timezone.now().date())
+    lastupdate = models.DateTimeField(default=timezone.now())
     teacher = models.ForeignKey(User, on_delete= models.CASCADE)
 
 class Grade(models.Model):
     subject = models.ForeignKey(Subject, on_delete= models.CASCADE, default=0)
-    related = models.DateField(default=timezone.now)
-    lastupdate = models.DateTimeField(default=timezone.now)
+    related = models.DateField(default=timezone.now().date())
+    lastupdate = models.DateTimeField(default=timezone.now())
     student = models.ForeignKey(User, on_delete= models.CASCADE)
     grade = models.IntegerField( default=0)
 
 class Theme(models.Model):
     name = models.CharField(max_length=100, default='')
     description = models.TextField(default='')
-    creationdate = models.DateField(default=timezone.now)
-    lastupdate = models.DateTimeField(default=timezone.now)
+    creationdate = models.DateField(default=timezone.now().date())
+    lastupdate = models.DateTimeField(default=timezone.now())
     subject = models.ForeignKey(Subject, on_delete= models.CASCADE, default=0)
 
 class Lesson(models.Model):
@@ -30,8 +30,8 @@ class Lesson(models.Model):
         lecture = 'L'
     name = models.CharField(max_length=100, default='')
     description = models.TextField(default='')
-    creationdate = models.DateField(default=timezone.now)
-    lastupdate = models.DateTimeField(default=timezone.now)
+    creationdate = models.DateField(default=timezone.now().date())
+    lastupdate = models.DateTimeField(default=timezone.now())
     lessontype = models.CharField(max_length=40,choices=LessonType.choices, default=LessonType.lecture)
     content = models.BinaryField (default=b'\x08')
     theme = models.ForeignKey(Theme, on_delete= models.CASCADE)
@@ -39,8 +39,8 @@ class Lesson(models.Model):
 class Test(models.Model):
     name = models.CharField(max_length=100, default='')
     description = models.TextField(default='')
-    creationdate = models.DateField(default=timezone.now)
-    lastupdate = models.DateTimeField(default=timezone.now)
+    creationdate = models.DateField(default=timezone.now().date())
+    lastupdate = models.DateTimeField(default=timezone.now())
     lesson = models.ForeignKey(Lesson, on_delete= models.CASCADE)
     timelimit = models.IntegerField(default=0)
     class TestType(models.TextChoices):
@@ -53,7 +53,7 @@ class Test(models.Model):
 class Question(models.Model):
     text= models.TextField(default='')
     points = models.IntegerField(default=0)
-    lastupdate = models.DateTimeField(default=timezone.now)
+    lastupdate = models.DateTimeField(default=timezone.now())
     correctanswer = models.TextField(default='')
     class QuestionType(models.TextChoices):
         single = 'S'
@@ -70,15 +70,15 @@ class UserAnswer(models.Model):
 class Assignment(models.Model):
     title = models.CharField(max_length=255, default='')
     description = models.TextField(default='')
-    deadline = models.DateField(default=timezone.now)
-    creationdate = models.DateField(default=timezone.now)
-    lastupdate = models.DateTimeField(default=timezone.now)
+    deadline = models.DateField(default=timezone.now().date())
+    creationdate = models.DateField(default=timezone.now().date())
+    lastupdate = models.DateTimeField(default=timezone.now())
     lesson = models.ForeignKey(Lesson, on_delete= models.CASCADE)
 
 class SubmittedAssignment(models.Model):
     submittedassignment = models.BinaryField(default=b'\x08')
     comment = models.TextField(default='')
     grade = models.IntegerField(default=0)
-    dateofsubmit = models.DateField(default=timezone.now)
+    dateofsubmit = models.DateField(default=timezone.now().date())
     Student = models.ForeignKey(User, on_delete= models.CASCADE)
     Assignment = models.ForeignKey(Assignment, on_delete= models.CASCADE)
