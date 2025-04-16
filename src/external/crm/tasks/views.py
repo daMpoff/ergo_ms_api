@@ -92,7 +92,6 @@ class SectionCreateView(APIView):
                         'data': openapi.Schema(
                             type=openapi.TYPE_OBJECT,
                             properties={
-                                'id': openapi.Schema(type=openapi.TYPE_INTEGER),
                                 'name': openapi.Schema(type=openapi.TYPE_STRING),
                                 'project_id': openapi.Schema(type=openapi.TYPE_INTEGER),
                             }
@@ -169,7 +168,6 @@ class TaskCreateView(APIView):
                         'data': openapi.Schema(
                             type=openapi.TYPE_OBJECT,
                             properties={
-                                'id': openapi.Schema(type=openapi.TYPE_INTEGER),
                                 'text': openapi.Schema(type=openapi.TYPE_STRING),
                                 'section_id': openapi.Schema(type=openapi.TYPE_INTEGER),
                                 'isdone': openapi.Schema(type=openapi.TYPE_BOOLEAN),
