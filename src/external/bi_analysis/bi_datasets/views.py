@@ -91,9 +91,9 @@ class FileUploadDetailView(generics.RetrieveUpdateDestroyAPIView):
         has_header = request.query_params.get('has_header', 'true').lower() == 'true'
 
         try:
-            if instance.file_type == 'csv':
+            if instance.file_type in ['csv', 'txt']:
                 with open(instance.file.path, 'r', encoding=encoding) as f:
-                    reader = csv.reader(f, delimiter=delimiter)
+                    reader = csv.reader(f, delimiter=delimiter if delimiter != '\\t' else '\t')
                     parsed = list(reader)
                     if parsed and not has_header:
                         alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
@@ -104,7 +104,6 @@ class FileUploadDetailView(generics.RetrieveUpdateDestroyAPIView):
             elif instance.file_type == 'xlsx':
                 import pandas as pd
                 xls = pd.ExcelFile(instance.file.path)
-
                 sheet_name = request.query_params.get('sheet') or xls.sheet_names[0]
                 df = pd.read_excel(xls, sheet_name=sheet_name, header=0 if has_header else None)
                 parsed = df.fillna('').astype(str).values.tolist()
