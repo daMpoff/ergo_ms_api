@@ -20,14 +20,21 @@ class DatasetSerializer(serializers.ModelSerializer):
         }
         
 class FileUploadSerializer(serializers.ModelSerializer):
+    file_url = serializers.SerializerMethodField()
+
     class Meta:
         model = FileUpload
         fields = [
-            'id', 'name', 'file', 'uploaded_at',
+            'id', 'name', 'file', 'file_url', 'uploaded_at',
             'owner', 'original_filename', 'file_type'
         ]
         read_only_fields = ['id', 'uploaded_at']
         extra_kwargs = {
             'owner': {'read_only': True},
-            'file': {'required': True}
         }
+
+    def get_file_url(self, obj):
+        try:
+            return obj.file.url if obj.file else None
+        except ValueError:
+            return None
