@@ -12,9 +12,8 @@ class Dataset(models.Model):
         related_name='datasets'
     )
 
-    # Источник — один из двух:
     file_source = models.ForeignKey(
-        'bi_analysis_bi_datasets.FileUpload',  # <== уточнение: app_name.ModelName
+        'bi_analysis_bi_datasets.FileUpload',
         null=True, blank=True,
         on_delete=models.SET_NULL
     )
@@ -36,9 +35,8 @@ class FileUpload(models.Model):
     uploaded_at = models.DateTimeField(auto_now_add=True)
     owner = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, related_name='uploaded_files')
 
-    # можно добавить метаинформацию
     original_filename = models.CharField(max_length=255, blank=True, null=True)
-    file_type = models.CharField(max_length=50, blank=True, null=True)  # 'csv', 'xlsx', ...
+    file_type = models.CharField(max_length=50, blank=True, null=True)
 
     def __str__(self):
         return self.name

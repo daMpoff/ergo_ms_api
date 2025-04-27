@@ -25,11 +25,11 @@ class ConnectionDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = ConnectionSerializer
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
-        user = self.request.user
-        if not user.is_authenticated:
-            return self.queryset.none()
-        return self.queryset.filter(owner=user)
+    def get_object(self):
+        obj = super().get_object()
+        if obj.owner != self.request.user:
+            raise PermissionDenied('У вас нет доступа к этому подключению')
+        return obj
     
 class CheckConnectionView(APIView):
     permission_classes = [IsAuthenticated]

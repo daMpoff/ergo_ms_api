@@ -12,6 +12,18 @@ class ConnectionSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'created_at', 'owner']
 
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        return data
+
+    def update(self, instance, validated_data):
+        config = validated_data.get('config', {})
+        # Если пароль не передан — сохранить старый
+        if 'password' not in config and 'config' in validated_data:
+            config['password'] = instance.config.get('password')
+        validated_data['config'] = config
+        return super().update(instance, validated_data)
+
 class CheckConnectionSerializer(serializers.Serializer):
     host = serializers.CharField()
     port = serializers.IntegerField()
