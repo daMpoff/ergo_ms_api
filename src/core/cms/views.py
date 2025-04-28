@@ -28,6 +28,11 @@ from src.core.utils.base.base_views import BaseAPIView
 from src.core.cms.queries import (get_users_permissions, get_users_group, get_users_group_permissions)
 
 from rest_framework.request import Request
+from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework import viewsets, status
+from rest_framework.response import Response
+from .models import *
+from .serializers import *
 
 class GetUserPermissions(BaseAPIView):
     permission_classes = [IsAuthenticated]
@@ -107,3 +112,43 @@ class GetUserGroupPermissions(BaseAPIView):
             result,
             status=status.HTTP_200_OK
         )
+    class GeneralSettingsViewSet(viewsets.ModelViewSet):
+        queryset = GeneralSettings.objects.all()
+        serializer_class = GeneralSettingsSerializer
+
+class AppearanceSettingsViewSet(viewsets.ModelViewSet):
+    queryset = AppearanceSettings.objects.all()
+    serializer_class = AppearanceSettingsSerializer
+
+class SEOSettingsViewSet(viewsets.ModelViewSet):
+    queryset = SEOSettings.objects.all()
+    serializer_class = SEOSettingsSerializer
+
+class SecuritySettingsViewSet(viewsets.ModelViewSet):
+    queryset = SecuritySettings.objects.all()
+    serializer_class = SecuritySettingsSerializer
+
+class MediaSettingsViewSet(viewsets.ModelViewSet):
+    queryset = MediaSettings.objects.all()
+    serializer_class = MediaSettingsSerializer
+
+class PermalinkSettingsViewSet(viewsets.ModelViewSet):
+    queryset = PermalinkSettings.objects.all()
+    serializer_class = PermalinkSettingsSerializer
+
+class EmailSettingsViewSet(viewsets.ModelViewSet):
+    queryset = EmailSettings.objects.all()
+    serializer_class = EmailSettingsSerializer
+class FileViewSet(viewsets.ModelViewSet):
+    queryset = UploadedFile.objects.all()
+    serializer_class = UploadedFileSerializer
+    parser_classes = [MultiPartParser, FormParser]
+
+    def create(self, request, *args, **kwargs):
+        file = request.FILES.get('file')
+
+        if not file:
+            return Response({'error': 'Файл не передан'}, status=status.HTTP_400_BAD_REQUEST)
+
+        instance = UploadedFile.objects.create(file=file)
+        return Response(UploadedFileSerializer(instance).data, status=status.HTTP_201_CREATED)
