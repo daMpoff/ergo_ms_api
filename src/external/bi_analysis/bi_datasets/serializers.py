@@ -26,7 +26,7 @@ class FileUploadSerializer(serializers.ModelSerializer):
         model = FileUpload
         fields = [
             'id', 'name', 'file', 'file_url', 'uploaded_at',
-            'owner', 'original_filename', 'file_type'
+            'owner', 'original_filename', 'file_type', 'connection'
         ]
         read_only_fields = ['id', 'uploaded_at']
         extra_kwargs = {

@@ -61,13 +61,17 @@ class FileUploadView(APIView):
             'original_filename': file.name,
             'file_type': file.name.split('.')[-1].lower()
         })
-
-class FileUploadListView(generics.ListAPIView):
+        
+class FileUploadByConnectionView(generics.ListAPIView):
     serializer_class = FileUploadSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return FileUpload.objects.filter(owner=self.request.user).order_by('-uploaded_at')
+        connection_id = self.kwargs.get('connection_id')
+        if not connection_id:
+            raise ValueError('connection_id is required')
+        user = self.request.user
+        return FileUpload.objects.filter(owner=user, connection_id=connection_id).order_by('-uploaded_at')
 
 class FileUploadDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = FileUpload.objects.all()
@@ -182,6 +186,7 @@ class FinalizeUploadView(APIView):
         name = request.data.get('name')
         original_filename = request.data.get('original_filename')
         file_type = request.data.get('file_type')
+        connection_id = request.data.get('connection')
 
         if not all([temp_path, name, original_filename, file_type]):
             return Response({"error": "Необходимы поля: temp_path, name, original_filename, file_type"}, status=400)
@@ -193,16 +198,22 @@ class FinalizeUploadView(APIView):
             owner=request.user,
             name=name,
             original_filename=original_filename,
-            file_type=file_type
+            file_type=file_type,
+            connection_id=connection_id
         )
 
         with open(temp_path, 'rb') as f:
             file_upload.file.save(original_filename, File(f), save=False)
 
         file_upload.save()
-        os.remove(temp_path)  # удаляем временный файл
+
+        try:
+            os.remove(temp_path)
+        except Exception:
+            pass
 
         return Response(FileUploadSerializer(file_upload).data, status=status.HTTP_201_CREATED)
+
     
 class XlsxTempPreviewView(APIView):
     permission_classes = [permissions.IsAuthenticated]

@@ -6,6 +6,7 @@ class Connection(models.Model):
         ('postgres', 'PostgreSQL'),
         ('clickhouse', 'ClickHouse'),
         ('mssql', 'Microsoft SQL Server'),
+        ('file', 'Файл'),
     ]
 
     name = models.CharField(max_length=255)

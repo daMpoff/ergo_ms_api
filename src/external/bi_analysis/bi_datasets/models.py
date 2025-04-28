@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth import get_user_model
+from ..bi_connections.models import Connection
 
 class Dataset(models.Model):
     name = models.CharField(max_length=255)
@@ -31,6 +32,7 @@ class Dataset(models.Model):
     
 class FileUpload(models.Model):
     name = models.CharField(max_length=255)
+    connection = models.ForeignKey(Connection, null=True, blank=True, on_delete=models.CASCADE, related_name='files')
     file = models.FileField(upload_to='uploads/')
     uploaded_at = models.DateTimeField(auto_now_add=True)
     owner = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, related_name='uploaded_files')
