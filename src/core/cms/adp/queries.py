@@ -44,7 +44,7 @@ def get_sections_and_tasks():
         SELECT
         s.id AS section_id,
         s.name AS section_name,
-        p.name AS project_name,
+        p.id AS project_id,
         json_agg(json_build_object(
             'id', t.id,
             'text', t.text,
@@ -63,7 +63,7 @@ def get_sections_and_tasks():
         LEFT JOIN
             crm_task t ON s.id = t.section_id
         GROUP BY
-            s.id, s.name, p.name
+            s.id, s.name, p.id
         ORDER BY
             s.id;
         """,

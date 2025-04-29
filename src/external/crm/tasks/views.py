@@ -15,12 +15,12 @@ from src.core.cms.adp.queries import (
 from src.core.utils.base.base_views import BaseAPIView
 import psycopg2
 from django.db import connection
-from src.external.crm.models import Section
+from src.external.crm.models import Section,Task
 
 # Создавайте свои представления здесь
 class SectionTaskView(APIView):
     @swagger_auto_schema(
-        operation_description="Получение всех разделов и их задач",
+        operation_description="Получение всех разделов и их задач с возможностью фильтрации по project_id",
         responses={
             200: "Список разделов и их задач.",
             400: "Ошибка при выполнении запроса.",
@@ -29,38 +29,45 @@ class SectionTaskView(APIView):
     )
     def get(self, request):
         try:
-            with connection.cursor() as cursor:
-                sql, params = get_sections_and_tasks()
-                cursor.execute(sql, params)
-                rows = cursor.fetchall()
+            # Получаем параметр фильтрации project_id из GET-запроса
+            project_id = request.GET.get('project_id')
 
-                sections_data = []
-                for row in rows:
-                    section_id = row[0]
-                    section_title = row[1]
-                    tasks = row[3]  # JSON массив задач
+            # Фильтрация разделов по project_id, если параметр передан
+            filter_conditions = {}
+            if project_id:
+                filter_conditions['project_id'] = project_id
 
-                    # Преобразуем задачи в нужный формат
-                    cards = []
-                    for task in tasks:
-                        card = {
-                            'id': task['id'],
-                            'title': task['text'],
-                            'priority': task['priority'],  # Используем приоритет как тег
-                            'image': None,  # По умолчанию изображение отсутствует
-                            'attachments': 0,  # По умолчанию вложений нет
-                            'comments': task['description'],  # По умолчанию комментариев нет
-                            'user_id':task['user_id'],
-                        }
-                        cards.append(card)
+            sections = Section.objects.filter(**filter_conditions).select_related('project')
 
-                    # Создаем раздел с карточками
-                    section = {
-                        'id': section_id,
-                        'title': section_title,
-                        'cards': cards,
+            sections_data = []
+            for section in sections:
+                section_id = section.id
+                section_title = section.name
+                project_id = section.project.id
+                tasks = Task.objects.filter(section=section).select_related('user')
+
+                # Преобразуем задачи в нужный формат
+                cards = []
+                for task in tasks:
+                    card = {
+                        'id': task.id,
+                        'title': task.text,
+                        'priority': task.priority,  # Используем приоритет как тег
+                        'image': None,  # По умолчанию изображение отсутствует
+                        'attachments': 0,  # По умолчанию вложений нет
+                        'comments': task.description,  # По умолчанию комментариев нет
+                        'user_id': task.user.id,
                     }
-                    sections_data.append(section)
+                    cards.append(card)
+
+                # Создаем раздел с карточками
+                section_data = {
+                    'id': section_id,
+                    'title': section_title,
+                    'cards': cards,
+                    'project_id': project_id,
+                }
+                sections_data.append(section_data)
 
             return Response(
                 {"data": sections_data, "message": "Разделы и задачи успешно получены."},
