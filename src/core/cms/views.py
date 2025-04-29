@@ -112,7 +112,7 @@ class GetUserGroupPermissions(BaseAPIView):
             result,
             status=status.HTTP_200_OK
         )
-    class GeneralSettingsViewSet(viewsets.ModelViewSet):
+class GeneralSettingsViewSet(viewsets.ModelViewSet):
         queryset = GeneralSettings.objects.all()
         serializer_class = GeneralSettingsSerializer
 
