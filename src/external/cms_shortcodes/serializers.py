@@ -10,7 +10,8 @@ class TemplateSerializer(serializers.ModelSerializer):
             'component_type',
             'class_list',
             'extra_data',
-            'is_active'
+            'is_active',
+            'icon_name'
         ]
 
 class RecursiveField(serializers.Serializer):
