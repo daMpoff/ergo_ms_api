@@ -4,10 +4,13 @@ from rest_framework.permissions import IsAuthenticated
 from .models import CmsPage, CmsShortcodeTemplate, CmsShortcodeInstance
 from .serializers import PageSerializer, TemplateSerializer, InstanceSerializer
 
-class TemplateViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = CmsShortcodeTemplate.objects.filter(is_active=True)
+class TemplateViewSet(viewsets.ModelViewSet):
+    queryset = CmsShortcodeTemplate.objects.all()
     serializer_class = TemplateSerializer
     permission_classes = [IsAuthenticated]
+    
+    def perform_create(self, serializer):
+        serializer.save(creator=self.request.user)
 
 class PageViewSet(viewsets.ModelViewSet):
     queryset = CmsPage.objects.all()
