@@ -3,7 +3,7 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.views import APIView
-
+from django.db import models
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 
@@ -20,7 +20,7 @@ from src.external.crm.models import Section,Task
 # Создавайте свои представления здесь
 class SectionTaskView(APIView):
     @swagger_auto_schema(
-        operation_description="Получение всех разделов и их задач с возможностью фильтрации по project_id",
+        operation_description="Получение всех разделов и их задач с подзадачами",
         responses={
             200: "Список разделов и их задач.",
             400: "Ошибка при выполнении запроса.",
@@ -29,10 +29,9 @@ class SectionTaskView(APIView):
     )
     def get(self, request):
         try:
-            # Получаем параметр фильтрации project_id из GET-запроса
             project_id = request.GET.get('project_id')
-
-            # Фильтрация разделов по project_id, если параметр передан
+            
+            # Фильтрация разделов
             filter_conditions = {}
             if project_id:
                 filter_conditions['project_id'] = project_id
@@ -41,31 +40,40 @@ class SectionTaskView(APIView):
 
             sections_data = []
             for section in sections:
-                section_id = section.id
-                section_title = section.name
-                project_id = section.project.id
-                tasks = Task.objects.filter(section=section).select_related('user')
+                # Получаем родительские задачи (где parenttask_id равен id)
+                parent_tasks = Task.objects.filter(
+                    section=section,
+                    parenttask_id=models.F('id')
+                ).select_related('user')
 
-                # Преобразуем задачи в нужный формат
                 cards = []
-                for task in tasks:
+                for task in parent_tasks:
+                    # Получаем подзадачи для этой задачи (исключая саму родительскую задачу)
+                    subtasks = Task.objects.filter(
+                        parenttask_id=task.id
+                    ).exclude(  # Добавляем exclude чтобы исключить родительскую задачу
+                        id=task.id
+                    ).values(
+                        'id', 'text', 'priority', 'description', 
+                        'user_id', 'isdone', 'deadline'
+                    )
+                    
                     card = {
                         'id': task.id,
                         'title': task.text,
-                        'priority': task.priority,  # Используем приоритет как тег
-                        'image': None,  # По умолчанию изображение отсутствует
-                        'attachments': 0,  # По умолчанию вложений нет
-                        'comments': task.description,  # По умолчанию комментариев нет
-                        'user_id': task.user.id,
+                        'priority': task.priority,
+                        'description': task.description,
+                        'user_id': task.user.id if task.user else None,
+                        'parenttask_id': task.parenttask_id,
+                        'subtasks': list(subtasks)  # Преобразуем QuerySet в список
                     }
                     cards.append(card)
 
-                # Создаем раздел с карточками
                 section_data = {
-                    'id': section_id,
-                    'title': section_title,
+                    'id': section.id,
+                    'title': section.name,
                     'cards': cards,
-                    'project_id': project_id,
+                    'project_id': section.project.id,
                 }
                 sections_data.append(section_data)
 
@@ -160,7 +168,6 @@ class TaskCreateView(APIView):
                 'description': openapi.Schema(type=openapi.TYPE_STRING, description='Описание задачи', default=None),
                 'deadline': openapi.Schema(type=openapi.TYPE_STRING, format='date-time', description='Срок выполнения', default=None),
                 'priority': openapi.Schema(type=openapi.TYPE_INTEGER, description='Приоритет задачи', default=0),
-                'parenttask_id': openapi.Schema(type=openapi.TYPE_INTEGER, description='ID родительской задачи', default=None),
                 'user_id': openapi.Schema(type=openapi.TYPE_INTEGER, description='ID пользователя', default=None),
                 'isdone': openapi.Schema(type=openapi.TYPE_BOOLEAN, description='Статус выполнения задачи', default=False),
                 'dateofcreation': openapi.Schema(type=openapi.TYPE_STRING, format='date-time', description='Дата создания задачи', default=None),
@@ -175,10 +182,12 @@ class TaskCreateView(APIView):
                         'data': openapi.Schema(
                             type=openapi.TYPE_OBJECT,
                             properties={
+                                'id': openapi.Schema(type=openapi.TYPE_INTEGER),
                                 'text': openapi.Schema(type=openapi.TYPE_STRING),
                                 'section_id': openapi.Schema(type=openapi.TYPE_INTEGER),
                                 'isdone': openapi.Schema(type=openapi.TYPE_BOOLEAN),
                                 'dateofcreation': openapi.Schema(type=openapi.TYPE_STRING, format='date-time'),
+                                'parenttask_id': openapi.Schema(type=openapi.TYPE_INTEGER),
                             }
                         ),
                         'message': openapi.Schema(type=openapi.TYPE_STRING),
@@ -200,28 +209,29 @@ class TaskCreateView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            # Подготавливаем данные задачи
             task_data = {
                 'text': text,
                 'section_id': section_id,
                 'description': request.data.get('description'),
                 'deadline': request.data.get('deadline'),
                 'priority': request.data.get('priority', 0),
-                'parenttask_id': request.data.get('parenttask_id'),
                 'user_id': request.data.get('user_id'),
                 'isdone': request.data.get('isdone', False),
                 'dateofcreation': request.data.get('dateofcreation') or timezone.now().isoformat(),
             }
             
             with connection.cursor() as cursor:
+                # Создаем задачу и сразу устанавливаем parenttask_id = id
                 sql = """
                     INSERT INTO crm_task (
                         text, section_id, description, deadline, priority, 
-                        parenttask_id, user_id, isdone, dateofcreation
+                        user_id, isdone, dateofcreation, parenttask_id
                     ) VALUES (
                         %(text)s, %(section_id)s, %(description)s, %(deadline)s, 
-                        %(priority)s, %(parenttask_id)s, %(user_id)s, %(isdone)s, %(dateofcreation)s
-                    ) RETURNING id, text, section_id, isdone, dateofcreation
+                        %(priority)s, %(user_id)s, %(isdone)s, %(dateofcreation)s,
+                        (SELECT currval(pg_get_serial_sequence('crm_task','id')))
+                    )
+                    RETURNING id, text, section_id, isdone, dateofcreation, parenttask_id
                 """
                 cursor.execute(sql, task_data)
                 row = cursor.fetchone()
@@ -232,18 +242,60 @@ class TaskCreateView(APIView):
                     'section_id': row[2],
                     'isdone': row[3],
                     'dateofcreation': row[4],
+                    'parenttask_id': row[5],
                 }
-                
+            
             return Response(
                 {
+                    "success": True,
                     "data": created_task,
                     "message": "Задача успешно создана."
                 },
                 status=status.HTTP_201_CREATED
             )
-            
+        
         except Exception as e:
             return Response(
-                {"error": str(e), "message": "Ошибка при создании задачи."},
+                {
+                    "success": False,
+                    "error": str(e),
+                    "message": "Ошибка при создании задачи."
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+# views.py
+from rest_framework.permissions import IsAuthenticated
+
+class TaskDeleteView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, id):
+        try:
+            task = Task.objects.get(id=id)
+            
+            # Проверка владельца задачи
+            if task.user_id != request.user.id:
+                return Response(
+                    {"error": "У вас нет прав для удаления этой задачи"},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            task.delete()
+            
+            return Response(
+                {"success": True, "message": "Задача успешно удалена"},
+                status=status.HTTP_200_OK
+            )
+            
+        except Task.DoesNotExist:
+            return Response(
+                {"error": "Задача не найдена"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {"error": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
