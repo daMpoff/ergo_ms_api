@@ -13,6 +13,7 @@ class CmsShortcodeTemplate(models.Model):
     extra_data = models.JSONField(default=dict, blank=True)  # Например: {"text": "Купить", "icon": "cart"}
     is_active = models.BooleanField(default=True)
     icon_name = models.CharField(max_length=100, blank=True, help_text='Имя иконки из lucide-vue-next')
+    allow_children = models.BooleanField(default=False, help_text='Можно ли вкладывать в этот компонент другие компоненты')
     creator = models.ForeignKey(User, on_delete=models.CASCADE)
     date_of_creation = models.DateField(auto_now_add=True)
     last_update = models.DateTimeField(auto_now=True)
