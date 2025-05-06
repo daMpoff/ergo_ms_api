@@ -1,18 +1,22 @@
 from django.db import models
 from django.contrib.auth.models import User
 
-COMPONENT_TYPES = [
-    ('button', 'Button'),
-    ('container', 'Container'),
-]
+class CmsShortcodeCategory(models.Model):
+    name = models.CharField(max_length=100)
 
 class CmsShortcodeTemplate(models.Model):
     name = models.CharField(max_length=100, unique=True)
-    component_type = models.CharField(max_length=20, choices=COMPONENT_TYPES)  # Тип компонента (button, container и т.д.)
+    component_type = models.ForeignKey(
+        'CmsShortcodeCategory',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='templates'
+    )
     class_list = models.JSONField(default=list, blank=True)
     extra_data = models.JSONField(default=dict, blank=True)  # Например: {"text": "Купить", "icon": "cart"}
     is_active = models.BooleanField(default=True)
-    icon_name = models.CharField(max_length=100, blank=True, help_text='Имя иконки из lucide-vue-next')
+    icon_name = models.CharField(max_length=100, blank=True, null=True, help_text='Имя иконки из lucide-vue-next')
     allow_children = models.BooleanField(default=False, help_text='Можно ли вкладывать в этот компонент другие компоненты')
     creator = models.ForeignKey(User, on_delete=models.CASCADE)
     date_of_creation = models.DateField(auto_now_add=True)

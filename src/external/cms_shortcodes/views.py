@@ -1,8 +1,13 @@
 from django.db import models
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
-from .models import CmsPage, CmsShortcodeTemplate, CmsShortcodeInstance
-from .serializers import PageSerializer, TemplateSerializer, InstanceSerializer
+from .models import CmsPage, CmsShortcodeCategory, CmsShortcodeTemplate, CmsShortcodeInstance
+from .serializers import CmsCategorySerializer, PageSerializer, TemplateSerializer, InstanceSerializer
+
+class ShortcodeCategoryViewSet(viewsets.ModelViewSet):
+    queryset = CmsShortcodeCategory.objects.all()
+    serializer_class = CmsCategorySerializer
+    permission_classes = [IsAuthenticated]
 
 class TemplateViewSet(viewsets.ModelViewSet):
     queryset = CmsShortcodeTemplate.objects.all()

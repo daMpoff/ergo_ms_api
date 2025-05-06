@@ -1,7 +1,16 @@
 from rest_framework import serializers
-from .models import CmsPage, CmsShortcodeTemplate, CmsShortcodeInstance
+from .models import CmsPage, CmsShortcodeCategory, CmsShortcodeTemplate, CmsShortcodeInstance
+
+class CmsCategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CmsShortcodeCategory
+        fields = ['id', 'name']
 
 class TemplateSerializer(serializers.ModelSerializer):
+    component_type = serializers.SlugRelatedField(
+        queryset= CmsShortcodeCategory.objects.all(),
+        slug_field='name'
+    )
     class Meta:
         model = CmsShortcodeTemplate
         fields = [
