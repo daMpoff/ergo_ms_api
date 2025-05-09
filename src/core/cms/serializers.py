@@ -5,9 +5,18 @@ from .models import (
     SecuritySettings, MediaSettings, PermalinkSettings, EmailSettings
 )
 class UploadedFileSerializer(serializers.ModelSerializer):
+    name = serializers.SerializerMethodField()
+    size = serializers.SerializerMethodField()
+
     class Meta:
         model = UploadedFile
-        fields = ['id', 'file', 'uploaded_at']
+        fields = ['id', 'file', 'name', 'size', 'uploaded_at']
+
+    def get_name(self, obj):
+        return obj.file.name.split('/')[-1]
+
+    def get_size(self, obj):
+        return obj.file.size
 class GeneralSettingsSerializer(serializers.ModelSerializer):
     class Meta:
         model = GeneralSettings
