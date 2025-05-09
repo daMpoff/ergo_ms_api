@@ -152,3 +152,11 @@ class FileViewSet(viewsets.ModelViewSet):
 
         instance = UploadedFile.objects.create(file=file)
         return Response(UploadedFileSerializer(instance).data, status=status.HTTP_201_CREATED)
+    
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        # удаляем файл с диска, но не трогаем запись
+        instance.file.delete(save=False)
+        # затем удаляем запись из БД
+        self.perform_destroy(instance)
+        return Response(status=status.HTTP_204_NO_CONTENT)
