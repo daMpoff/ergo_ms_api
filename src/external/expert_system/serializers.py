@@ -1,5 +1,3 @@
-# serializers.py
-
 from rest_framework import serializers
 from django.contrib.auth.models import User
 from .models import (
@@ -18,14 +16,32 @@ class ExpertSystemStudyGroupSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class ExpertSystemStudentProfileSerializer(serializers.ModelSerializer):
-    user = serializers.PrimaryKeyRelatedField(queryset=User.objects.all())
+    user = serializers.HiddenField(default=serializers.CurrentUserDefault())
+
+    # write_only — ждёт в запросе числовой ID
     study_group = serializers.PrimaryKeyRelatedField(
-        queryset=ExpertSystemStudyGroup.objects.all(), allow_null=True
+        queryset=ExpertSystemStudyGroup.objects.all(),
+        allow_null=True,
+        write_only=True
     )
+    # read_only — отдаёт в ответе только имя группы
+    group_name = serializers.CharField(
+        source='study_group.name',
+        read_only=True,
+        default=''
+    )
+    email = serializers.EmailField(required=False, allow_blank=True)
+    phone = serializers.CharField(required=False, allow_blank=True)
 
     class Meta:
         model = ExpertSystemStudentProfile
-        fields = ['id', 'user', 'first_name', 'last_name', 'study_group', 'has_experience']
+        fields = [
+            'id', 'user',
+            'first_name', 'last_name',
+            'study_group', 'group_name',
+            'has_experience',
+            'email', 'phone'
+        ]
 
 class ExpertsystemCompanyProfileSerializer(serializers.ModelSerializer):
     user = serializers.PrimaryKeyRelatedField(queryset=User.objects.all())
