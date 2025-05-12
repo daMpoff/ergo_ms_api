@@ -45,6 +45,18 @@ class ExpertSystemStudentProfile(models.Model):
         verbose_name="Есть опыт в IT",
         default=False
     )
+    email = models.EmailField(
+        verbose_name="Email",
+        max_length=254,
+        blank=True,
+        default=''
+    )
+    phone = models.CharField(
+        verbose_name="Телефон",
+        max_length=20,
+        blank=True,
+        default=''
+    )
 
     def __str__(self):
         return f"{self.last_name} {self.first_name}"

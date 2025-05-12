@@ -30,15 +30,17 @@ class ExpertSystemStudentProfileSerializer(serializers.ModelSerializer):
         read_only=True,
         default=''
     )
+    email = serializers.EmailField(required=False, allow_blank=True)
+    phone = serializers.CharField(required=False, allow_blank=True)
 
     class Meta:
         model = ExpertSystemStudentProfile
         fields = [
             'id', 'user',
             'first_name', 'last_name',
-            'study_group',   # только для записи
-            'group_name',    # только для чтения
-            'has_experience'
+            'study_group', 'group_name',
+            'has_experience',
+            'email', 'phone'
         ]
 
 class ExpertsystemCompanyProfileSerializer(serializers.ModelSerializer):
