@@ -11,7 +11,8 @@ from src.core.utils.database.main import OrderedDictQueryExecutor
 from src.core.utils.management.commands.add_module import Command
 from django.contrib.auth import authenticate
 from django.utils.crypto import get_random_string
-
+from rest_framework.views import APIView
+import logging
 from django.contrib.auth.models import User
 
 from src.core.utils.methods import (
@@ -31,6 +32,162 @@ from rest_framework.request import Request
 import pandas as pd
 from src.external.expsys_module.models import (Skill, Vacance)
 from django.db import connection
+from src.external.lms.models import Subject
+from django.shortcuts import get_object_or_404
+from django.contrib.auth import get_user_model
+from django.utils import timezone
+
+User = get_user_model()
+
+class TeacherSubjectsView(APIView):
+    @swagger_auto_schema(
+        operation_description="Получение всех предметов по ID учителя из query-параметра",
+        manual_parameters=[
+            openapi.Parameter(
+                'user_id', openapi.IN_QUERY, description="ID пользователя", type=openapi.TYPE_INTEGER, required=True
+            )
+        ],
+        responses={
+            200: openapi.Response(
+                description="Список предметов учителя",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'data': openapi.Schema(
+                            type=openapi.TYPE_ARRAY,
+                            items=openapi.Schema(
+                                type=openapi.TYPE_OBJECT,
+                                properties={
+                                    'id': openapi.Schema(type=openapi.TYPE_INTEGER),
+                                    'name': openapi.Schema(type=openapi.TYPE_STRING),
+                                    'description': openapi.Schema(type=openapi.TYPE_STRING),
+                                    'creationdate': openapi.Schema(type=openapi.TYPE_STRING, format='date'),
+                                    'lastupdate': openapi.Schema(type=openapi.TYPE_STRING, format='date-time'),
+                                    'teacher_id': openapi.Schema(type=openapi.TYPE_INTEGER),
+                                }
+                            )
+                        ),
+                        'message': openapi.Schema(type=openapi.TYPE_STRING),
+                    }
+                )
+            ),
+            400: "Неверный запрос",
+            404: "Пользователь не найден",
+            403: "Пользователь не является учителем",
+            500: "Внутренняя ошибка сервера"
+        }
+    )
+    def get(self, request):
+        try:
+            user_id = request.query_params.get('user_id')
+
+            if not user_id:
+                return Response(
+                    {"error": "user_id обязателен", "message": "Укажите ID пользователя в параметрах запроса."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            try:
+                user = User.objects.get(id=user_id)
+            except User.DoesNotExist:
+                return Response(
+                    {"error": "Пользователь не найден", "message": f"Пользователь с ID {user_id} не существует."},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+
+            teacher_subjects = Subject.objects.filter(teacher=user)
+
+            subjects_data = [{
+                'id': subject.id,
+                'name': subject.name,
+                'description': subject.description,
+                'creationdate': subject.creationdate,
+                'lastupdate': subject.lastupdate,
+                'teacher_id': subject.teacher.id,
+            } for subject in teacher_subjects]
+
+            return Response(
+                {
+                    "data": subjects_data,
+                    "message": f"Найдено {len(subjects_data)} предметов."
+                },
+                status=status.HTTP_200_OK
+            )
+
+        except Exception as e:
+            return Response(
+                {"error": str(e), "message": "Ошибка при получении предметов."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+logger = logging.getLogger(__name__)
+
+class SubjectCreateView(APIView):
+    def post(self, request):
+        try:
+            # Валидация данных
+            name = request.data.get('name', '').strip()
+            description = request.data.get('description', '').strip()
+
+            if not name:
+                return Response(
+                    {
+                        "status": "error",
+                        "message": "Название предмета обязательно"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Проверка на авторизацию
+            if not request.user.is_authenticated:
+                return Response(
+                    {
+                        "status": "error",
+                        "message": "Требуется авторизация"
+                    },
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+
+            # Создание предмета
+            subject = Subject.objects.create(
+                name=name,
+                description=description,
+                teacher=request.user
+            )
+
+            # Формирование успешного ответа
+            return Response(
+                {
+                    "status": "success",
+                    "data": {
+                        "id": subject.id,
+                        "name": subject.name,
+                        "description": subject.description,
+                        "teacher_id": subject.teacher.id,
+                        "creation_date": subject.creationdate.strftime('%Y-%m-%d'),  # Форматируем дату
+                        "icon": "book",
+                        "icon_background": "bg-blue",
+                        "stats": {
+                            "students": 0,
+                            "lessons": 0,
+                            "tasks": 0
+                        }
+                    }
+                },
+                status=status.HTTP_201_CREATED
+            )
+
+        except Exception as e:
+            # Логирование исключений
+            logger.error(f"Ошибка при создании предмета: {str(e)}")
+            return Response(
+                {
+                    "status": "error",
+                    "message": "Внутренняя ошибка сервера",
+                    "details": str(e)  # Включаем дополнительные детали ошибки для диагностики
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 class PostCompetenciesandVacations(BaseAPIView):
     permission_classes = [IsAuthenticated]
     @swagger_auto_schema(
