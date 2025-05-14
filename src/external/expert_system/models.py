@@ -273,6 +273,10 @@ class ExpertSystemTest(models.Model):
         verbose_name="Название теста",
         max_length=200
     )
+    descriptions = models.TextField(
+        verbose_name="описание",
+        default=''
+    )
 
     def __str__(self):
         return f"{self.name} ({self.skill.name})"
