@@ -136,7 +136,7 @@ class ExpertSystemOrientationUserAnswerViewSet(viewsets.ModelViewSet):
     queryset = ExpertSystemOrientationUserAnswer.objects.select_related('result', 'question', 'answer').all()
     serializer_class = ExpertSystemOrientationUserAnswerSerializer
 
-class SetUserSkillTest(BaseAPIView):
+class SetUserSkills(BaseAPIView):
     permission_classes = [IsAuthenticated]
     @swagger_auto_schema(
         operation_description="Установление тестов по умениям",
@@ -162,38 +162,10 @@ class SetUserSkillTest(BaseAPIView):
         skill_names = request.data['Skills']
         for skill_name in skill_names:
             ess = ExpertSystemSkill.objects.get(name= skill_name)
-            esst = ExpertSystemTest.objects.get(skill = ess)
-            ExpertSystemTestResult.objects.create(test = esst, user = userprofile, score = 0, passed = False)
-            
+            ExpertSystemUserSkill.objects.create(user = userprofile, skill = ess)
         return Response(
             status=status.HTTP_200_OK
         )
-    
-class GetUserSkillTests(BaseAPIView):
-    permission_classes = [IsAuthenticated]
-    @swagger_auto_schema(
-        operation_description="Получение тестов по навыкам пользователя",
-        responses={
-            200: "Тесты пользователя по навыкам получены",
-            401: "Пользователь не авторизован",
-        },
-    )
-    def get(self, request: Request):
-        user = request.user
-        userprofile = ExpertSystemStudentProfile.objects.get(user=user)
-        exptestresults = ExpertSystemTestResult.objects.filter(user= userprofile)
-        result = []
-        for exptestresult in exptestresults:
-            test = exptestresult.test       
-            testname = test.name
-            description = test.descriptions
-            result.append({'id':exptestresult.id, 'test':testname,'description':description, 'result': exptestresult.score,'status': exptestresult.passed})
-            
-        return Response(
-            result,
-            status=status.HTTP_200_OK
-        )
-    
 class GetUserSkills(BaseAPIView):
     permission_classes = [IsAuthenticated]
     @swagger_auto_schema(
@@ -206,33 +178,10 @@ class GetUserSkills(BaseAPIView):
     def get(self, request: Request):
         user = request.user
         userprofile = ExpertSystemStudentProfile.objects.get(user=user)
-        exptestresults = ExpertSystemTestResult.objects.filter(user= userprofile)
-        result = []
-        for exptestresult in exptestresults:
-            test = exptestresult.test     
-            result.append(test.skill.name)            
-        return Response(
-            result,
-            status=status.HTTP_200_OK
-        )
-    
-class GetTestbySkill(BaseAPIView):
-    permission_classes = [IsAuthenticated]
-    @swagger_auto_schema(
-        operation_description="Получение навыков пользователя",
-        responses={
-            200: "навыки получены",
-            401: "Пользователь не авторизован",
-        },
-    )
-    def get(self, request: Request):
-        user = request.user
-        userprofile = ExpertSystemStudentProfile.objects.get(user=user)
-        exptestresults = ExpertSystemTestResult.objects.filter(user= userprofile)
-        result = []
-        for exptestresult in exptestresults:
-            test = exptestresult.test     
-            result.append(test.skill.name)            
+        expuserskills = ExpertSystemUserSkill.objects.filter(user=userprofile)
+        result =[] 
+        for expuserskill in expuserskills:     
+            result.append({'id':expuserskill.id,'name': expuserskill.skill.name, 'status':expuserskill.status})            
         return Response(
             result,
             status=status.HTTP_200_OK
