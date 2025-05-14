@@ -44,7 +44,7 @@ class ExpertSystemStudentProfileSerializer(serializers.ModelSerializer):
         ]
 
 class ExpertsystemCompanyProfileSerializer(serializers.ModelSerializer):
-    user = serializers.PrimaryKeyRelatedField(queryset=User.objects.all())
+    user = serializers.HiddenField(default=serializers.CurrentUserDefault())
 
     class Meta:
         model = ExpertsystemCompanyProfile
@@ -126,11 +126,15 @@ class ExpertSystemTestResultSerializer(serializers.ModelSerializer):
         fields = ['id', 'user', 'test', 'score', 'passed']
 
 class ExpertSystemVacancySerializer(serializers.ModelSerializer):
-    employer = serializers.PrimaryKeyRelatedField(queryset=ExpertsystemCompanyProfile.objects.all())
+    employer = serializers.PrimaryKeyRelatedField(
+        read_only=True,
+        default=serializers.CurrentUserDefault()
+    )
 
     class Meta:
         model = ExpertSystemVacancy
         fields = ['id', 'employer', 'title', 'description', 'required_skills']
+        read_only_fields = ['employer']
 
 class ExpertSystemVacancySkillSerializer(serializers.ModelSerializer):
     vacancy = serializers.PrimaryKeyRelatedField(queryset=ExpertSystemVacancy.objects.all())
