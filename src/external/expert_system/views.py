@@ -176,7 +176,6 @@ class GetUserSkillTest(BaseAPIView):
         responses={
             200: "Права пользователя",
             401: "Пользователь не авторизован",
-            403: "Нет доступа"
         },
     )
     def get(self, request: Request):
@@ -190,6 +189,27 @@ class GetUserSkillTest(BaseAPIView):
             description = test.descriptions
             result.append({'test':testname,'description':description, 'result': exptestresult.score,'status': exptestresult.passed})
             
+        return Response(
+            result,
+            status=status.HTTP_200_OK
+        )
+class GetUserSkills(BaseAPIView):
+    permission_classes = [IsAuthenticated]
+    @swagger_auto_schema(
+        operation_description="Установление тестов по умениям",
+        responses={
+            200: "Права пользователя",
+            401: "Пользователь не авторизован",
+        },
+    )
+    def get(self, request: Request):
+        user = request.user
+        userprofile = ExpertSystemStudentProfile.objects.get(user=user)
+        exptestresults = ExpertSystemTestResult.objects.filter(user= userprofile)
+        result = []
+        for exptestresult in exptestresults:
+            test = exptestresult.test     
+            result.append(test.skill.name)            
         return Response(
             result,
             status=status.HTTP_200_OK
