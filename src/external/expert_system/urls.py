@@ -8,7 +8,7 @@ from .views import (
     ExpertSystemAnswerViewSet, ExpertSystemTestResultViewSet, ExpertSystemVacancyViewSet,
     ExpertSystemVacancySkillViewSet, ExpertSystemCandidateApplicationViewSet,
     ExpertSystemOrientationTestResultViewSet, ExpertSystemOrientationUserAnswerViewSet,
-    SetUserSkillTest, GetUserSkillTest, GetUserSkills
+    SetUserSkillTest, GetUserSkillTests, GetUserSkills
 )
 
 router = DefaultRouter()
@@ -35,6 +35,7 @@ router.register(r'orientation-answers', ExpertSystemOrientationUserAnswerViewSet
 urlpatterns = [
     path('', include(router.urls)),
     path('set-user-skill-test', SetUserSkillTest.as_view(), name ='Set user skill test'),
-    path('get-user-skill-tests', GetUserSkillTest.as_view(), name ='Get user skill tests'),
+    path('get-user-skill-tests', GetUserSkillTests.as_view(), name ='Get user skill tests'),
     path('get-user-skills', GetUserSkills.as_view(), name ='Get user skills')
+    
 ]
