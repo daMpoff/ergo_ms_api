@@ -11,6 +11,7 @@ from .models import (
     ExpertSystemCandidateApplication, ExpertSystemOrientationTestResult,
     ExpertSystemOrientationUserAnswer
 )
+
 from .serializers import (
     ExpertSystemStudyGroupSerializer, ExpertSystemStudentProfileSerializer, ExpertsystemCompanyProfileSerializer,
     ExpertSystemSkillSerializer, ExpertSystemUserSkillSerializer, ExpertSystemRoleSerializer,
@@ -21,6 +22,13 @@ from .serializers import (
     ExpertSystemOrientationTestResultSerializer, ExpertSystemOrientationUserAnswerSerializer
 )
 
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
+from src.core.utils.base.base_views import BaseAPIView
+from rest_framework.request import Request
 class ExpertSystemStudyGroupViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = ExpertSystemStudyGroup.objects.all()
@@ -143,3 +151,54 @@ class ExpertSystemOrientationUserAnswerViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = ExpertSystemOrientationUserAnswer.objects.select_related('result', 'question', 'answer').all()
     serializer_class = ExpertSystemOrientationUserAnswerSerializer
+
+class SetUserSkills(BaseAPIView):
+    permission_classes = [IsAuthenticated]
+    @swagger_auto_schema(
+        operation_description="Установление тестов по умениям",
+        responses={
+            200: "Права пользователя",
+            401: "Пользователь не авторизован",
+            403: "Нет доступа"
+        },
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'Skills': openapi.Schema(
+                    type=openapi.TYPE_ARRAY,
+                    items=openapi.Items(type=openapi.TYPE_STRING), 
+                    description='Навыки'
+                )
+            }
+        )
+    )
+    def post(self, request: Request):
+        user = request.user
+        userprofile = ExpertSystemStudentProfile.objects.get(user=user)
+        skill_names = request.data['Skills']
+        for skill_name in skill_names:
+            ess = ExpertSystemSkill.objects.get(name= skill_name)
+            ExpertSystemUserSkill.objects.create(user = userprofile, skill = ess)
+        return Response(
+            status=status.HTTP_200_OK
+        )
+class GetUserSkills(BaseAPIView):
+    permission_classes = [IsAuthenticated]
+    @swagger_auto_schema(
+        operation_description="Получение навыков пользователя",
+        responses={
+            200: "навыки получены",
+            401: "Пользователь не авторизован",
+        },
+    )
+    def get(self, request: Request):
+        user = request.user
+        userprofile = ExpertSystemStudentProfile.objects.get(user=user)
+        expuserskills = ExpertSystemUserSkill.objects.filter(user=userprofile)
+        result =[] 
+        for expuserskill in expuserskills:     
+            result.append({'id':expuserskill.id,'name': expuserskill.skill.name, 'status':expuserskill.status})            
+        return Response(
+            result,
+            status=status.HTTP_200_OK
+        )
