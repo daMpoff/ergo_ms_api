@@ -55,6 +55,18 @@ class ExpertsystemCompanyProfileViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = ExpertsystemCompanyProfile.objects.select_related('user').all()
     serializer_class = ExpertsystemCompanyProfileSerializer
+    
+    @action(detail=False, methods=['get'], url_path='me')
+    def me(self, request):
+        """
+        Возвращает профиль текущего аутентифицированного работодателя.
+        """
+        try:
+            profile = ExpertsystemCompanyProfile.objects.get(user=request.user)
+        except ExpertsystemCompanyProfile.DoesNotExist:
+            return Response({'detail': 'Профиль не найден.'}, status=404)
+        serializer = self.get_serializer(profile)
+        return Response(serializer.data)
 
 class ExpertSystemSkillViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
@@ -115,6 +127,10 @@ class ExpertSystemVacancyViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = ExpertSystemVacancy.objects.select_related('employer').prefetch_related('required_skills').all()
     serializer_class = ExpertSystemVacancySerializer
+    
+    def perform_create(self, serializer):
+        company_profile = self.request.user.company_profile
+        serializer.save(employer=company_profile)
 
 class ExpertSystemVacancySkillViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
