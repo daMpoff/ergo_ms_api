@@ -33,6 +33,7 @@ import pandas as pd
 from src.external.expsys_module.models import (Skill, Vacance)
 from django.db import connection
 from src.external.lms.models import Subject
+from src.external.expsys_module.models import Competence,Competence_Subject
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
 from django.utils import timezone
@@ -132,7 +133,6 @@ class SubjectCreateView(APIView):
             if not name:
                 return Response(
                     {
-                        "status": "error",
                         "message": "Название предмета обязательно"
                     },
                     status=status.HTTP_400_BAD_REQUEST
@@ -142,7 +142,6 @@ class SubjectCreateView(APIView):
             if not request.user.is_authenticated:
                 return Response(
                     {
-                        "status": "error",
                         "message": "Требуется авторизация"
                     },
                     status=status.HTTP_401_UNAUTHORIZED
@@ -158,23 +157,20 @@ class SubjectCreateView(APIView):
             # Формирование успешного ответа
             return Response(
                 {
-                    "status": "success",
-                    "data": {
-                        "id": subject.id,
-                        "name": subject.name,
-                        "description": subject.description,
-                        "teacher_id": subject.teacher.id,
-                        "creation_date": subject.creationdate.strftime('%Y-%m-%d'),  # Форматируем дату
-                        "icon": "book",
-                        "icon_background": "bg-blue",
-                        "stats": {
-                            "students": 0,
-                            "lessons": 0,
-                            "tasks": 0
-                        }
+                    "id": subject.id,
+                    "name": subject.name,
+                    "description": subject.description,
+                    "teacher_id": subject.teacher.id,
+                    "creation_date": subject.creationdate.strftime('%Y-%m-%d'),
+                    "icon": "book",
+                    "icon_background": "bg-blue",
+                    "stats": {
+                        "students": 0,
+                        "lessons": 0,
+                        "tasks": 0
                     }
                 },
-                status=status.HTTP_201_CREATED
+                status=status.HTTP_201_CREATED  # будет считаться успешным, если handleResponse проверяет только 200
             )
 
         except Exception as e:
@@ -182,12 +178,72 @@ class SubjectCreateView(APIView):
             logger.error(f"Ошибка при создании предмета: {str(e)}")
             return Response(
                 {
-                    "status": "error",
                     "message": "Внутренняя ошибка сервера",
-                    "details": str(e)  # Включаем дополнительные детали ошибки для диагностики
+                    "details": str(e)
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+class SubjectCompetenciesView(APIView):
+    @swagger_auto_schema(
+        operation_description="Получение всех компетенций выбранного предмета",
+        manual_parameters=[
+            openapi.Parameter(
+                'subject_id',
+                openapi.IN_QUERY,
+                description="ID предмета",
+                type=openapi.TYPE_INTEGER
+            )
+        ],
+        responses={
+            200: "Список компетенций предмета.",
+            400: "Ошибка при выполнении запроса.",
+            500: "Внутренняя ошибка сервера."
+        }
+    )
+    def get(self, request):
+        try:
+            subject_id = request.GET.get('subject_id')
+            
+            if not subject_id:
+                return Response(
+                    {"error": "Не указан ID предмета", "message": "Необходимо указать subject_id"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Получаем все связи компетенций с предметом
+            competence_links = Competence_Subject.objects.filter(
+                subject_id=subject_id
+            ).select_related('competence')
+
+            competencies_data = []
+            for link in competence_links:
+                competence_data = {
+                    'id': link.competence.id,
+                    'name': link.competence.name,
+                    'description':link.competence.description,
+                    'sat_coef': link.sat_coef,
+                    'subject_id': link.subject_id,
+                    'knowledge':link.knowledge,
+                    'ability':link.ability,
+                    'mastered':link.mastered,
+                }
+                competencies_data.append(competence_data)
+
+            return Response(
+                {
+                    "data": competencies_data,
+                    "message": "Компетенции предмета успешно получены.",
+                    "count": len(competencies_data)
+                },
+                status=status.HTTP_200_OK
+            )
+        except Exception as e:
+            return Response(
+                {"error": str(e), "message": "Ошибка при получении компетенций предмета."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+            
 class PostCompetenciesandVacations(BaseAPIView):
     permission_classes = [IsAuthenticated]
     @swagger_auto_schema(

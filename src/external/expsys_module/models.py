@@ -6,6 +6,15 @@ import datetime
 
 class Competence(models.Model):
     name = models.CharField(max_length=255, default='')
+    description = models.TextField(default='')
+
+class Competence_Subject(models.Model):
+    competence = models.ForeignKey(Competence, on_delete=models.CASCADE)
+    subject = models.ForeignKey(Subject, on_delete=models.CASCADE, default=0)
+    sat_coef = models.FloatField(default=0)
+    knowledge = models.TextField(default='')
+    ability = models.TextField(default='')
+    mastered = models.TextField(default='')
 
 class Skill(models.Model):
     name =models.CharField(max_length=255, default='')
@@ -27,7 +36,3 @@ class Skill_Course(models.Model):
     subject = models.ForeignKey(Subject, on_delete=models.CASCADE, default=0)
     sat_coef = models.FloatField(default=0)
 
-class Competence_Course(models.Model):
-    competence = models.ForeignKey(Competence, on_delete=models.CASCADE)
-    subject = models.ForeignKey(Subject, on_delete=models.CASCADE, default=0)
-    sat_coef = models.FloatField(default=0)
