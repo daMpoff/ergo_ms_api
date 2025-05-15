@@ -34,6 +34,8 @@ class ExpertSystemStudyGroupViewSet(viewsets.ModelViewSet):
     queryset = ExpertSystemStudyGroup.objects.all()
     serializer_class = ExpertSystemStudyGroupSerializer
 
+
+
 class ExpertSystemStudentProfileViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = ExpertSystemStudentProfile.objects.select_related('user', 'study_group').all()
@@ -50,7 +52,7 @@ class ExpertSystemStudentProfileViewSet(viewsets.ModelViewSet):
             return Response({'detail': 'Профиль не найден.'}, status=404)
         serializer = self.get_serializer(profile)
         return Response(serializer.data)
-
+    
 class ExpertsystemCompanyProfileViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = ExpertsystemCompanyProfile.objects.select_related('user').all()
@@ -202,3 +204,95 @@ class GetUserSkills(BaseAPIView):
             result,
             status=status.HTTP_200_OK
         )
+
+class CreateTest(BaseAPIView):
+    permission_classes=[IsAuthenticated]
+    @swagger_auto_schema(
+        operation_description="Создание теста экспертной системы",
+        responses={
+            200: "Тест создан",
+            401: "Пользователь не авторизован",
+        },
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'title': openapi.Schema(
+                    type=openapi.TYPE_STRING, 
+                    description='Название'),
+                'skill': openapi.Schema(
+                    type=openapi.TYPE_STRING, 
+                    description='Навык'),
+                'description': openapi.Schema(
+                    type=openapi.TYPE_STRING, 
+                    description='Описание'),
+                'questions': openapi.Schema(
+                    type=openapi.TYPE_ARRAY,
+                    items=openapi.Items(type=openapi.TYPE_OBJECT),
+                    description='вопросы теста')
+            }
+        )
+    )
+    def post(self, request:Request):
+        title = request.data['title']
+        skill = request.data['skill']
+        description = request.data['description']
+        expskill = ExpertSystemSkill.objects.get(name =skill)
+        test = ExpertSystemTest.objects.create(name = title, skill = expskill, descriptions = description)
+        questions = request.data['questions']
+        for question in questions:
+            print(question)
+            expquestion =ExpertSystemQuestion.objects.create(text = question['text'], test = test)
+            for answer in question['answers']:
+                ExpertSystemAnswer.objects.create(text = answer['text'], is_correct = answer['isCorrect'], question = expquestion)
+        return Response(status=status.HTTP_200_OK)
+
+
+class GetAllTests(BaseAPIView):
+    permission_classes=[IsAuthenticated]
+    @swagger_auto_schema(
+        operation_description="Получение всех тестов экспертной системы",
+        responses={
+            200: "Тесты получены",
+            401: "Пользователь не авторизован",
+        },
+    )
+    def get(self, request:Request):
+        expstests = ExpertSystemTest.objects.all()
+        result =[]
+        for exptest in expstests:
+            title = exptest.name
+            id = exptest.id
+            description = exptest.descriptions
+            skill = exptest.skill.name
+            count_of_questions = len(ExpertSystemQuestion.objects.filter(test = exptest))
+            result.append({'id':id,'title':title, 'description':description, 'skill':skill, 'count_of_questions':count_of_questions})
+        return Response(result, status=status.HTTP_200_OK)
+    
+
+class DeleteTest(BaseAPIView):
+    permission_classes=[IsAuthenticated]
+    @swagger_auto_schema(
+        operation_description="Удаление теста",
+        responses={
+            200: "Тест удален",
+            401: "Пользователь не авторизован",
+        },
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'id': openapi.Schema(
+                    type=openapi.TYPE_STRING, 
+                    description='id теста на удаление'),
+            }
+        )
+    )
+    def delete(self, request:Request):
+        print(request.data)
+        id = request.data['id']
+        test = ExpertSystemTest.objects.get(id=id)
+        for question in ExpertSystemQuestion.objects.filter(test=test):
+            for answer in ExpertSystemAnswer.objects.filter(question=question):
+                answer.delete()
+            question.delete()
+        test.delete()
+        return Response(status=status.HTTP_200_OK)
