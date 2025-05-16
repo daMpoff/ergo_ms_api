@@ -21,7 +21,8 @@ from .serializers import (
     ExpertSystemVacancySkillSerializer, ExpertSystemCandidateApplicationSerializer,
     ExpertSystemOrientationTestResultSerializer, ExpertSystemOrientationUserAnswerSerializer
 )
-
+import json
+from django.http import JsonResponse
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -277,18 +278,8 @@ class DeleteTest(BaseAPIView):
             200: "Тест удален",
             401: "Пользователь не авторизован",
         },
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                'id': openapi.Schema(
-                    type=openapi.TYPE_STRING, 
-                    description='id теста на удаление'),
-            }
-        )
     )
-    def delete(self, request:Request):
-        print(request.data)
-        id = request.data['id']
+    def delete(self, request:Request, id:int):
         test = ExpertSystemTest.objects.get(id=id)
         for question in ExpertSystemQuestion.objects.filter(test=test):
             for answer in ExpertSystemAnswer.objects.filter(question=question):
@@ -296,3 +287,29 @@ class DeleteTest(BaseAPIView):
             question.delete()
         test.delete()
         return Response(status=status.HTTP_200_OK)
+    
+
+    
+class GetTest(BaseAPIView):
+    permission_classes=[IsAuthenticated]
+    @swagger_auto_schema(
+        operation_description="Получение теста экспертной системы",
+        responses={
+            200: "Тест получены",
+            401: "Пользователь не авторизован",
+        },
+        manual_parameters=[
+        openapi.Parameter('id', openapi.IN_QUERY, type=openapi.TYPE_INTEGER, description='id теста')
+    ]
+    )
+    def get(self, request:Request):
+        test_id = request.query_params.get('id')
+        test = ExpertSystemTest.objects.get(id=test_id)
+        questions = []
+        for question in ExpertSystemQuestion.objects.filter(test=test):
+            answers = []
+            for answer in ExpertSystemAnswer.objects.filter(question=question):
+                answers.append({'text':answer.text, 'isCorrect':answer.is_correct})
+            questions.append({'text':question.text, 'answers':answers})
+        result = {'title':test.name, 'skill':test.skill.name, 'description':test.descriptions, 'questions':questions}
+        return Response(result, status=status.HTTP_200_OK)
