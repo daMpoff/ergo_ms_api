@@ -33,7 +33,7 @@ import pandas as pd
 from src.external.expsys_module.models import (Skill, Vacance)
 from django.db import connection
 from src.external.lms.models import Subject
-from src.external.expsys_module.models import Competence,Competence_Subject
+from src.external.expsys_module.models import Competence,Indicator_Subject,Indicator
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
 from django.utils import timezone
@@ -212,16 +212,16 @@ class SubjectCompetenciesView(APIView):
                 )
 
             # Получаем все связи компетенций с предметом
-            competence_links = Competence_Subject.objects.filter(
+            competence_links = Indicator_Subject.objects.filter(
                 subject_id=subject_id
-            ).select_related('competence')
+            ).select_related('indicator')
 
             competencies_data = []
             for link in competence_links:
                 competence_data = {
-                    'id': link.competence.id,
-                    'name': link.competence.name,
-                    'description':link.competence.description,
+                    'id': link.indicator.id,
+                    'name': link.indicator.name,
+                    'description':link.indicator.description,
                     'sat_coef': link.sat_coef,
                     'subject_id': link.subject_id,
                     'knowledge':link.knowledge,
@@ -241,6 +241,42 @@ class SubjectCompetenciesView(APIView):
         except Exception as e:
             return Response(
                 {"error": str(e), "message": "Ошибка при получении компетенций предмета."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class CompetenciesView(APIView):
+    @swagger_auto_schema(
+        operation_description="Получение всех имеющихся компетенций",
+        responses={
+            200: "Список компетенций.",
+            400: "Ошибка при выполнении запроса.",
+            500: "Внутренняя ошибка сервера."
+        }
+    )
+    def get(self, request):
+        try:            
+            # Получаем все компетенции
+            competencies = Competence.objects.all()
+            competencies_data = []
+            for comp in competencies:
+                competence_data = {
+                    'id': comp.id,
+                    'name': comp.name,
+                    'description':comp.description,
+                }
+                competencies_data.append(competence_data)
+
+            return Response(
+                {
+                    "data": competencies_data,
+                    "message": "Компетенции успешно получены.",
+                    "count": len(competencies_data)
+                },
+                status=status.HTTP_200_OK
+            )
+        except Exception as e:
+            return Response(
+                {"error": str(e), "message": "Ошибка при получении компетенций."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
             

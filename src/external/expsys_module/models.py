@@ -7,14 +7,20 @@ import datetime
 class Competence(models.Model):
     name = models.CharField(max_length=255, default='')
     description = models.TextField(default='')
-
-class Competence_Subject(models.Model):
-    competence = models.ForeignKey(Competence, on_delete=models.CASCADE)
+class Indicator(models.Model):
+    name = models.CharField(max_length=255, default='')
+    description = models.TextField(default='')
+class Indicator_Subject(models.Model):
+    indicator = models.ForeignKey(Indicator, on_delete=models.CASCADE,default=0)
     subject = models.ForeignKey(Subject, on_delete=models.CASCADE, default=0)
     sat_coef = models.FloatField(default=0)
     knowledge = models.TextField(default='')
     ability = models.TextField(default='')
     mastered = models.TextField(default='')
+
+class Indicator_Competence(models.Model):
+    indicator = models.ForeignKey(Indicator, on_delete=models.CASCADE,default=0)
+    competence = models.ForeignKey(Competence, on_delete=models.CASCADE, default=0)
 
 class Skill(models.Model):
     name =models.CharField(max_length=255, default='')
