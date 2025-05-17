@@ -197,7 +197,7 @@ class GetUserSkills(BaseAPIView):
         expuserskills = ExpertSystemUserSkill.objects.filter(user=userprofile)
         result =[] 
         for expuserskill in expuserskills:     
-            result.append({'id':expuserskill.id,'name': expuserskill.skill.name, 'status':expuserskill.status})            
+            result.append({'id':expuserskill.id,'skill_id':expuserskill.skill.id, 'name': expuserskill.skill.name, 'status':expuserskill.status})            
         return Response(
             result,
             status=status.HTTP_200_OK
