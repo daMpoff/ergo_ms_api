@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.db import transaction
 from django.contrib.auth.models import User
 from .models import (
     ExpertSystemStudyGroup, ExpertSystemStudentProfile, ExpertsystemCompanyProfile,
@@ -49,7 +50,7 @@ class ExpertsystemCompanyProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = ExpertsystemCompanyProfile
         fields = ['id', 'user', 'company_name', 'description', 'website',
-                  'contact_person', 'contact_email', 'is_verified']
+                'contact_person', 'contact_email', 'is_verified']
 
 class ExpertSystemSkillSerializer(serializers.ModelSerializer):
     class Meta:
@@ -126,15 +127,66 @@ class ExpertSystemTestResultSerializer(serializers.ModelSerializer):
         fields = ['id', 'user', 'test', 'score', 'passed']
 
 class ExpertSystemVacancySerializer(serializers.ModelSerializer):
-    employer = serializers.PrimaryKeyRelatedField(
+    required_skills = serializers.PrimaryKeyRelatedField(
+        many=True,
+        write_only=True,
+        queryset=ExpertSystemSkill.objects.all()
+    )
+    required_skills_info = ExpertSystemSkillSerializer(
+        many=True,
         read_only=True,
-        default=serializers.CurrentUserDefault()
+        source='required_skills'
+    )
+    employer_name = serializers.CharField(
+        source='employer.company_name',
+        read_only=True
     )
 
     class Meta:
         model = ExpertSystemVacancy
-        fields = ['id', 'employer', 'title', 'description', 'required_skills']
+        fields = [
+            'id',
+            'employer',
+            'title',
+            'employer_name',
+            'description',
+            'required_skills',
+            'required_skills_info'
+        ]
         read_only_fields = ['employer']
+
+    def create(self, validated_data):
+        skills = validated_data.pop('required_skills', [])
+        with transaction.atomic():
+            vacancy = ExpertSystemVacancy.objects.create(**validated_data)
+            for skill in skills:
+                ExpertSystemVacancySkill.objects.create(
+                    vacancy=vacancy,
+                    skill=skill,
+                    is_mandatory=True
+                )
+        return vacancy
+
+    def update(self, instance, validated_data):
+        skills = validated_data.pop('required_skills', None)
+
+        # обновляем все прочие поля
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        if skills is not None:
+            with transaction.atomic():
+                # удаляем старые связи
+                ExpertSystemVacancySkill.objects.filter(vacancy=instance).delete()
+                # создаем новые
+                for skill in skills:
+                    ExpertSystemVacancySkill.objects.create(
+                        vacancy=instance,
+                        skill=skill,
+                        is_mandatory=True
+                    )
+        return instance
 
 class ExpertSystemVacancySkillSerializer(serializers.ModelSerializer):
     vacancy = serializers.PrimaryKeyRelatedField(queryset=ExpertSystemVacancy.objects.all())
