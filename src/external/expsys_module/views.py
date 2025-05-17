@@ -184,7 +184,7 @@ class SubjectCreateView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-class SubjectCompetenciesView(APIView):
+class SubjectIndicatorsCompetenciesView(APIView):
     @swagger_auto_schema(
         operation_description="Получение всех компетенций выбранного предмета",
         manual_parameters=[

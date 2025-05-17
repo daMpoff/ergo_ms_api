@@ -268,34 +268,50 @@ class TaskCreateView(APIView):
 # views.py
 from rest_framework.permissions import IsAuthenticated
 
-class TaskDeleteView(APIView):
-    permission_classes = [IsAuthenticated]
+from drf_yasg.utils import swagger_auto_schema
+from django.shortcuts import get_object_or_404
+from django.db import transaction
 
-    def delete(self, request, id):
+
+class DeleteTaskView(APIView):
+    @transaction.atomic
+    def delete(self, request, task_id):
         try:
-            task = Task.objects.get(id=id)
+            # Получаем задачу или возвращаем 404
+            task = get_object_or_404(Task, id=task_id)
             
-            # Проверка владельца задачи
-            if task.user_id != request.user.id:
+            # Проверяем права доступа
+            if task.user != request.user:
                 return Response(
-                    {"error": "У вас нет прав для удаления этой задачи"},
+                    {"error": "Forbidden", "message": "У вас нет прав на удаление этой задачи"},
                     status=status.HTTP_403_FORBIDDEN
                 )
             
-            task.delete()
+            # Получаем ID всех подзадач (рекурсивно)
+            def get_subtask_ids(parent_id):
+                subtasks = Task.objects.filter(parenttask_id=parent_id).values_list('id', flat=True)
+                ids = list(subtasks)
+                for subtask_id in subtasks:
+                    ids.extend(get_subtask_ids(subtask_id))
+                return ids
+            
+            # Собираем все ID для удаления
+            task_ids = [task.id] + get_subtask_ids(task.id)
+            
+            # Удаляем задачи (каскадное удаление настроено в моделях)
+            Task.objects.filter(id__in=task_ids).delete()
             
             return Response(
-                {"success": True, "message": "Задача успешно удалена"},
+                {"success": True, "message": "Задача и подзадачи успешно удалены"},
                 status=status.HTTP_200_OK
             )
             
-        except Task.DoesNotExist:
-            return Response(
-                {"error": "Задача не найдена"},
-                status=status.HTTP_404_NOT_FOUND
-            )
         except Exception as e:
             return Response(
-                {"error": str(e)},
+                {
+                    "success": False,
+                    "error": str(e),
+                    "message": "Внутренняя ошибка сервера при удалении задачи"
+                },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
