@@ -2,6 +2,11 @@ from rest_framework import viewsets
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
+from rest_framework import status
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
+from src.core.utils.base.base_views import BaseAPIView
+from rest_framework.request import Request
 from .models import (
     ExpertSystemStudyGroup, ExpertSystemStudentProfile, ExpertsystemCompanyProfile,
     ExpertSystemSkill, ExpertSystemUserSkill, ExpertSystemRole,
@@ -21,14 +26,6 @@ from .serializers import (
     ExpertSystemVacancySkillSerializer, ExpertSystemCandidateApplicationSerializer,
     ExpertSystemOrientationTestResultSerializer, ExpertSystemOrientationUserAnswerSerializer
 )
-
-from rest_framework.response import Response
-from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
-from drf_yasg.utils import swagger_auto_schema
-from drf_yasg import openapi
-from src.core.utils.base.base_views import BaseAPIView
-from rest_framework.request import Request
 class ExpertSystemStudyGroupViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = ExpertSystemStudyGroup.objects.all()
