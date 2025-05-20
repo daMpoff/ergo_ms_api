@@ -9,7 +9,8 @@ from .views import (
     ExpertSystemVacancySkillViewSet, ExpertSystemCandidateApplicationViewSet,
     ExpertSystemOrientationTestResultViewSet, ExpertSystemOrientationUserAnswerViewSet,
     SetUserSkills, GetUserSkills, GetUserSkills, CreateTest, GetAllTests, DeleteTest,
-    GetTest
+    GetTestForRedact, ChangeTest, GetSkillsForCreateTest, GetSkillsForRedactTest,GetTestidBySkill, GetTest,
+    TestEvaluation
 )
 
 router = DefaultRouter()
@@ -42,4 +43,10 @@ urlpatterns = [
     path('get-all-tests', GetAllTests.as_view(), name='Get all tests'),
     path('delete-test/<int:id>/', DeleteTest.as_view(), name='Delete test'),
     path('get-test', GetTest.as_view(), name='Get test'),
+    path('patch-test/<int:id>/', ChangeTest.as_view(), name='Change test'),
+    path('get-skills-for-create-test', GetSkillsForCreateTest.as_view(), name='Get skills for create test'),
+    path('get-skills-for-redact-test/<int:id>/', GetSkillsForRedactTest.as_view(), name='Get skills for redact test'),
+    path('get-test-id-by-skill', GetTestidBySkill.as_view(), name='Get test id by skill'),
+    path('get-test-for-redact', GetTestForRedact.as_view(), name='Get test'),
+    path('evaluate-test', TestEvaluation.as_view(), name='Evaluate test')
 ]
