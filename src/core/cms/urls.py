@@ -12,18 +12,22 @@ urlpatterns = [
     path('check_access_to_page/', CheckAccesstoPage.as_view(), name='check access to page'),
     path('check_access_to_admin_panel/', CheckAccessToAdminPanel.as_view(), name='check access to admin panel'),
     path('check_access_to_component/', CheckAccessToComponent.as_view(), name='check access to component'),
+
     path('post_group_category/', AddGroupCategory.as_view(), name='add group category'),
     path('change_group_category/', ChangeGroupCategory.as_view(), name='change group category'),
-    path('delete_group_category/', DeleteGroupCategory.as_view(), name='delete group category'),
+    path('delete_group_category/<str:category_name>/', DeleteGroupCategory.as_view(), name='delete group category'),
     path('get_group_categories/', GetGroupCategories.as_view(), name="get group categories"),
+
     path('add_group/', AddGroup.as_view(), name='add group'),
     path('change_group/', ChangeGroup.as_view(), name='change group'),
-    path('delete_group/', DeleteGroup.as_view(), name='delete group'),
+    path('delete_group/<int:id>/', DeleteGroup.as_view(), name='delete group'),
     path('get_groups/', GetGroups.as_view(), name='get groups'),
+
     path('get_permissions/', GetPermissions.as_view(), name='get permissions'),
     path('add_permission/', AddPermission.as_view(), name='add permission'), 
-    path('delete_permission/', DeletePermission.as_view(), name='delete permission'),
+    path('delete_permission/<int:id>/', DeletePermission.as_view(), name='delete permission'),
     path('change_permission/', ChangePermission.as_view(), name='change permission'),
+    
     path('get_user_groups_and_permissions/', GetUserGroupsAndPermissions.as_view(), name='get user groups and permissions'),
     path('get_user_groups/', GetUserGroups.as_view(), name='get user groups'),
     path('get_user_permissions/', GetUserPermissions.as_view(), name='get user permissions'),

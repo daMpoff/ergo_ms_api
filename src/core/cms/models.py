@@ -23,7 +23,6 @@ class ExpandedPermission(models.Model):
     group_category = models.ForeignKey(GroupCategory, on_delete=models.CASCADE)
 
 class Accession(models.Model):
-    typeaccession = models.CharField(max_length=100, default='PageAccession')
     path = models.CharField(max_length=255, default='')
     component_id = models.CharField(max_length=255, default='')
     permission = models.OneToOneField(ExpandedPermission, on_delete=models.CASCADE, default=0)

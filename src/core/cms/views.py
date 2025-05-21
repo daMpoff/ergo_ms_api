@@ -44,7 +44,7 @@ class AddGroupCategory(BaseAPIView):
                     )
             catg = GroupCategory.objects.create(name = request.data['category_name'])
             ct = ContentType.objects.get_or_create(app_label='cms', model='none')
-            pm = PermissionMark.objects.get(id = 9)
+            pm = PermissionMark.objects.get(id = 4)
             p = Permission.objects.create(codename ='Admin of Category '+ request.data['category_name'], name = request.data['category_name'] + ' redact', content_type = ct[0])
             exp =ExpandedPermission.objects.create(permission = p, group_category = catg, permission_mark = pm)
             Accession.objects.create(typeaccession = 'AdminPanelAccession', path = 'admin', component_id = 'admin_panel', permission = exp)
@@ -111,7 +111,19 @@ class ChangeGroupCategory(BaseAPIView):
     def put(self, request: Request):
         if(request.user.is_superuser):
             catg = GroupCategory.objects.get(name = request.data['category_name'])
+            pm = PermissionMark.objects.get(id = 4)
+            exp =ExpandedPermission.objects.get(group_category = catg, permission_mark = pm)
+            p = exp.permission
+            p.codename ='Admin of Category '+ request.data['new_category_name']
+            p.name = request.data['new_category_name'] + ' redact'
+            for egroup in ExpandedGroup.objects.filter(category= catg):
+                group = egroup.group
+                if(group.name == request.data['category_name'] + ' admin'):
+                    group.name = request.data['new_category_name'] + ' admin'
+                    group.save()
+                    break
             catg.name = request.data['new_category_name']
+            p.save()
             catg.save()
             return Response(
                 status=status.HTTP_200_OK
@@ -129,19 +141,10 @@ class DeleteGroupCategory(BaseAPIView):
             401: "Пользователь не авторизован",
             403: "Нет доступа"
         },
-         request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                'category_name': openapi.Schema(
-                    type=openapi.TYPE_STRING, 
-                    description='Имя категории'
-                )
-            }
-        )
     )
-    def delete(self, request: Request):
+    def delete(self, request: Request, category_name):
         if(request.user.is_superuser):
-            catg = GroupCategory.objects.get(name = request.data['category_name'])
+            catg = GroupCategory.objects.get(name = category_name)
             eg = ExpandedGroup.objects.filter(category = catg)
             for e in eg:
                 g = e.group
@@ -190,7 +193,7 @@ class AddGroup(BaseAPIView):
         access = False
         exps = GetUserExpandedPermissions(request.user)
         for exp in exps:
-            if exp.permission_mark.id == 9 & exp.group_category.name == request.data['category_name']:
+            if exp.permission_mark.id == 4 & exp.group_category.name == request.data['category_name']:
                 access = True
                 break
         if(request.user.is_superuser | access):
@@ -242,7 +245,7 @@ class ChangeGroup(BaseAPIView):
         groups = request.user.groups.all()
         exps = GetUserExpandedPermissions(request.user)
         for exp in exps:
-            if exp.permission_mark.id == 9 & exp.group_category.name == eg.category.name:
+            if exp.permission_mark.id == 4 & exp.group_category.name == eg.category.name:
                 access = True
                 break
         if(request.user.is_superuser | access):
@@ -272,31 +275,19 @@ class DeleteGroup(BaseAPIView):
             200: "Группа удалена",
             401: "Не удалось удалить группу"
         },
-         request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                'group_name': openapi.Schema(
-                    type=openapi.TYPE_STRING, 
-                    description='Имя группы'
-                ),
-            }
-        )
     )
-    def delete(self, request: Request):
-        g = Group.objects.get(name = request.data['group_name'])
+    def delete(self, request: Request, id):
+        g = Group.objects.get(id=id)
         eg = ExpandedGroup.objects.get(group = g)
         access = False
         exps = GetUserExpandedPermissions(request.user)
         for exp in exps:
-            if exp.permission_mark.id == 9 & exp.group_category.name == eg.category.name:
+            if exp.permission_mark.id == 4 & exp.group_category.name == eg.category.name:
                 access = True
                 break
         if(request.user.is_superuser | access):
-            nameg = request.data['group_name']
-            group = Group.objects.get(name = nameg )
-            eg = ExpandedGroup.objects.get(group = group.id)
             eg.delete()
-            group.delete()
+            g.delete()
             return Response(
                 status=status.HTTP_200_OK
             )
@@ -339,7 +330,7 @@ class GetGroups(BaseAPIView):
         access = False
         exps = GetUserExpandedPermissions(request.user)
         for exp in exps:
-            if exp.permission_mark.id == 9:
+            if exp.permission_mark.id == 4:
                 access = True
                 break
         if(request.user.is_superuser | access):
@@ -357,7 +348,7 @@ class GetGroups(BaseAPIView):
             else:
                 cat_list=[]
                 for exp in exps:
-                    if exp.permission_mark.id == 9:
+                    if exp.permission_mark.id == 4:
                         cat_list.append(exp.group_category.name)
                 for cat in cat_list:                
                     for group in groups:
@@ -378,6 +369,7 @@ class GetGroups(BaseAPIView):
             return Response(
                 status=status.HTTP_403_FORBIDDEN
             )
+        
 class AddGroupPermissions(BaseAPIView):
     permission_classes = [IsAuthenticated]
     @swagger_auto_schema(
@@ -391,6 +383,7 @@ class AddGroupPermissions(BaseAPIView):
             type=openapi.TYPE_OBJECT,
             properties={
                 'group_name': openapi.Schema(type=openapi.TYPE_STRING, description='Имя группы'),
+                
                 'permissions_name': openapi.Schema(type=openapi.TYPE_ARRAY,items=openapi.Items(type=openapi.TYPE_STRING), description='Имя права')
             }
         )
@@ -401,19 +394,20 @@ class AddGroupPermissions(BaseAPIView):
         exp_group = ExpandedGroup.objects.get(group=group)
         exps = GetUserExpandedPermissions(request.user)
         for exp in exps:
-            if exp.permission_mark.id == 9 and exp.group_category==exp_group.group_category:
+            if exp.permission_mark.id == 4 and exp.group_category==exp_group.category:
                 access = True
                 break
         if(access or request.user.is_superuser):
             for permission_name in request.data['permissions_name']:
                 permission = Permission.objects.get(name = permission_name)
                 exp_permission = ExpandedPermission.objects.get(permission=permission)
-                if(exp_permission.group_category == exp_group.group_category):
+                if(exp_permission.group_category == exp_group.category):
                     group.permissions.add(permission)
                 else:
                     return Response(status=status.HTTP_400_BAD_REQUEST)
             group.save()
             return Response(status=status.HTTP_200_OK) 
+        
 class RemoveGroupPermissions(BaseAPIView):
     permission_classes = [IsAuthenticated]
     @swagger_auto_schema(
@@ -431,25 +425,25 @@ class RemoveGroupPermissions(BaseAPIView):
             }
         )
     )
-    def delete(self, request: Request):
+    def post(self, request: Request):
+        
         access = False
         group = Group.objects.get(name = request.data['group_name'])
         exp_group = ExpandedGroup.objects.get(group=group)
         exps = GetUserExpandedPermissions(request.user)
         for exp in exps:
-            if exp.permission_mark.id == 9 and exp.group_category==exp_group.group_category:
+            if exp.permission_mark.id == 4 and exp.group_category==exp_group.category:
                 access = True
                 break
         if(access or request.user.is_superuser):
             for permission_name in request.data['permissions_name']:
                 permission = Permission.objects.get(name = permission_name)
                 exp_permission = ExpandedPermission.objects.get(permission=permission)
-                if(exp_permission.group_category == exp_group.group_category):
-                    group.permissions.remove(permission)
-                else:
-                    return Response(status=status.HTTP_400_BAD_REQUEST)
+                group.permissions.remove(permission)
             group.save()
             return Response(status=status.HTTP_200_OK)
+        
+
 #Управление правами
 class GetPermissions(BaseAPIView):
     permission_classes = [IsAuthenticated]
@@ -465,7 +459,7 @@ class GetPermissions(BaseAPIView):
         access = False
         exps = GetUserExpandedPermissions(request.user)
         for exp in exps:
-            if exp.permission_mark.id == 9:
+            if exp.permission_mark.id == 4:
                 access = True
                 break
         if(request.user.is_superuser | access):
@@ -476,23 +470,23 @@ class GetPermissions(BaseAPIView):
                     permission = expperm.permission
                     accession = Accession.objects.get(permission = expperm)
                     permissions_list.append({'id':permission.id, 'name':permission.name,
-                    'permission_mark':expperm.permission_mark.id, 'category_name':expperm.group_category.name, 'accession_type':accession.typeaccession,
+                    'category_name':expperm.group_category.name, 'accession_type':expperm.permission_mark.name,
                     'path':accession.path, 'component_id':accession.component_id})
                 result = {"permissions":permissions_list}
             else:
                 cat_list=[]
                 for exp in exps:
-                    if exp.permission_mark.id == 9:
+                    if exp.permission_mark.id == 4:
                         cat_list.append(exp.group_category.name)
                 for cat in cat_list:                
                     for expperm in ExpandedPermissions:
                         if expperm.category.name == cat:
                             permission = expperm.permission
                             accession = Accession.objects.get(permission = expperm)
-                            permissions_list.append({'id':permission.id, 'name':permission.name, 'code_name':permission.codename,
-                            'permission_mark':expperm.permission_mark.id, 'category_name':expperm.group_category.name, 'accession_type':accession.typeaccession,
+                            permissions_list.append({'id':permission.id, 'name':permission.name,
+                            'category_name':expperm.group_category.name, 'accession_type':expperm.permission_mark.name,
                             'path':accession.path, 'component_id':accession.component_id})
-                            result = {"permissions":permissions_list}
+                result = {"permissions":permissions_list}
             return Response(result, status=status.HTTP_200_OK)
         else:
             return Response(
@@ -513,11 +507,6 @@ class AddPermission(BaseAPIView):
                 'permission_name': openapi.Schema(
                     type=openapi.TYPE_STRING, 
                     description='Имя права'
-                ),
-                
-                'permission_mark': openapi.Schema(
-                    type=openapi.TYPE_INTEGER,
-                    description='Маркер права'
                 ),
                 'category_name': openapi.Schema(
                     type=openapi.TYPE_STRING,
@@ -541,7 +530,8 @@ class AddPermission(BaseAPIView):
      def post(self, request: Request):
         access = False
         perms =[]
-        if(request.data['permission_mark'] < 9):
+        pm = PermissionMark.objects.get(name = request.data['accession_type'])
+        if(pm.id < 4):
             exps = GetUserExpandedPermissions(request.user)
             for exp in exps:
                 if exp.group_category.name == request.data['category_name']:
@@ -550,11 +540,10 @@ class AddPermission(BaseAPIView):
             if(access or request.user.is_superuser):
                 content_type = ContentType.objects.get_or_create(app_label='cms', model='none')
                 categoryy = GroupCategory.objects.get(name = request.data['category_name'])
-                pm = PermissionMark.objects.get(id = request.data['permission_mark'])
                 permission = Permission.objects.create(name=request.data['permission_name'], content_type_id =content_type[0].id, codename =request.data['permission_name'])
                 exp =ExpandedPermission.objects.create(permission = permission,
                 permission_mark = pm, group_category = categoryy)
-                Accession.objects.create(permission = exp, typeaccession = request.data['accession_type'], path = request.data['path'], component_id = request.data['component_id'])
+                Accession.objects.create(permission = exp, path = request.data['path'], component_id = request.data['component_id'])
                 return Response(status=status.HTTP_200_OK)
             else:
                 return Response(
@@ -576,25 +565,24 @@ class DeletePermission(BaseAPIView):
          request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
-                'permission_name': openapi.Schema(
-                    type=openapi.TYPE_STRING, 
-                    description='Имя права'
+                'permission_id': openapi.Schema(
+                    type=openapi.TYPE_INTEGER, 
+                    description='Идентификатор права'
                 ),
             }
         )
     )
-    def delete(self, request: Request):
-        namep = request.data['permission_name']
-        permission = Permission.objects.get(name = namep )
+    def delete(self, request: Request, id):
+        permission = Permission.objects.get(id = id )
         expanded_permission = ExpandedPermission.objects.get(permission_id = permission.id)
         access = False
         exps = GetUserExpandedPermissions(request.user)
         for exp in exps:
-            if exp.permission_mark.id == 9 and exp.group_category == expanded_permission.group_category :
+            if exp.permission_mark.id == 4 and exp.group_category == expanded_permission.group_category :
                 access = True
                 break
         if(access or request.user.is_superuser):
-            if (expanded_permission.permission_mark.id < 9):
+            if (expanded_permission.permission_mark.id < 4):
                 accs = Accession.objects.get(permission = expanded_permission)
                 accs.delete()
                 expanded_permission.delete()
@@ -622,17 +610,13 @@ class ChangePermission(BaseAPIView):
          request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
-                'permission_name': openapi.Schema(
-                    type=openapi.TYPE_STRING, 
-                    description='Имя права'
+                'permission_id': openapi.Schema(
+                    type=openapi.TYPE_INTEGER, 
+                    description='Идентификатор права'
                 ),
                 'new_permission_name': openapi.Schema(
                     type=openapi.TYPE_STRING, 
                     description='Новое имя права'
-                ),
-                'new_permission_mark': openapi.Schema(
-                    type=openapi.TYPE_INTEGER, 
-                    description='Новый маркер права'
                 ),
                 'new_category_name': openapi.Schema(
                     type=openapi.TYPE_STRING, 
@@ -656,32 +640,27 @@ class ChangePermission(BaseAPIView):
         access = False
         exps = GetUserExpandedPermissions(request.user)
         for exp in exps:
-            if exp.permission_mark.id == 9 and exp.group_category.name == request.data['new_category_name'] :
+            if exp.permission_mark.id == 4 and exp.group_category.name == request.data['new_category_name'] :
                 access = True
                 break
         if(request.user.is_superuser | access):
-            hascategory = False
-            for category in GroupCategory.objects.all():
-                if(category.name == request.data['new_category_name']):
-                    hascategory = True
-            if((int(request.data['new_permission_mark']) < 9) & hascategory):
-                permission = Permission.objects.get(name = request.data['permission_name'])
+            pm = PermissionMark.objects.get(name = request.data['accession_type'])
+            if((pm.id < 4)):
+                permission = Permission.objects.get(id = request.data['permission_id'])
                 expanded_permission = ExpandedPermission.objects.get(permission = permission)
                 category = GroupCategory.objects.get(name = request.data['new_category_name'])
                 accs = Accession.objects.get(permission = expanded_permission)
                 if(permission.name != request.data['new_permission_name']):
                     permission.name = request.data['new_permission_name']
                     permission.codename = request.data['new_permission_name']
-                if(expanded_permission.permission_mark.id != request.data['new_permission_mark']):
-                    expanded_permission.permission_mark = PermissionMark.objects.get(id = request.data['new_permission_mark'])
+                if(expanded_permission.permission_mark.id != pm.id):
+                    expanded_permission.permission_mark = pm
                 if(expanded_permission.group_category.name != request.data['new_category_name']):
                     expanded_permission.group_category = category
                 if(accs.path != request.data['path']):
                     accs.path = request.data['path']
                 if(accs.component_id != request.data['component_id']):
                     accs.component_id = request.data['component_id']
-                if(accs.typeaccession != request.data['accession_type']):
-                    accs.typeaccession = request.data['accession_type']
                 permission.save()
                 expanded_permission.save()
                 accs.save()
@@ -718,7 +697,7 @@ class RemoveUserPermission(BaseAPIView):
         access = False
         exps = GetUserExpandedPermissions(request.user)
         for exp in exps:
-            if exp.permission_mark.id == 9:
+            if exp.permission_mark.id == 4:
                 access = True
                 break
         if(access or request.user.is_superuser):
@@ -730,7 +709,7 @@ class RemoveUserPermission(BaseAPIView):
             else:
                 catlist =[]
                 for exp in exps:
-                    if(exp.permission_mark.id==9):
+                    if(exp.permission_mark.id==4):
                         catlist.append(exp.group_category)
                 for permission_name in request.data['permissions_name']:
                     permission = Permission.objects.get(name = permission_name)
@@ -766,7 +745,7 @@ class GetPermissionsByCategory(BaseAPIView):
         category = GroupCategory.objects.get(name = category_name)
         exps = GetUserExpandedPermissions(request.user)
         for exp in exps:
-            if exp.permission_mark.id == 9 and exp.group_category==category:
+            if exp.permission_mark.id == 4 and exp.group_category==category:
                 access = True
                 break
         if(access or request.user.is_superuser):
@@ -889,14 +868,14 @@ class CheckAccessToAdminPanel(BaseAPIView):
                 permissions = group.permissions.all()
                 for permission in permissions:
                     expanded_permission = ExpandedPermission.objects.get(permission = permission)
-                    if(expanded_permission.permission_mark.id == 9):
+                    if(expanded_permission.permission_mark.id == 4):
                         result['access'] = True
                         break
             if(result['access'] == False):
                 permissions = user.user_permissions.all()
                 for permission in permissions:
                     expanded_permission = ExpandedPermission.objects.get(permission = permission)
-                    if(expanded_permission.permission_mark.id == 9):
+                    if(expanded_permission.permission_mark.id == 4):
                         result['access'] = True
                         break
         return Response(
@@ -919,7 +898,7 @@ class GetUserGroupsAndPermissions(BaseAPIView):
         ugplist = []
         exps = GetUserExpandedPermissions(request.user)
         for exp in exps:
-            if exp.permission_mark.id == 9:
+            if exp.permission_mark.id == 4:
                 access = True
         if(access or request.user.is_superuser):
             if(request.user.is_superuser):
@@ -941,7 +920,7 @@ class GetUserGroupsAndPermissions(BaseAPIView):
             else:
                 catlist =[]
                 for exp in exps:
-                    if(exp.permission_mark.id==9):
+                    if(exp.permission_mark.id==4):
                         catlist.append(exp.group_category)
                 users = User.objects.all()
                 for user in users:
@@ -993,7 +972,7 @@ class AddUserGroup(BaseAPIView):
         access = False
         exps = GetUserExpandedPermissions(request.user)
         for exp in exps:
-            if exp.permission_mark.id == 9:
+            if exp.permission_mark.id == 4:
                 access = True
                 break
         if(access or request.user.is_superuser):
@@ -1006,7 +985,7 @@ class AddUserGroup(BaseAPIView):
             else:
                 catlist =[]
                 for exp in exps:
-                    if(exp.permission_mark.id==9):
+                    if(exp.permission_mark.id==4):
                         catlist.append(exp.group_category)
                 user = User.objects.get(username = request.data['username'])
                 for group_name in request.data['groups_name']:
@@ -1043,7 +1022,7 @@ class RemoveUserGroup(BaseAPIView):
         access = False
         exps = GetUserExpandedPermissions(request.user)
         for exp in exps:
-            if exp.permission_mark.id == 9:
+            if exp.permission_mark.id == 4:
                 access = True
                 break
         if(access or request.user.is_superuser):
@@ -1056,7 +1035,7 @@ class RemoveUserGroup(BaseAPIView):
             else :
                 catlist =[]
                 for exp in exps:
-                    if(exp.permission_mark.id==9):
+                    if(exp.permission_mark.id==4):
                         catlist.append(exp.group_category)
                 user = User.objects.get(username = request.data['username'])
                 for group_name in request.data['groups_name']:
@@ -1093,7 +1072,7 @@ class AddUserPermission(BaseAPIView):
         access = False
         exps = GetUserExpandedPermissions(request.user)
         for exp in exps:
-            if exp.permission_mark.id == 9:
+            if exp.permission_mark.id == 4:
                 access = True
                 break
         if(access or request.user.is_superuser):
@@ -1106,7 +1085,7 @@ class AddUserPermission(BaseAPIView):
             else:
                 catlist =[]
                 for exp in exps:
-                    if(exp.permission_mark.id==9):
+                    if(exp.permission_mark.id==4):
                         catlist.append(exp.group_category)
                 for permission_name in request.data['permissions_name']:
                     permission = Permission.objects.get(name = permission_name)
