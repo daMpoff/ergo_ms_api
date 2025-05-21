@@ -2,6 +2,14 @@ from rest_framework import viewsets
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
+from rest_framework import status
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
+from src.core.utils.base.base_views import BaseAPIView
+from rest_framework.request import Request
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.filters import SearchFilter
+
 from .models import (
     ExpertSystemStudyGroup, ExpertSystemStudentProfile, ExpertsystemCompanyProfile,
     ExpertSystemSkill, ExpertSystemUserSkill, ExpertSystemRole,
@@ -21,16 +29,10 @@ from .serializers import (
     ExpertSystemVacancySkillSerializer, ExpertSystemCandidateApplicationSerializer,
     ExpertSystemOrientationTestResultSerializer, ExpertSystemOrientationUserAnswerSerializer
 )
-import json
-from django.http import JsonResponse
-from rest_framework.response import Response
-from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
-from drf_yasg.utils import swagger_auto_schema
-from drf_yasg import openapi
-from src.core.utils.base.base_views import BaseAPIView
-from rest_framework.request import Request
 class ExpertSystemStudyGroupViewSet(viewsets.ModelViewSet):
+    """
+    CRUD для групп студентов
+    """
     permission_classes = [IsAuthenticated]
     queryset = ExpertSystemStudyGroup.objects.all()
     serializer_class = ExpertSystemStudyGroupSerializer
@@ -38,6 +40,9 @@ class ExpertSystemStudyGroupViewSet(viewsets.ModelViewSet):
 
 
 class ExpertSystemStudentProfileViewSet(viewsets.ModelViewSet):
+    """
+    CRUD для профилей студентов
+    """
     permission_classes = [IsAuthenticated]
     queryset = ExpertSystemStudentProfile.objects.select_related('user', 'study_group').all()
     serializer_class = ExpertSystemStudentProfileSerializer
@@ -56,91 +61,138 @@ class ExpertSystemStudentProfileViewSet(viewsets.ModelViewSet):
     
 class ExpertsystemCompanyProfileViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
-    queryset = ExpertsystemCompanyProfile.objects.select_related('user').all()
+    queryset = ExpertsystemCompanyProfile.objects.select_related('user').prefetch_related(
+        'vacancies'
+    ).all()
     serializer_class = ExpertsystemCompanyProfileSerializer
-    
+
     @action(detail=False, methods=['get'], url_path='me')
     def me(self, request):
-        """
-        Возвращает профиль текущего аутентифицированного работодателя.
-        """
         try:
-            profile = ExpertsystemCompanyProfile.objects.get(user=request.user)
+            profile = ExpertsystemCompanyProfile.objects.prefetch_related(
+                'vacancies'
+            ).get(user=request.user)
         except ExpertsystemCompanyProfile.DoesNotExist:
             return Response({'detail': 'Профиль не найден.'}, status=404)
         serializer = self.get_serializer(profile)
         return Response(serializer.data)
 
 class ExpertSystemSkillViewSet(viewsets.ModelViewSet):
+    """
+    CRUD для справочника навыков
+    """
     permission_classes = [IsAuthenticated]
     queryset = ExpertSystemSkill.objects.all()
     serializer_class = ExpertSystemSkillSerializer
 
 class ExpertSystemUserSkillViewSet(viewsets.ModelViewSet):
+    """
+    CRUD для связи Студент-Навык-Статус
+    """
     permission_classes = [IsAuthenticated]
     queryset = ExpertSystemUserSkill.objects.select_related('user', 'skill').all()
     serializer_class = ExpertSystemUserSkillSerializer
 
 class ExpertSystemRoleViewSet(viewsets.ModelViewSet):
+    """
+    CRUD для справочника профессий и направлений
+    """
     permission_classes = [IsAuthenticated]
     queryset = ExpertSystemRole.objects.all()
     serializer_class = ExpertSystemRoleSerializer
 
 class ExpertSystemTrajectoryStepViewSet(viewsets.ModelViewSet):
+    """
+    CRUD для шага обучени
+    """
     permission_classes = [IsAuthenticated]
     queryset = ExpertSystemTrajectoryStep.objects.select_related('role').all()
     serializer_class = ExpertSystemTrajectoryStepSerializer
 
 class ExpertSystemOrientationTestViewSet(viewsets.ModelViewSet):
+    """
+    CRUD для профориентационного теста
+    """
     permission_classes = [IsAuthenticated]
     queryset = ExpertSystemOrientationTest.objects.all()
     serializer_class = ExpertSystemOrientationTestSerializer
 
 class ExpertSystemOrientationQuestionViewSet(viewsets.ModelViewSet):
+    """
+    CRUD для вопросов профориентационного теста
+    """
     permission_classes = [IsAuthenticated]
     queryset = ExpertSystemOrientationQuestion.objects.select_related('test').all()
     serializer_class = ExpertSystemOrientationQuestionSerializer
 
 class ExpertSystemOrientationAnswerViewSet(viewsets.ModelViewSet):
+    """
+    CRUD для ответов профориентационного теста
+    """
     permission_classes = [IsAuthenticated]
     queryset = ExpertSystemOrientationAnswer.objects.select_related('question', 'role').all()
     serializer_class = ExpertSystemOrientationAnswerSerializer
 
 class ExpertSystemTestViewSet(viewsets.ModelViewSet):
+    """
+    CRUD для тестов по навыкам
+    """
     permission_classes = [IsAuthenticated]
     queryset = ExpertSystemTest.objects.select_related('skill').all()
     serializer_class = ExpertSystemTestSerializer
 
 class ExpertSystemQuestionViewSet(viewsets.ModelViewSet):
+    """
+    CRUD для вопросов теста по навыкам
+    """
     permission_classes = [IsAuthenticated]
     queryset = ExpertSystemQuestion.objects.select_related('test').all()
     serializer_class = ExpertSystemQuestionSerializer
 
 class ExpertSystemAnswerViewSet(viewsets.ModelViewSet):
+    """
+    CRUD вариантов ответов на вопросы теста навыков
+    """
     permission_classes = [IsAuthenticated]
     queryset = ExpertSystemAnswer.objects.select_related('question').all()
     serializer_class = ExpertSystemAnswerSerializer
 
 class ExpertSystemTestResultViewSet(viewsets.ModelViewSet):
+    """
+    CRUD результатов прохождения тестов навыков студентом
+    """
     permission_classes = [IsAuthenticated]
     queryset = ExpertSystemTestResult.objects.select_related('user', 'test').all()
     serializer_class = ExpertSystemTestResultSerializer
 
 class ExpertSystemVacancyViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
-    queryset = ExpertSystemVacancy.objects.select_related('employer').prefetch_related('required_skills').all()
+    queryset = ExpertSystemVacancy.objects.select_related('employer')\
+                                        .prefetch_related('required_skills').all()
     serializer_class = ExpertSystemVacancySerializer
-    
+
+    filter_backends = [DjangoFilterBackend, SearchFilter]
+    # для фильтра по навыкам по их ID:
+    filterset_fields = ['required_skills']
+    # для поиска по заголовку, описанию или имени навыка
+    search_fields = ['title', 'description', 'required_skills__name']
+
     def perform_create(self, serializer):
         company_profile = self.request.user.company_profile
         serializer.save(employer=company_profile)
 
 class ExpertSystemVacancySkillViewSet(viewsets.ModelViewSet):
+    """
+    CRUD для работы со связью Вакансия-Навык
+    """
     permission_classes = [IsAuthenticated]
     queryset = ExpertSystemVacancySkill.objects.select_related('vacancy', 'skill').all()
     serializer_class = ExpertSystemVacancySkillSerializer
 
 class ExpertSystemCandidateApplicationViewSet(viewsets.ModelViewSet):
+    """
+    CRUD для работы со связью Вакансия-Навык
+    """
     permission_classes = [IsAuthenticated]
     queryset = ExpertSystemCandidateApplication.objects.select_related('vacancy', 'candidate').all()
     serializer_class = ExpertSystemCandidateApplicationSerializer
@@ -190,7 +242,7 @@ class GetUserSkills(BaseAPIView):
     @swagger_auto_schema(
         operation_description="Получение навыков пользователя",
         responses={
-            200: "навыки получены",
+            200: "Навыки получены",
             401: "Пользователь не авторизован",
         },
     )
@@ -200,7 +252,7 @@ class GetUserSkills(BaseAPIView):
         expuserskills = ExpertSystemUserSkill.objects.filter(user=userprofile)
         result =[] 
         for expuserskill in expuserskills:     
-            result.append({'id':expuserskill.id,'name': expuserskill.skill.name, 'status':expuserskill.status})            
+            result.append({'id':expuserskill.id,'skill_id':expuserskill.skill.id, 'name': expuserskill.skill.name, 'status':expuserskill.status})            
         return Response(
             result,
             status=status.HTTP_200_OK
