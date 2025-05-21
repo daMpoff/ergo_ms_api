@@ -11,52 +11,6 @@ from .models import (
     ExpertSystemOrientationUserAnswer
 )
 
-class ExpertSystemStudyGroupSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = ExpertSystemStudyGroup
-        fields = '__all__'
-
-class ExpertSystemStudentProfileSerializer(serializers.ModelSerializer):
-    user = serializers.HiddenField(default=serializers.CurrentUserDefault())
-
-    # write_only — ждёт в запросе числовой ID
-    study_group = serializers.PrimaryKeyRelatedField(
-        queryset=ExpertSystemStudyGroup.objects.all(),
-        allow_null=True,
-        write_only=True
-    )
-    # read_only — отдаёт в ответе только имя группы
-    group_name = serializers.CharField(
-        source='study_group.name',
-        read_only=True,
-        default=''
-    )
-    email = serializers.EmailField(required=False, allow_blank=True)
-    phone = serializers.CharField(required=False, allow_blank=True)
-
-    class Meta:
-        model = ExpertSystemStudentProfile
-        fields = [
-            'id', 'user',
-            'first_name', 'last_name',
-            'study_group', 'group_name',
-            'has_experience',
-            'email', 'phone'
-        ]
-
-class ExpertsystemCompanyProfileSerializer(serializers.ModelSerializer):
-    user = serializers.HiddenField(default=serializers.CurrentUserDefault())
-
-    class Meta:
-        model = ExpertsystemCompanyProfile
-        fields = ['id', 'user', 'company_name', 'description', 'website',
-                'contact_person', 'contact_email', 'is_verified']
-
-class ExpertSystemSkillSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = ExpertSystemSkill
-        fields = '__all__'
-
 class ExpertSystemUserSkillSerializer(serializers.ModelSerializer):
     user = serializers.PrimaryKeyRelatedField(queryset=ExpertSystemStudentProfile.objects.all())
     skill = serializers.PrimaryKeyRelatedField(queryset=ExpertSystemSkill.objects.all())
@@ -64,68 +18,17 @@ class ExpertSystemUserSkillSerializer(serializers.ModelSerializer):
     class Meta:
         model = ExpertSystemUserSkill
         fields = ['id', 'user', 'skill', 'status']
-
-class ExpertSystemRoleSerializer(serializers.ModelSerializer):
+        
+class ExpertSystemStudyGroupSerializer(serializers.ModelSerializer):
     class Meta:
-        model = ExpertSystemRole
+        model = ExpertSystemStudyGroup
         fields = '__all__'
 
-class ExpertSystemTrajectoryStepSerializer(serializers.ModelSerializer):
-    role = serializers.PrimaryKeyRelatedField(queryset=ExpertSystemRole.objects.all())
-
+class ExpertSystemSkillSerializer(serializers.ModelSerializer):
     class Meta:
-        model = ExpertSystemTrajectoryStep
-        fields = ['id', 'role', 'order', 'description']
-
-class ExpertSystemOrientationTestSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = ExpertSystemOrientationTest
+        model = ExpertSystemSkill
         fields = '__all__'
-
-class ExpertSystemOrientationQuestionSerializer(serializers.ModelSerializer):
-    test = serializers.PrimaryKeyRelatedField(queryset=ExpertSystemOrientationTest.objects.all())
-
-    class Meta:
-        model = ExpertSystemOrientationQuestion
-        fields = ['id', 'test', 'text']
-
-class ExpertSystemOrientationAnswerSerializer(serializers.ModelSerializer):
-    question = serializers.PrimaryKeyRelatedField(queryset=ExpertSystemOrientationQuestion.objects.all())
-    role = serializers.PrimaryKeyRelatedField(queryset=ExpertSystemRole.objects.all())
-
-    class Meta:
-        model = ExpertSystemOrientationAnswer
-        fields = ['id', 'question', 'text', 'weight', 'role']
-
-class ExpertSystemTestSerializer(serializers.ModelSerializer):
-    skill = serializers.PrimaryKeyRelatedField(queryset=ExpertSystemSkill.objects.all())
-
-    class Meta:
-        model = ExpertSystemTest
-        fields = ['id', 'skill', 'name']
-
-class ExpertSystemQuestionSerializer(serializers.ModelSerializer):
-    test = serializers.PrimaryKeyRelatedField(queryset=ExpertSystemTest.objects.all())
-
-    class Meta:
-        model = ExpertSystemQuestion
-        fields = ['id', 'test', 'text']
-
-class ExpertSystemAnswerSerializer(serializers.ModelSerializer):
-    question = serializers.PrimaryKeyRelatedField(queryset=ExpertSystemQuestion.objects.all())
-
-    class Meta:
-        model = ExpertSystemAnswer
-        fields = ['id', 'question', 'text', 'is_correct']
-
-class ExpertSystemTestResultSerializer(serializers.ModelSerializer):
-    user = serializers.PrimaryKeyRelatedField(queryset=ExpertSystemStudentProfile.objects.all())
-    test = serializers.PrimaryKeyRelatedField(queryset=ExpertSystemTest.objects.all())
-
-    class Meta:
-        model = ExpertSystemTestResult
-        fields = ['id', 'user', 'test', 'score', 'passed']
-
+        
 class ExpertSystemVacancySerializer(serializers.ModelSerializer):
     required_skills = serializers.PrimaryKeyRelatedField(
         many=True,
@@ -187,6 +90,107 @@ class ExpertSystemVacancySerializer(serializers.ModelSerializer):
                         is_mandatory=True
                     )
         return instance
+class ExpertSystemStudentProfileSerializer(serializers.ModelSerializer):
+    user = serializers.HiddenField(default=serializers.CurrentUserDefault())
+
+    # write_only — ждёт в запросе числовой ID
+    study_group = serializers.PrimaryKeyRelatedField(
+        queryset=ExpertSystemStudyGroup.objects.all(),
+        allow_null=True,
+        write_only=True
+    )
+    # read_only — отдаёт в ответе только имя группы
+    group_name = serializers.CharField(
+        source='study_group.name',
+        read_only=True,
+        default=''
+    )
+    email = serializers.EmailField(required=False, allow_blank=True)
+    phone = serializers.CharField(required=False, allow_blank=True)
+
+    class Meta:
+        model = ExpertSystemStudentProfile
+        fields = [
+            'id', 'user',
+            'first_name', 'last_name',
+            'study_group', 'group_name',
+            'has_experience',
+            'email', 'phone'
+        ]
+
+class ExpertsystemCompanyProfileSerializer(serializers.ModelSerializer):
+    user = serializers.HiddenField(default=serializers.CurrentUserDefault())
+    vacancies = ExpertSystemVacancySerializer(
+        many=True, 
+        read_only=True,
+    )
+    class Meta:
+        model = ExpertsystemCompanyProfile
+        fields = [
+            'id', 'user', 'company_name', 'description', 'website',
+            'contact_person', 'contact_email', 'is_verified', 'vacancies'
+        ]
+
+class ExpertSystemRoleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ExpertSystemRole
+        fields = '__all__'
+
+class ExpertSystemTrajectoryStepSerializer(serializers.ModelSerializer):
+    role = serializers.PrimaryKeyRelatedField(queryset=ExpertSystemRole.objects.all())
+
+    class Meta:
+        model = ExpertSystemTrajectoryStep
+        fields = ['id', 'role', 'order', 'description']
+
+class ExpertSystemOrientationTestSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ExpertSystemOrientationTest
+        fields = '__all__'
+
+class ExpertSystemOrientationQuestionSerializer(serializers.ModelSerializer):
+    test = serializers.PrimaryKeyRelatedField(queryset=ExpertSystemOrientationTest.objects.all())
+
+    class Meta:
+        model = ExpertSystemOrientationQuestion
+        fields = ['id', 'test', 'text']
+
+class ExpertSystemOrientationAnswerSerializer(serializers.ModelSerializer):
+    question = serializers.PrimaryKeyRelatedField(queryset=ExpertSystemOrientationQuestion.objects.all())
+    role = serializers.PrimaryKeyRelatedField(queryset=ExpertSystemRole.objects.all())
+
+    class Meta:
+        model = ExpertSystemOrientationAnswer
+        fields = ['id', 'question', 'text', 'weight', 'role']
+
+class ExpertSystemTestSerializer(serializers.ModelSerializer):
+    skill = serializers.PrimaryKeyRelatedField(queryset=ExpertSystemSkill.objects.all())
+
+    class Meta:
+        model = ExpertSystemTest
+        fields = ['id', 'skill', 'name']
+
+class ExpertSystemQuestionSerializer(serializers.ModelSerializer):
+    test = serializers.PrimaryKeyRelatedField(queryset=ExpertSystemTest.objects.all())
+
+    class Meta:
+        model = ExpertSystemQuestion
+        fields = ['id', 'test', 'text']
+
+class ExpertSystemAnswerSerializer(serializers.ModelSerializer):
+    question = serializers.PrimaryKeyRelatedField(queryset=ExpertSystemQuestion.objects.all())
+
+    class Meta:
+        model = ExpertSystemAnswer
+        fields = ['id', 'question', 'text', 'is_correct']
+
+class ExpertSystemTestResultSerializer(serializers.ModelSerializer):
+    user = serializers.PrimaryKeyRelatedField(queryset=ExpertSystemStudentProfile.objects.all())
+    test = serializers.PrimaryKeyRelatedField(queryset=ExpertSystemTest.objects.all())
+
+    class Meta:
+        model = ExpertSystemTestResult
+        fields = ['id', 'user', 'test', 'score', 'passed']
 
 class ExpertSystemVacancySkillSerializer(serializers.ModelSerializer):
     vacancy = serializers.PrimaryKeyRelatedField(queryset=ExpertSystemVacancy.objects.all())

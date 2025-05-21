@@ -58,20 +58,18 @@ class ExpertSystemStudentProfileViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 class ExpertsystemCompanyProfileViewSet(viewsets.ModelViewSet):
-    """
-    CRUD для компаний
-    """
     permission_classes = [IsAuthenticated]
-    queryset = ExpertsystemCompanyProfile.objects.select_related('user').all()
+    queryset = ExpertsystemCompanyProfile.objects.select_related('user').prefetch_related(
+        'vacancies'
+    ).all()
     serializer_class = ExpertsystemCompanyProfileSerializer
-    
+
     @action(detail=False, methods=['get'], url_path='me')
     def me(self, request):
-        """
-        Возвращает профиль текущего аутентифицированного работодателя.
-        """
         try:
-            profile = ExpertsystemCompanyProfile.objects.get(user=request.user)
+            profile = ExpertsystemCompanyProfile.objects.prefetch_related(
+                'vacancies'
+            ).get(user=request.user)
         except ExpertsystemCompanyProfile.DoesNotExist:
             return Response({'detail': 'Профиль не найден.'}, status=404)
         serializer = self.get_serializer(profile)
