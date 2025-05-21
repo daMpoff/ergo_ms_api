@@ -38,6 +38,7 @@ channels = "^4.2.0"
 ipykernel = "^6.29.5"
 torch = "^2.6.0"
 tensorflow = "^2.19.0"
+django-filter = "^25.1"
 
 [tool.poetry.scripts]
 cmd = "commands.__main__:main"
