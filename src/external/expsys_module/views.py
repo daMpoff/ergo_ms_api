@@ -33,7 +33,7 @@ import pandas as pd
 from src.external.expsys_module.models import (Skill, Vacance)
 from django.db import connection
 from src.external.lms.models import Subject
-from src.external.expsys_module.models import Competence,Indicator_Subject,Indicator
+from src.external.expsys_module.models import Competence,Indicator_Subject,Indicator,Indicator_Competence
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
 from django.utils import timezone
@@ -121,7 +121,10 @@ class TeacherSubjectsView(APIView):
                 {"error": str(e), "message": "Ошибка при получении предметов."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
 logger = logging.getLogger(__name__)
+
 
 class SubjectCreateView(APIView):
     def post(self, request):
@@ -279,7 +282,280 @@ class CompetenciesView(APIView):
                 {"error": str(e), "message": "Ошибка при получении компетенций."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+class IndicatorsView(APIView):
+    @swagger_auto_schema(
+        operation_description="Получение всех имеющихся индикаторов компетенций",
+        responses={
+            200: "Список индикаторов.",
+            400: "Ошибка при выполнении запроса.",
+            500: "Внутренняя ошибка сервера."
+        }
+    )
+    def get(self, request):
+        try:            
+            # Получаем все индикаторы
+            indicators = Indicator.objects.all()
+            indicators_data = []
+            for ind in indicators:
+                indicator_data = {
+                    'id': ind.id,
+                    'name': ind.name,
+                    'description':ind.description,
+                }
+                indicators_data.append(indicator_data)
+
+            return Response(
+                {
+                    "data": indicators_data,
+                    "message": "Индикаторы успешно получены.",
+                    "count": len(indicators_data)
+                },
+                status=status.HTTP_200_OK
+            )
+        except Exception as e:
+            return Response(
+                {"error": str(e), "message": "Ошибка при получении индикаторов."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class IndicatorSubjectsCountView(APIView):
+    @swagger_auto_schema(
+        operation_description="Получение количества предметов по ID индикатора компетенции",
+        manual_parameters=[
+            openapi.Parameter(
+                'indicator_id', openapi.IN_QUERY, 
+                description="ID индикатора компетенции", 
+                type=openapi.TYPE_INTEGER, 
+                required=True
+            )
+        ],
+        responses={
+            200: openapi.Response(
+                description="Количество предметов с указанным индикатором",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'subjects_count': openapi.Schema(type=openapi.TYPE_INTEGER),
+                        'message': openapi.Schema(type=openapi.TYPE_STRING),
+                    }
+                )
+            ),
+            400: "Неверный запрос",
+            404: "Индикатор не найден",
+            500: "Внутренняя ошибка сервера"
+        }
+    )
+    def get(self, request):
+        try:
+            indicator_id = request.query_params.get('indicator_id')
+
+            if not indicator_id:
+                return Response(
+                    {"error": "indicator_id обязателен", "message": "Укажите ID индикатора в параметрах запроса."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            try:
+                indicator = Indicator.objects.get(id=indicator_id)
+            except Indicator.DoesNotExist:
+                return Response(
+                    {"error": "Индикатор не найден", "message": f"Индикатор с ID {indicator_id} не существует."},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            # Подсчет количества предметов с этим индикатором
+            count = Indicator_Subject.objects.filter(indicator=indicator).count()
+
+            return Response(
+                {
+                    "subjects_count": count,
+                    "message": f"Найдено {count} предметов с этим индикатором."
+                },
+                status=status.HTTP_200_OK
+            )
+
+        except Exception as e:
+            return Response(
+                {"error": str(e), "message": "Ошибка при получении данных."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class CompetenceCreateView(APIView):
+    def post(self, request):
+        try:
+            # Валидация данных
+            name = request.data.get('name', '').strip()
+            description = request.data.get('description', '').strip()
+
+            if not name:
+                return Response(
+                    {
+                        "message": "Название компетенции обязательно"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Проверка на существующую компетенцию с таким именем
+            if Competence.objects.filter(name=name).exists():
+                return Response(
+                    {
+                        "message": "Компетенция с таким названием уже существует"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Создание компетенции (без указания id, чтобы БД сама сгенерировала новый)
+            competence = Competence.objects.create(
+                name=name,
+                description=description,
+            )
+
+            # Формирование успешного ответа
+            return Response(
+                {
+                    "id": competence.id,
+                    "name": competence.name,
+                    "description": competence.description,
+                },
+                status=status.HTTP_201_CREATED
+            )
+
+        except IntegrityError as e:
+            logger.error(f"Ошибка целостности при создании компетенции: {str(e)}")
+            return Response(
+                {
+                    "message": "Ошибка при создании компетенции (проблема с уникальностью данных)",
+                    "details": str(e)
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
             
+        except Exception as e:
+            # Логирование исключений
+            logger.error(f"Ошибка при создании компетенции: {str(e)}")
+            return Response(
+                {
+                    "message": "Внутренняя ошибка сервера",
+                    "details": str(e)
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class IndicatorCreateView(APIView):
+    def post(self, request):
+        try:
+            # Валидация данных
+            name = request.data.get('name', '').strip()
+            description = request.data.get('description', '').strip()
+
+            if not name:
+                return Response(
+                    {
+                        "message": "Название индикатора обязательно"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Проверка на существующую компетенцию с таким именем
+            if Indicator.objects.filter(name=name).exists():
+                return Response(
+                    {
+                        "message": "Индикатор с таким названием уже существует"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            indicator = Indicator.objects.create(
+                name=name,
+                description=description,
+            )
+
+            # Формирование успешного ответа
+            return Response(
+                {
+                    "id": indicator.id,
+                    "name": indicator.name,
+                    "description": indicator.description,
+                },
+                status=status.HTTP_201_CREATED
+            )
+
+        except IntegrityError as e:
+            logger.error(f"Ошибка целостности при создании компетенции: {str(e)}")
+            return Response(
+                {
+                    "message": "Ошибка при создании компетенции (проблема с уникальностью данных)",
+                    "details": str(e)
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        except Exception as e:
+            # Логирование исключений
+            logger.error(f"Ошибка при создании индикатора: {str(e)}")
+            return Response(
+                {
+                    "message": "Внутренняя ошибка сервера",
+                    "details": str(e)
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+class CompetenceIndicatorsView(APIView):
+    @swagger_auto_schema(
+        operation_description="Получение всех индикаторов в компитенции",
+        manual_parameters=[
+            openapi.Parameter(
+                'competence_id',
+                openapi.IN_QUERY,
+                description="ID компитенции",
+                type=openapi.TYPE_INTEGER
+            )
+        ],
+        responses={
+            200: "Список индикаторов компитенции.",
+            400: "Ошибка при выполнении запроса.",
+            500: "Внутренняя ошибка сервера."
+        }
+    )
+    def get(self, request):
+        try:
+            competence_id = request.GET.get('competence_id')
+            
+            if not competence_id:
+                return Response(
+                    {"error": "Не указан ID компитенции", "message": "Необходимо указать competence_id"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Получаем все связи индикаторов с компитенцией
+            indicator_links = Indicator_Competence.objects.filter(
+                competence_id=competence_id
+            ).select_related('indicator')
+
+            indicators_data = []
+            for link in indicator_links:
+                indicator_data = {
+                    'id': link.indicator.id,
+                    'name': link.indicator.name,
+                    'description':link.indicator.description,
+                }
+                indicators_data.append(indicator_data)
+
+            return Response(
+                {
+                    "data": indicators_data,
+                    "message": "Индикаторы компитенций успешно получены.",
+                    "count": len(indicators_data)
+                },
+                status=status.HTTP_200_OK
+            )
+        except Exception as e:
+            return Response(
+                {"error": str(e), "message": "Ошибка при получении индикаторов компитенции."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
 class PostCompetenciesandVacations(BaseAPIView):
     permission_classes = [IsAuthenticated]
     @swagger_auto_schema(

@@ -263,6 +263,112 @@ class TaskCreateView(APIView):
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+class SubtaskCreateView(APIView):
+    @swagger_auto_schema(
+        operation_description="Добавление новой подзадачи",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['text', 'section_id', 'parenttask_id'],
+            properties={
+                'text': openapi.Schema(type=openapi.TYPE_STRING, description='Текст задачи'),
+                'section_id': openapi.Schema(type=openapi.TYPE_INTEGER, description='ID раздела'),
+                'parenttask_id': openapi.Schema(type=openapi.TYPE_INTEGER, description='ID родительской задачи'),
+                'description': openapi.Schema(type=openapi.TYPE_STRING, description='Описание задачи', default=None),
+                'deadline': openapi.Schema(type=openapi.TYPE_STRING, format='date-time', description='Срок выполнения', default=None),
+                'priority': openapi.Schema(type=openapi.TYPE_INTEGER, description='Приоритет задачи', default=0),
+                'user_id': openapi.Schema(type=openapi.TYPE_INTEGER, description='ID пользователя', default=None),
+                'isdone': openapi.Schema(type=openapi.TYPE_BOOLEAN, description='Статус выполнения задачи', default=False),
+                'dateofcreation': openapi.Schema(type=openapi.TYPE_STRING, format='date-time', description='Дата создания задачи', default=None),
+            },
+        ),
+        responses={
+            201: openapi.Response(
+                description="Подзадача успешно создана",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'data': openapi.Schema(
+                            type=openapi.TYPE_OBJECT,
+                            properties={
+                                'id': openapi.Schema(type=openapi.TYPE_INTEGER),
+                                'text': openapi.Schema(type=openapi.TYPE_STRING),
+                                'section_id': openapi.Schema(type=openapi.TYPE_INTEGER),
+                                'isdone': openapi.Schema(type=openapi.TYPE_BOOLEAN),
+                                'dateofcreation': openapi.Schema(type=openapi.TYPE_STRING, format='date-time'),
+                                'parenttask_id': openapi.Schema(type=openapi.TYPE_INTEGER),
+                            }
+                        ),
+                        'message': openapi.Schema(type=openapi.TYPE_STRING),
+                    }
+                )
+            ),
+            400: "Неверные входные данные",
+            404: "Родительская задача не найдена",
+            500: "Внутренняя ошибка сервера"
+        }
+    )
+    def post(self, request):
+        try:
+            text = request.data.get('text')
+            section_id = request.data.get('section_id')
+            parenttask_id = request.data.get('parenttask_id')
+            
+            if not text or not section_id or not parenttask_id:
+                return Response(
+                    {"error": "Необходимо указать text, section_id и parenttask_id", "message": "Ошибка валидации."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Проверяем существование родительской задачи
+            parent_task = Task.objects.filter(id=parenttask_id).first()
+            if not parent_task:
+                return Response(
+                    {"error": "Родительская задача не найдена", "message": "Ошибка валидации."},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            task_data = {
+                'text': text,
+                'section_id': section_id,
+                'parenttask_id': parenttask_id,
+                'description': request.data.get('description'),
+                'deadline': request.data.get('deadline'),
+                'priority': request.data.get('priority', 0),
+                'user_id': request.data.get('user_id'),
+                'isdone': request.data.get('isdone', False),
+                'dateofcreation': request.data.get('dateofcreation') or timezone.now().isoformat(),
+            }
+            
+            # Создаем задачу через ORM
+            task = Task.objects.create(**task_data)
+            
+            created_task = {
+                'id': task.id,
+                'text': task.text,
+                'section_id': task.section_id,
+                'isdone': task.isdone,
+                'dateofcreation': task.dateofcreation.isoformat() if task.dateofcreation else None,
+                'parenttask_id': task.parenttask_id,
+            }
+            
+            return Response(
+                {
+                    "success": True,
+                    "data": created_task,
+                    "message": "Подзадача успешно создана."
+                },
+                status=status.HTTP_201_CREATED
+            )
+        
+        except Exception as e:
+            return Response(
+                {
+                    "success": False,
+                    "error": str(e),
+                    "message": "Ошибка при создании подзадачи."
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 # views.py
@@ -277,32 +383,11 @@ class DeleteTaskView(APIView):
     @transaction.atomic
     def delete(self, request, task_id):
         try:
-            # Получаем задачу или возвращаем 404
             task = get_object_or_404(Task, id=task_id)
-            
-            # Проверяем права доступа
-            if task.user != request.user:
-                return Response(
-                    {"error": "Forbidden", "message": "У вас нет прав на удаление этой задачи"},
-                    status=status.HTTP_403_FORBIDDEN
-                )
-            
-            # Получаем ID всех подзадач (рекурсивно)
-            def get_subtask_ids(parent_id):
-                subtasks = Task.objects.filter(parenttask_id=parent_id).values_list('id', flat=True)
-                ids = list(subtasks)
-                for subtask_id in subtasks:
-                    ids.extend(get_subtask_ids(subtask_id))
-                return ids
-            
-            # Собираем все ID для удаления
-            task_ids = [task.id] + get_subtask_ids(task.id)
-            
-            # Удаляем задачи (каскадное удаление настроено в моделях)
-            Task.objects.filter(id__in=task_ids).delete()
+            task.delete()  # Каскадное удаление сработает автоматически
             
             return Response(
-                {"success": True, "message": "Задача и подзадачи успешно удалены"},
+                {"success": True, "message": "Задача и подзадачи удалены"},
                 status=status.HTTP_200_OK
             )
             
@@ -311,7 +396,7 @@ class DeleteTaskView(APIView):
                 {
                     "success": False,
                     "error": str(e),
-                    "message": "Внутренняя ошибка сервера при удалении задачи"
+                    "message": "Ошибка при удалении задачи"
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
