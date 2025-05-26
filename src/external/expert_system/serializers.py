@@ -202,11 +202,18 @@ class ExpertSystemVacancySkillSerializer(serializers.ModelSerializer):
 
 class ExpertSystemCandidateApplicationSerializer(serializers.ModelSerializer):
     vacancy = serializers.PrimaryKeyRelatedField(queryset=ExpertSystemVacancy.objects.all())
-    candidate = serializers.PrimaryKeyRelatedField(queryset=ExpertSystemStudentProfile.objects.all())
-
+    candidate = serializers.PrimaryKeyRelatedField(read_only=True)
+    candidate_name = serializers.SerializerMethodField()
+    match_score = serializers.FloatField(required=False)
     class Meta:
         model = ExpertSystemCandidateApplication
-        fields = ['id', 'vacancy', 'candidate', 'applied_at', 'match_score']
+        fields = ['id', 'vacancy', 'candidate', 'applied_at', 'match_score', 'candidate_name']
+        
+    def get_candidate_name(self, obj):
+        try:
+            return f"{obj.candidate.first_name} {obj.candidate.last_name}".strip()
+        except Exception:
+            return f"ID: {obj.candidate_id}"
 
 class ExpertSystemOrientationTestResultSerializer(serializers.ModelSerializer):
     user = serializers.PrimaryKeyRelatedField(queryset=ExpertSystemStudentProfile.objects.all())
