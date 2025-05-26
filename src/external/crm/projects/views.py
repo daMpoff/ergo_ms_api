@@ -157,67 +157,7 @@ class ProjectCreateView(APIView):
             )
 
 
-class UserProjectCreateView(APIView):
-    def post(self, request):
-        try:
-            # Валидация данных
-            project_id = request.data.get('project_id')
-            user_id = request.data.get('user_id')
-            isnew = request.data.get('isnew', True)  # Значение по умолчанию True
-            if not project_id or not user_id:
-                return Response(
-                    {"message": "Необходимо указать project_id и user_id"},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            # Проверка на авторизацию
-            if not request.user.is_authenticated:
-                return Response(
-                    {"message": "Требуется авторизация"},
-                    status=status.HTTP_401_UNAUTHORIZED
-                )
-            # Проверка существования проекта и пользователя
-            try:
-                project = Project.objects.get(pk=project_id)
-                user = User.objects.get(pk=user_id)
-            except (Project.DoesNotExist, User.DoesNotExist) as e:
-                return Response(
-                    {"message": "Проект или пользователь не найдены"},
-                    status=status.HTTP_404_NOT_FOUND
-                )
-            # Проверка, не существует ли уже такая связь
-            if User_Project.objects.filter(project=project, user=user).exists():
-                return Response(
-                    {"message": "Пользователь уже добавлен в этот проект"},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            # Создание связи пользователя с проектом
-            user_project = User_Project.objects.create(
-                project=project,
-                user=user,
-                isnew=isnew
-            )
-            # Формирование успешного ответа
-            return Response(
-                {
-                    "success": True,
-                    "id": user_project.id,
-                    "project_id": user_project.project.id,
-                    "user_id": user_project.user.id,
-                    "isnew": user_project.isnew,
-                },
-                status=status.HTTP_201_CREATED
-            )
-            
-        except Exception as e:
-            logger.error(f"Ошибка при добавлении пользователя в проект: {str(e)}", exc_info=True)
-            return Response(
-                {
-                    "success": False,
-                    "message": "Внутренняя ошибка сервера",
-                    "details": str(e)
-                },
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+
 
 
 class PersonalProjectsView(APIView):
