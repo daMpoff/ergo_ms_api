@@ -1,0 +1,166 @@
+{
+    "employers": [
+        {
+            "company_name": "TechVision Solutions",
+            "description": "Ведущая компания в области разработки программного обеспечения и IT-консалтинга",
+            "email": "contact@techvision.ru",
+            "rating": 4.85
+        },
+        {
+            "company_name": "DataStream Analytics",
+            "description": "Специализируется на больших данных и машинном обучении",
+            "email": "info@datastream.com",
+            "rating": 4.70
+        },
+        {
+            "company_name": "InnoMed Systems",
+            "description": "Инновационная компания в сфере медицинских технологий и оборудования",
+            "email": "contact@innomed.ru",
+            "rating": 4.90
+        },
+        {
+            "company_name": "EcoTech Industries",
+            "description": "Лидер в разработке экологически чистых технологий",
+            "email": "info@ecotech.ru",
+            "rating": 4.65
+        },
+        {
+            "company_name": "FinPro Services",
+            "description": "Финансовые технологии и банковские решения",
+            "email": "business@finpro.ru",
+            "rating": 4.75
+        },
+        {
+            "company_name": "SmartEdge Computing",
+            "description": "Разработка решений в области искусственного интеллекта",
+            "email": "hello@smartedge.com",
+            "rating": 4.80
+        },
+        {
+            "company_name": "RoboTech Systems",
+            "description": "Автоматизация производства и робототехника",
+            "email": "info@robotech.ru",
+            "rating": 4.60
+        },
+        {
+            "company_name": "CloudMatrix Solutions",
+            "description": "Облачные решения и инфраструктура для бизнеса",
+            "email": "info@cloudmatrix.ru",
+            "rating": 4.82
+        },
+        {
+            "company_name": "BioTech Innovations",
+            "description": "Исследования и разработки в области биотехнологий",
+            "email": "contact@biotech-inn.ru",
+            "rating": 4.88
+        },
+        {
+            "company_name": "CyberShield Security",
+            "description": "Кибербезопасность и защита данных",
+            "email": "security@cybershield.ru",
+            "rating": 4.95
+        },
+        {
+            "company_name": "Smart City Technologies",
+            "description": "Разработка решений для умных городов",
+            "email": "info@smartcity.ru",
+            "rating": 4.78
+        },
+        {
+            "company_name": "Quantum Computing Labs",
+            "description": "Исследования в области квантовых вычислений",
+            "email": "research@quantumlabs.ru",
+            "rating": 4.92
+        },
+        {
+            "company_name": "Digital Marketing Pro",
+            "description": "Цифровой маркетинг и аналитика",
+            "email": "hello@digipro.ru",
+            "rating": 4.68
+        },
+        {
+            "company_name": "VR World Systems",
+            "description": "Разработка решений виртуальной реальности",
+            "email": "contact@vrworld.ru",
+            "rating": 4.73
+        },
+        {
+            "company_name": "AgroTech Solutions",
+            "description": "Технологии для сельского хозяйства",
+            "email": "info@agrotech.ru",
+            "rating": 4.67
+        },
+        {
+            "company_name": "Neural Networks Plus",
+            "description": "Разработка нейронных сетей и ИИ решений",
+            "email": "ai@nnplus.ru",
+            "rating": 4.89
+        },
+        {
+            "company_name": "LogisTech Systems",
+            "description": "Логистические технологии и автоматизация",
+            "email": "info@logistech.ru",
+            "rating": 4.71
+        },
+        {
+            "company_name": "SpaceTech Innovations",
+            "description": "Космические технологии и исследования",
+            "email": "space@spacetech.ru",
+            "rating": 4.94
+        },
+        {
+            "company_name": "EdTech Solutions",
+            "description": "Образовательные технологии и платформы",
+            "email": "edu@edtech.ru",
+            "rating": 4.77
+        },
+        {
+            "company_name": "BlockChain Systems",
+            "description": "Блокчейн технологии и криптография",
+            "email": "blockchain@bcsystems.ru",
+            "rating": 4.83
+        },
+        {
+            "company_name": "IoT Connectors",
+            "description": "Интернет вещей и умные устройства",
+            "email": "connect@iottech.ru",
+            "rating": 4.76
+        },
+        {
+            "company_name": "GameDev Studio",
+            "description": "Разработка игр и интерактивных приложений",
+            "email": "games@gamedev.ru",
+            "rating": 4.81
+        },
+        {
+            "company_name": "MedTech Solutions",
+            "description": "Медицинские информационные системы",
+            "email": "info@medtech.ru",
+            "rating": 4.86
+        },
+        {
+            "company_name": "Industrial Automation",
+            "description": "Промышленная автоматизация и IoT",
+            "email": "auto@industrial.ru",
+            "rating": 4.72
+        },
+        {
+            "company_name": "Clean Energy Tech",
+            "description": "Технологии возобновляемой энергетики",
+            "email": "energy@cleantech.ru",
+            "rating": 4.84
+        },
+        {
+            "company_name": "Digital Transport",
+            "description": "Цифровые решения для транспорта",
+            "email": "transport@digital.ru",
+            "rating": 4.79
+        },
+        {
+            "company_name": "RetailTech Systems",
+            "description": "Технологии для розничной торговли",
+            "email": "retail@techsys.ru",
+            "rating": 4.69
+        }
+    ]
+}
