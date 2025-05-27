@@ -38,6 +38,8 @@ channels = "^4.2.0"
 ipykernel = "^6.29.5"
 torch = "^2.6.0"
 tensorflow = "^2.19.0"
+pymssql = "^2.3.4"
+clickhouse-connect = "^0.8.16"
 openpyxl = "^3.1.5"
 
 [tool.poetry.scripts]
