@@ -266,6 +266,7 @@ class CompetenciesView(APIView):
                     'id': comp.id,
                     'name': comp.name,
                     'description':comp.description,
+                    'category':comp.category,
                 }
                 competencies_data.append(competence_data)
 
@@ -387,7 +388,7 @@ class CompetenceCreateView(APIView):
             # Валидация данных
             name = request.data.get('name', '').strip()
             description = request.data.get('description', '').strip()
-
+            category=request.data.get('category', '').strip()
             if not name:
                 return Response(
                     {
@@ -409,6 +410,7 @@ class CompetenceCreateView(APIView):
             competence = Competence.objects.create(
                 name=name,
                 description=description,
+                category=category
             )
 
             # Формирование успешного ответа
@@ -417,6 +419,7 @@ class CompetenceCreateView(APIView):
                     "id": competence.id,
                     "name": competence.name,
                     "description": competence.description,
+                    "category":competence.category,
                 },
                 status=status.HTTP_201_CREATED
             )

@@ -7,6 +7,7 @@ import datetime
 class Competence(models.Model):
     name = models.CharField(max_length=255, default='')
     description = models.TextField(default='')
+    category = models.TextField(default='')
 class Indicator(models.Model):
     name = models.CharField(max_length=255, default='')
     description = models.TextField(default='')
