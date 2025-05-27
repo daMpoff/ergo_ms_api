@@ -1,0 +1,182 @@
+[
+    {
+      "name": "Python",
+      "description": "Мощный язык программирования с простым синтаксисом, поддерживающий множество парадигм программирования и имеющий обширную экосистему библиотек",
+      "popularity": 95.50,
+      "rating": 4.80
+    },
+    {
+      "name": "JavaScript",
+      "description": "Универсальный язык программирования, используемый для создания интерактивных веб-приложений, серверной разработки и мобильных приложений",
+      "popularity": 97.20,
+      "rating": 4.70
+    },
+    {
+      "name": "Docker",
+      "description": "Передовая платформа для разработки, доставки и запуска приложений в изолированных контейнерах, обеспечивающая согласованность среды выполнения",
+      "popularity": 89.30,
+      "rating": 4.60
+    },
+    {
+      "name": "Kubernetes",
+      "description": "Передовая система оркестрации контейнеров, автоматизирующая развертывание, масштабирование и управление контейнеризированными приложениями",
+      "popularity": 85.70,
+      "rating": 4.50
+    },
+    {
+      "name": "React",
+      "description": "Популярная JavaScript-библиотека с открытым исходным кодом для создания масштабируемых пользовательских интерфейсов с компонентным подходом",
+      "popularity": 93.40,
+      "rating": 4.65
+    },
+    {
+      "name": "TensorFlow",
+      "description": "Комплексная платформа машинного обучения с открытым исходным кодом для разработки и развертывания моделей искусственного интеллекта",
+      "popularity": 82.10,
+      "rating": 4.40
+    },
+    {
+      "name": "PostgreSQL",
+      "description": "Реляционная система управления базами данных",
+      "popularity": 88.90,
+      "rating": 4.75
+    },
+    {
+      "name": "Git",
+      "description": "Система контроля версий",
+      "popularity": 99.00,
+      "rating": 4.90
+    },
+    {
+      "name": "AWS",
+      "description": "Облачная платформа Amazon Web Services",
+      "popularity": 91.50,
+      "rating": 4.70
+    },
+    {
+      "name": "Flask",
+      "description": "Микрофреймворк для веб-приложений на Python",
+      "popularity": 78.60,
+      "rating": 4.30
+    },
+    {
+      "name": "Django",
+      "description": "Высокоуровневый Python веб-фреймворк",
+      "popularity": 84.20,
+      "rating": 4.55
+    },
+    {
+      "name": "Vue.js",
+      "description": "Прогрессивный JavaScript-фреймворк",
+      "popularity": 80.40,
+      "rating": 4.45
+    },
+    {
+      "name": "TypeScript",
+      "description": "Типизированное надмножество JavaScript",
+      "popularity": 87.30,
+      "rating": 4.60
+    },
+    {
+      "name": "GraphQL",
+      "description": "Язык запросов для API",
+      "popularity": 79.80,
+      "rating": 4.35
+    },
+    {
+      "name": "Redis",
+      "description": "Хранилище данных типа ключ-значение",
+      "popularity": 83.50,
+      "rating": 4.50
+    },
+    {
+      "name": "Elasticsearch",
+      "description": "Поисковая и аналитическая система",
+      "popularity": 76.90,
+      "rating": 4.25
+    },
+    {
+      "name": "Kafka",
+      "description": "Распределённый потоковый обработчик сообщений",
+      "popularity": 75.40,
+      "rating": 4.20
+    },
+    {
+      "name": "Prometheus",
+      "description": "Система мониторинга и оповещения",
+      "popularity": 74.20,
+      "rating": 4.15
+    },
+    {
+      "name": "Rust",
+      "description": "Язык системного программирования",
+      "popularity": 81.70,
+      "rating": 4.55
+    },
+    {
+      "name": "Go",
+      "description": "Язык программирования от Google",
+      "popularity": 86.40,
+      "rating": 4.60
+    },
+    {
+      "name": "Swift",
+      "description": "Язык программирования для iOS",
+      "popularity": 79.30,
+      "rating": 4.40
+    },
+    {
+      "name": "Kotlin",
+      "description": "Язык программирования для Android",
+      "popularity": 82.60,
+      "rating": 4.50
+    },
+    {
+      "name": "Unity",
+      "description": "Платформа для разработки игр",
+      "popularity": 77.80,
+      "rating": 4.30
+    },
+    {
+      "name": "Pandas",
+      "description": "Библиотека Python для анализа данных",
+      "popularity": 88.10,
+      "rating": 4.65
+    },
+    {
+      "name": "NumPy",
+      "description": "Библиотека Python для научных вычислений",
+      "popularity": 87.50,
+      "rating": 4.60
+    },
+    {
+      "name": "FastAPI",
+      "description": "Современный высокопроизводительный веб-фреймворк для создания API на Python с автоматической генерацией документации",
+      "popularity": 86.20,
+      "rating": 4.70
+    },
+    {
+      "name": "Svelte",
+      "description": "Инновационный компилируемый фреймворк для создания пользовательских интерфейсов с минимальным размером итогового кода",
+      "popularity": 82.40,
+      "rating": 4.65
+    },
+    {
+      "name": "Deno",
+      "description": "Безопасная среда выполнения JavaScript и TypeScript, созданная разработчиком Node.js с улучшенной архитектурой",
+      "popularity": 75.80,
+      "rating": 4.45
+    },
+    {
+      "name": "Flutter",
+      "description": "Кроссплатформенный фреймворк от Google для разработки мобильных, веб и десктопных приложений с единой кодовой базой",
+      "popularity": 89.60,
+      "rating": 4.75
+    },
+    {
+      "name": "Terraform",
+      "description": "Инструмент для автоматизации инфраструктуры, позволяющий управлять облачными ресурсами через код",
+      "popularity": 88.30,
+      "rating": 4.70
+    }
+]
