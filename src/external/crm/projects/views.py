@@ -3,10 +3,13 @@ from rest_framework.response import Response
 from rest_framework import status
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
-from src.external.crm.models import Project, User_Project
+from src.external.crm.models import Project, User_Project,Task
+from django.db.models import Count
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 import logging
+from django.db import transaction
+from django.shortcuts import get_object_or_404
 
 User = get_user_model()
 logger = logging.getLogger(__name__)
@@ -156,9 +159,29 @@ class ProjectCreateView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-
-
-
+class DeletePersonalProjectView(APIView):
+    @transaction.atomic
+    def delete(self, request, project_id):  # Изменил task_id на id
+        print("dada")
+        try:
+            print(id)
+            project = get_object_or_404(Project, id=project_id)  # Используем переданный id
+            project.delete()
+            
+            return Response(
+                {"success": True, "message": "Проект и его задачи удалены"},
+                status=status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            return Response(
+                {
+                    "success": False,
+                    "error": str(e),
+                    "message": "Ошибка при удалении проекта"
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 class PersonalProjectsView(APIView):
     @swagger_auto_schema(
@@ -322,5 +345,97 @@ class InvitedProjectsView(APIView):
         except Exception as e:
             return Response(
                 {"error": str(e), "message": "Ошибка при получении списка проектов."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+class ProjectTasksCountView(APIView):
+    @swagger_auto_schema(
+        operation_description="Получение количества задач по ID проекта",
+        manual_parameters=[
+            openapi.Parameter(
+                'project_id', openapi.IN_QUERY, 
+                description="ID проекта", 
+                type=openapi.TYPE_INTEGER, 
+                required=True
+            ),
+            openapi.Parameter(
+                'count_done', openapi.IN_QUERY, 
+                description="Учитывать только выполненные задачи (true/false)", 
+                type=openapi.TYPE_BOOLEAN,
+                required=False
+            )
+        ],
+        responses={
+            200: openapi.Response(
+                description="Количество задач в проекте",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'tasks_count': openapi.Schema(type=openapi.TYPE_INTEGER),
+                        'done_count': openapi.Schema(type=openapi.TYPE_INTEGER),
+                        'active_count': openapi.Schema(type=openapi.TYPE_INTEGER),
+                        'message': openapi.Schema(type=openapi.TYPE_STRING),
+                    }
+                )
+            ),
+            400: "Неверный запрос",
+            404: "Проект не найден",
+            500: "Внутренняя ошибка сервера"
+        }
+    )
+    def get(self, request):
+        try:
+            project_id = request.query_params.get('project_id')
+            count_done = request.query_params.get('count_done')
+
+            if not project_id:
+                return Response(
+                    {"error": "project_id обязателен", "message": "Укажите ID проекта в параметрах запроса."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            try:
+                project = Project.objects.get(id=project_id)
+            except Project.DoesNotExist:
+                return Response(
+                    {"error": "Проект не найден", "message": f"Проект с ID {project_id} не существует."},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            # Получаем все задачи проекта через секции
+            tasks = Task.objects.filter(section__project=project)
+            
+            # Общее количество задач
+            total_count = tasks.count()
+            
+            # Количество выполненных задач
+            done_count = tasks.filter(isdone=True).count()
+            
+            # Количество активных задач
+            active_count = total_count - done_count
+
+            response_data = {
+                "tasks_count": total_count,
+                "done_count": done_count,
+                "active_count": active_count,
+                "message": f"Проект '{project.name}' содержит {total_count} задач."
+            }
+
+            # Если запрошен подсчет только выполненных задач
+            if count_done == 'true':
+                response_data.update({
+                    "tasks_count": done_count,
+                    "message": f"Проект '{project.name}' содержит {done_count} выполненных задач."
+                })
+            elif count_done == 'false':
+                response_data.update({
+                    "tasks_count": active_count,
+                    "message": f"Проект '{project.name}' содержит {active_count} активных задач."
+                })
+
+            return Response(response_data, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response(
+                {"error": str(e), "message": "Ошибка при получении данных."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )

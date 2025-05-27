@@ -38,6 +38,9 @@ from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
+from django.db import transaction
+from django.shortcuts import get_object_or_404
+
 User = get_user_model()
 
 class TeacherSubjectsView(APIView):
@@ -632,3 +635,27 @@ class PostCompetenciesandVacations(BaseAPIView):
             uniquecompecs,
             status=status.HTTP_200_OK
         )
+
+class DeleteSubject(APIView):
+    @transaction.atomic
+    def delete(self, request, subject_id):  # Изменил task_id на id
+        print("dada")
+        try:
+            print(id)
+            subject = get_object_or_404(Subject, id=subject_id)  # Используем переданный id
+            subject.delete()
+            
+            return Response(
+                {"success": True, "message": "Предмет удален"},
+                status=status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            return Response(
+                {
+                    "success": False,
+                    "error": str(e),
+                    "message": "Ошибка при удалении предмета"
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
