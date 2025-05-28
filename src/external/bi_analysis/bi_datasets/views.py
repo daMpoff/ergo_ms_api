@@ -1,7 +1,9 @@
+from argparse import Action
 from django.core.files import File
 from django.db import transaction, connection, ProgrammingError
 from django.shortcuts import get_object_or_404
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.decorators import action
 
 from rest_framework import (
     generics,
@@ -60,6 +62,7 @@ class DatasetListCreateView(generics.ListCreateAPIView):
         temp_name = create_temp_table_from_source(dataset)
         dataset.table_ref = temp_name
         dataset.save(update_fields=['table_ref'])
+        print(f"[SAVE DATASET] id={dataset.id}, table_ref={dataset.table_ref}")
 
         DataSetTable.objects.create(
             dataset=dataset,
@@ -87,24 +90,39 @@ class DatasetDetailView(generics.RetrieveUpdateDestroyAPIView):
 # DatasetViewSet (альтернатива generic views)
 # ==============================================================================
 
-class DatasetViewSet(viewsets.ModelViewSet):
-    """
-    Полный CRUD для Dataset через ViewSet.
-    """
-    queryset = Dataset.objects.all()
-    serializer_class = DatasetSerializer
+class DataSetTableViewSet(viewsets.ModelViewSet):
+    queryset = DataSetTable.objects.all()
+    serializer_class = DataSetTableSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def perform_create(self, serializer):
-        dataset = serializer.save(owner=self.request.user)
-        temp_name = create_temp_table_from_source(dataset)
-        populate_initial_fields(dataset, temp_name)
+        table = serializer.save()
+        dataset = table.dataset
+        print("[DEBUG] DataSetTable.table_name:", table.table_name)
+        try:
+            auto_join_table(dataset, table)
+        except ValueError as e:
+            raise ValidationError(str(e))
+        
+    @action(detail=True, methods=['post'], url_path='auto_join')
+    def auto_join(self, request, pk=None):
+        dataset = self.get_object()
+        table_id = request.data.get('table_id')
+        if not table_id:
+            return Response({"error": "table_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            table = DataSetTable.objects.get(pk=table_id)
+            auto_join_table(dataset, table)
+            return Response({"success": True})
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         
 class DatasetPreviewView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, pk):
         dataset = Dataset.objects.filter(pk=pk, owner=request.user).first()
+        print(f"[PREVIEW] dataset.id={dataset.id}, table_ref={dataset.table_ref}")
         if not dataset:
             return Response({"detail": "Not found"}, status=404)
 
@@ -147,6 +165,14 @@ class DataSetTableViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         table = serializer.save()
         dataset = table.dataset
+        temp_name = dataset.table_ref
+        with connection.cursor() as cursor:
+            cursor.execute(f"SELECT to_regclass('{temp_name}')")
+            exists = cursor.fetchone()[0]
+        if not exists:
+            temp_name = create_temp_table_from_source(dataset)
+            dataset.table_ref = temp_name
+            dataset.save(update_fields=['table_ref'])
         try:
             auto_join_table(dataset, table)
         except ValueError as e:

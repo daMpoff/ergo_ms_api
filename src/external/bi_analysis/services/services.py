@@ -1,11 +1,10 @@
 import csv
 from uuid import uuid4
-from django.db import connection, transaction
+from django.db import connection
 from rest_framework.exceptions import ValidationError
 import pandas as pd
-from io import StringIO
 
-from ..bi_datasets.models import DataSetField, DataSetTable, FileUpload
+from ..bi_datasets.models import DataSetField, FileUpload
 
 def populate_initial_fields(dataset, temp_table_name, source_table=None):
     """
@@ -46,6 +45,7 @@ def create_temp_table_from_source(dataset):
         cursor.execute(f'SELECT * FROM "{schema}"."{table}" LIMIT 0')
         temp_name = f"temp_{uuid4().hex}"
         cursor.execute(f'CREATE TABLE "{temp_name}" AS SELECT * FROM "{schema}"."{table}";')
+    print(f"[CREATE TEMP] table_ref={dataset.table_ref}, temp_name={temp_name}")
     return temp_name
 
 def import_file_upload_to_table(file_upload_id, dataset=None):
@@ -103,25 +103,42 @@ def introspect_columns(temp_table_name):
     """
     Возвращает список (column_name, data_type) для временной таблицы.
     """
-    sql = f"SELECT * FROM {temp_table_name} LIMIT 0;"
+    safe_name = temp_table_name.replace('"', '""')
+    sql = f'SELECT * FROM "{safe_name}" LIMIT 0;'
     with connection.cursor() as cursor:
         cursor.execute(sql)
         return [col[0] for col in cursor.description]
+    
+def table_exists(table_name):
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT to_regclass(%s)", [table_name])
+        exists = cursor.fetchone()[0] is not None
+        print(f"[TABLE EXISTS] {table_name}: {exists}")
+        return exists
 
 def auto_join_table(dataset, table):
     """
     При добавлении DataSetTable — ищет общий столбец по имени и
     делает ALTER или Re-create temp_table с джойном.
     """
-    temp_name = f"temp_dataset_{dataset.id}"
+    temp_name = dataset.table_ref
+    print(f"[AUTO-JOIN] dataset.id={dataset.id}, temp_name={temp_name}, dataset.table_ref={dataset.table_ref}")
+    if not table_exists(temp_name):
+        raise ValueError(f"Временная таблица {temp_name} не существует, невозможно выполнить авто-JOIN.")
     existing_cols = set(introspect_columns(temp_name))
     new_cols      = set(introspect_columns(table.table_name))
     common        = existing_cols & new_cols
     if not common:
         raise ValueError("Не найдено общих полей для авто-JOIN")
     key = common.pop()
-    with connection.cursor() as cursor:
-        cursor.execute(f'CREATE TABLE {temp_name}_new AS ...')
+    join_key = key
+    with connection.cursor() as cursor:     
+        cursor.execute(f'''
+            CREATE TABLE {temp_name}_new AS
+            SELECT a.*, b.*
+            FROM {temp_name} a
+            JOIN {table.table_name} b ON a."{join_key}" = b."{join_key}";
+        ''')
         cursor.execute(f'ALTER TABLE {temp_name} RENAME TO {temp_name}_old;')
         cursor.execute(f'ALTER TABLE {temp_name}_new RENAME TO {temp_name};')
         cursor.execute(f'DROP TABLE {temp_name}_old;')

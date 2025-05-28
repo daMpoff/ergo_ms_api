@@ -6,11 +6,26 @@ from .models import FileUpload, Dataset, DataSetTable, DataSetField
 User = get_user_model()
 
 class DataSetTableSerializer(serializers.ModelSerializer):
+    table_ref = serializers.SerializerMethodField()
+    display_name = serializers.SerializerMethodField()
     class Meta:
         model = DataSetTable
-        fields = ['id', 'dataset', 'connection', 'table_name', 'alias', 'joined_on', 'order']
+        fields = [
+            'id', 'dataset', 'connection', 'table_name', 'alias',
+            'joined_on', 'order', 'table_ref', 'display_name'
+        ]
         read_only_fields = ['id']
-
+        
+    def get_table_ref(self, obj):
+        return obj.table_name
+    
+    def get_display_name(self, obj):
+        if hasattr(obj, "file_upload") and obj.file_upload and obj.sheet_name:
+            return f"{obj.file_upload.original_filename.replace('.xlsx', '')} – {obj.sheet_name}.xlsx"
+        elif hasattr(obj, "file_upload") and obj.file_upload:
+            return obj.file_upload.original_filename
+        else:
+            return obj.table_name
 
 class DataSetFieldSerializer(serializers.ModelSerializer):
     source_table_name = serializers.SerializerMethodField()

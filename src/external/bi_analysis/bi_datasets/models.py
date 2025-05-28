@@ -81,6 +81,12 @@ class DataSetTable(models.Model):
     joined_on  = JSONField(default=dict)
     order      = models.PositiveSmallIntegerField(default=0)
 
+    # Новые поля:
+    file_upload = models.ForeignKey(
+        FileUpload, null=True, blank=True, on_delete=models.SET_NULL, related_name='dataset_tables'
+    )
+    sheet_name = models.CharField(max_length=255, blank=True, null=True)
+
     def __str__(self):
         return f"{self.dataset.name} → {self.table_name}"
 

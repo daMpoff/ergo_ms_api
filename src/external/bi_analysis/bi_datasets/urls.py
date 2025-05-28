@@ -1,5 +1,5 @@
 from django.urls import path, include
-from .views import DataSetFieldViewSet
+from .views import DataSetFieldViewSet, DataSetTableViewSet
 from .views import (
     DatasetListCreateView, DatasetDetailView, DatasetPreviewView,
     FileUploadView, FileUploadDetailView,
@@ -11,6 +11,7 @@ from rest_framework.routers import SimpleRouter
 
 router = SimpleRouter()
 router.register(r'fields', DataSetFieldViewSet, basename='dataset-fields')
+router.register(r'tables', DataSetTableViewSet, basename='dataset-tables')
 
 urlpatterns = [
     path('', include(router.urls)),
