@@ -1,6 +1,8 @@
 from django.urls import path
 from src.external.expsys_module.views import PostCompetenciesandVacations
 from src.external.expsys_module.views import  TeacherSubjectsView,SubjectCreateView,SubjectIndicatorsCompetenciesView,CompetenciesView,IndicatorSubjectsCountView,IndicatorsView,CompetenceCreateView,IndicatorCreateView,CompetenceIndicatorsView,DeleteSubject
+from src.external.expsys_module.views import DeleteCompetence,DeleteIndicator
+
 
 urlpatterns = [
      path('post-competencies-vacations', PostCompetenciesandVacations.as_view(), name='post competencies and vacations'),
@@ -14,6 +16,9 @@ urlpatterns = [
      path('competence-create/', CompetenceCreateView.as_view(), name='competence-create'),
      path('indicator-create/', IndicatorCreateView.as_view(), name='indicator-create'),
      path('competenceindicators/', CompetenceIndicatorsView.as_view(), name='competenceindicators'),
+     path('delete-competence/<int:competence_id>/',DeleteCompetence.as_view(), name='delete_competence'),
+     path('delete-indicator/<int:indicator_id>/',DeleteIndicator.as_view(), name='delete_indicator'),
+
 
 
 

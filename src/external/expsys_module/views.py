@@ -659,3 +659,50 @@ class DeleteSubject(APIView):
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+class DeleteCompetence(APIView):
+    @transaction.atomic
+    def delete(self, request, competence_id):  # Изменил task_id на id
+        print("dada")
+        try:
+            print(id)
+            competence = get_object_or_404(Competence, id=competence_id)  # Используем переданный id
+            competence.delete()
+            
+            return Response(
+                {"success": True, "message": "Компетенция удалена"},
+                status=status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            return Response(
+                {
+                    "success": False,
+                    "error": str(e),
+                    "message": "Ошибка при удалении компетенции"
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class DeleteIndicator(APIView):
+    @transaction.atomic
+    def delete(self, request, indicator_id):  # Изменил task_id на id
+        print("dada")
+        try:
+            print(id)
+            indicator = get_object_or_404(Indicator, id=indicator_id)  # Используем переданный id
+            indicator.delete()
+            
+            return Response(
+                {"success": True, "message": "Индикатор компетенции удален"},
+                status=status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            return Response(
+                {
+                    "success": False,
+                    "error": str(e),
+                    "message": "Ошибка при удалении индикатора компетенции"
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
