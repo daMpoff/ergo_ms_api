@@ -7,7 +7,9 @@ DeleteGroup, GetGroups, ChangeGroup, GetPermissions,
 AddPermission, DeletePermission, 
 ChangePermission, GetUserGroupsAndPermissions, 
 GetUserGroups, GetUserPermissions,
- AddUserPermission, RemoveUserPermission, AddUserGroup, RemoveUserGroup, AddGroupPermissions, RemoveGroupPermissions, GetPermissionsByCategory, GetUserName)
+ AddUserPermission, RemoveUserPermission, AddUserGroup, RemoveUserGroup, AddGroupPermissions, RemoveGroupPermissions, GetPermissionsByCategory, GetUserName,
+ GetAllProgectPagesPath,
+ UpdateCMSPage, GetCMSPages, AddPageComponent, RemovePageComponent, UpdatePageComponent, GetPageComponents, GetClosedPages)
 urlpatterns = [
     path('check_access_to_page/', CheckAccesstoPage.as_view(), name='check access to page'),
     path('check_access_to_admin_panel/', CheckAccessToAdminPanel.as_view(), name='check access to admin panel'),
@@ -39,4 +41,15 @@ urlpatterns = [
     path('remove_groups_permissions/', RemoveGroupPermissions.as_view(), name='remove groups permissions'),
     path('get_permissions_by_category/', GetPermissionsByCategory.as_view(), name='get permissions by category'),
     path('get_user_name/', GetUserName.as_view(), name='get user name'),
+
+    path('set-all-pages', GetAllProgectPagesPath.as_view(), name='set all pages'),
+    path('get-cms-pages', GetCMSPages.as_view(), name='get all pages'),
+    path('put-cms-pages', UpdateCMSPage.as_view(), name='put all pages'),
+    path('get-closed-pages/', GetClosedPages.as_view(), name='get closed pages'),
+    
+    # Новые пути для управления компонентами страниц
+    path('add-page-component/', AddPageComponent.as_view(), name='add page component'),
+    path('remove-page-component/', RemovePageComponent.as_view(), name='remove page component'),
+    path('update-page-component/', UpdatePageComponent.as_view(), name='update page component'),
+    path('get-page-components/', GetPageComponents.as_view(), name='get page components')
 ]
