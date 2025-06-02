@@ -6,6 +6,8 @@ from rest_framework.views import APIView
 from django.db import models
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
+from django.utils import timezone
+from datetime import datetime
 
 
 from src.core.utils.database.main import OrderedDictQueryExecutor
@@ -64,6 +66,7 @@ class SectionTaskView(APIView):
                         'priority': task.priority,
                         'description': task.description,
                         'user_id': task.user.id if task.user else None,
+                        'section_id':task.section_id,
                         'parenttask_id': task.parenttask_id,
                         'subtasks': list(subtasks)  # Преобразуем QuerySet в список
                     }
@@ -263,22 +266,22 @@ class TaskCreateView(APIView):
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
 class SubtaskCreateView(APIView):
     @swagger_auto_schema(
         operation_description="Добавление новой подзадачи",
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
-            required=['text', 'section_id', 'parenttask_id'],
+            required=['text', 'section_id', 'parenttask_id', 'user_id'],
             properties={
-                'text': openapi.Schema(type=openapi.TYPE_STRING, description='Текст задачи'),
+                'text': openapi.Schema(type=openapi.TYPE_STRING, description='Текст подзадачи'),
                 'section_id': openapi.Schema(type=openapi.TYPE_INTEGER, description='ID раздела'),
                 'parenttask_id': openapi.Schema(type=openapi.TYPE_INTEGER, description='ID родительской задачи'),
-                'description': openapi.Schema(type=openapi.TYPE_STRING, description='Описание задачи', default=None),
+                'description': openapi.Schema(type=openapi.TYPE_STRING, description='Описание подзадачи', default=""),
                 'deadline': openapi.Schema(type=openapi.TYPE_STRING, format='date-time', description='Срок выполнения', default=None),
-                'priority': openapi.Schema(type=openapi.TYPE_INTEGER, description='Приоритет задачи', default=0),
-                'user_id': openapi.Schema(type=openapi.TYPE_INTEGER, description='ID пользователя', default=None),
-                'isdone': openapi.Schema(type=openapi.TYPE_BOOLEAN, description='Статус выполнения задачи', default=False),
-                'dateofcreation': openapi.Schema(type=openapi.TYPE_STRING, format='date-time', description='Дата создания задачи', default=None),
+                'priority': openapi.Schema(type=openapi.TYPE_INTEGER, description='Приоритет подзадачи', default=0),
+                'user_id': openapi.Schema(type=openapi.TYPE_INTEGER, description='ID пользователя'),
+                'isdone': openapi.Schema(type=openapi.TYPE_BOOLEAN, description='Статус выполнения подзадачи', default=False),
             },
         ),
         responses={
@@ -296,6 +299,7 @@ class SubtaskCreateView(APIView):
                                 'isdone': openapi.Schema(type=openapi.TYPE_BOOLEAN),
                                 'dateofcreation': openapi.Schema(type=openapi.TYPE_STRING, format='date-time'),
                                 'parenttask_id': openapi.Schema(type=openapi.TYPE_INTEGER),
+                                'user_id': openapi.Schema(type=openapi.TYPE_INTEGER),
                             }
                         ),
                         'message': openapi.Schema(type=openapi.TYPE_STRING),
@@ -309,48 +313,59 @@ class SubtaskCreateView(APIView):
     )
     def post(self, request):
         try:
-            text = request.data.get('text')
-            section_id = request.data.get('section_id')
-            parenttask_id = request.data.get('parenttask_id')
-            
-            if not text or not section_id or not parenttask_id:
+            required_fields = ['text', 'section_id', 'parenttask_id', 'user_id']
+            if not all(request.data.get(field) for field in required_fields):
                 return Response(
-                    {"error": "Необходимо указать text, section_id и parenttask_id", "message": "Ошибка валидации."},
+                    {"error": f"Необходимо указать: {', '.join(required_fields)}", 
+                     "message": "Ошибка валидации."},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-            
+
             # Проверяем существование родительской задачи
-            parent_task = Task.objects.filter(id=parenttask_id).first()
+            parent_task = Task.objects.filter(id=request.data['parenttask_id']).first()
             if not parent_task:
                 return Response(
                     {"error": "Родительская задача не найдена", "message": "Ошибка валидации."},
                     status=status.HTTP_404_NOT_FOUND
                 )
-            
+
+            deadline_str = request.data.get('deadline')
+            deadline_date = None
+
+            if deadline_str:
+                try:
+                    deadline_date = datetime.strptime(deadline_str, '%Y-%m-%d').date()
+                except ValueError:
+                    return Response(
+                        {"error": "Неверный формат даты. Используйте YYYY-MM-DD"},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
             task_data = {
-                'text': text,
-                'section_id': section_id,
-                'parenttask_id': parenttask_id,
-                'description': request.data.get('description'),
-                'deadline': request.data.get('deadline'),
+                'text': request.data['text'],
+                'section_id': request.data['section_id'],
+                'parenttask_id': request.data['parenttask_id'],
+                'user_id': request.data['user_id'],
+                'description': request.data.get('description', ""),
+                'deadline': deadline_date or timezone.now().date(),  # Используем date вместо datetime
                 'priority': request.data.get('priority', 0),
-                'user_id': request.data.get('user_id'),
                 'isdone': request.data.get('isdone', False),
-                'dateofcreation': request.data.get('dateofcreation') or timezone.now().isoformat(),
+                'dateofcreation': timezone.now().date()  # Используем date вместо datetime
             }
-            
-            # Создаем задачу через ORM
+
+            # Создаем подзадачу с помощью ORM
             task = Task.objects.create(**task_data)
-            
+
             created_task = {
                 'id': task.id,
                 'text': task.text,
                 'section_id': task.section_id,
                 'isdone': task.isdone,
-                'dateofcreation': task.dateofcreation.isoformat() if task.dateofcreation else None,
+                'dateofcreation': task.dateofcreation.isoformat(),
                 'parenttask_id': task.parenttask_id,
+                'user_id': task.user_id,
             }
-            
+
             return Response(
                 {
                     "success": True,
@@ -359,7 +374,7 @@ class SubtaskCreateView(APIView):
                 },
                 status=status.HTTP_201_CREATED
             )
-        
+
         except Exception as e:
             return Response(
                 {
@@ -369,8 +384,6 @@ class SubtaskCreateView(APIView):
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
-
 # views.py
 from rest_framework.permissions import IsAuthenticated
 
@@ -387,7 +400,7 @@ class DeleteTaskView(APIView):
             task.delete()  # Каскадное удаление сработает автоматически
             
             return Response(
-                {"success": True, "message": "Задача и подзадачи удалены"},
+                {"success": True},
                 status=status.HTTP_200_OK
             )
             
@@ -397,6 +410,29 @@ class DeleteTaskView(APIView):
                     "success": False,
                     "error": str(e),
                     "message": "Ошибка при удалении задачи"
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class DeleteSectionView(APIView):
+    @transaction.atomic
+    def delete(self, request, section_id):
+        try:
+            section = get_object_or_404(Section, id=section_id)
+            section.delete()  # Каскадное удаление сработает автоматически
+            
+            return Response(
+                {"success": True, "message": "Раздел и его задачи удалены"},
+                status=status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            return Response(
+                {
+                    "success": False,
+                    "error": str(e),
+                    "message": "Ошибка при удалении раздела"
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
