@@ -161,11 +161,11 @@ class ProjectCreateView(APIView):
 
 class DeletePersonalProjectView(APIView):
     @transaction.atomic
-    def delete(self, request, project_id):  # Изменил task_id на id
+    def delete(self, request, project_id): 
         print("dada")
         try:
             print(id)
-            project = get_object_or_404(Project, id=project_id)  # Используем переданный id
+            project = get_object_or_404(Project, id=project_id)  
             project.delete()
             
             return Response(
@@ -179,6 +179,29 @@ class DeletePersonalProjectView(APIView):
                     "success": False,
                     "error": str(e),
                     "message": "Ошибка при удалении проекта"
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+class LeaveProjectView(APIView):
+    @transaction.atomic
+    def delete(self, request, user_id,project_id): 
+        print("dada")
+        try:
+            print(id)
+            user_project = get_object_or_404(User_Project, user_id=user_id,project_id=project_id)  
+            user_project.delete()
+            
+            return Response(
+                {"success": True, "message": "Вы вышли из проекта"},
+                status=status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            return Response(
+                {
+                    "success": False,
+                    "error": str(e),
+                    "message": "Ошибка при выходе из проекта"
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
