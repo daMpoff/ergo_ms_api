@@ -9,6 +9,7 @@ from src.core.utils.base.base_views import BaseAPIView
 from rest_framework.request import Request
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter
+from rest_framework.exceptions import ValidationError
 
 from .models import (
     ExpertSystemStudyGroup, ExpertSystemStudentProfile, ExpertsystemCompanyProfile,
@@ -17,7 +18,7 @@ from .models import (
     ExpertSystemOrientationAnswer, ExpertSystemTest, ExpertSystemQuestion, ExpertSystemAnswer,
     ExpertSystemTestResult, ExpertSystemVacancy, ExpertSystemVacancySkill,
     ExpertSystemCandidateApplication, ExpertSystemOrientationTestResult,
-    ExpertSystemOrientationUserAnswer
+    ExpertSystemOrientationUserAnswer, ExpertSystemTestUserAnswer
 )
 
 from .serializers import (
@@ -96,6 +97,19 @@ class ExpertsystemCompanyProfileViewSet(viewsets.ModelViewSet):
             return Response({'detail': 'Профиль не найден.'}, status=404)
         serializer = self.get_serializer(profile)
         return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'], url_path='my-vacancies')
+    def my_vacancies(self, request):
+        """
+        Возвращает вакансии, созданные текущим работодателем (компанией)
+        """
+        try:
+            profile = ExpertsystemCompanyProfile.objects.prefetch_related('vacancies').get(user=request.user)
+        except ExpertsystemCompanyProfile.DoesNotExist:
+            return Response({'detail': 'Профиль работодателя не найден.'}, status=404)
+        vacancies = profile.vacancies.all()
+        serializer = ExpertSystemVacancySerializer(vacancies, many=True)
+        return Response(serializer.data)
 
 class ExpertSystemSkillViewSet(viewsets.ModelViewSet):
     """
@@ -123,7 +137,7 @@ class ExpertSystemRoleViewSet(viewsets.ModelViewSet):
 
 class ExpertSystemTrajectoryStepViewSet(viewsets.ModelViewSet):
     """
-    CRUD для шага обучени
+    CRUD для шага обучения
     """
     permission_classes = [IsAuthenticated]
     queryset = ExpertSystemTrajectoryStep.objects.select_related('role').all()
@@ -211,11 +225,33 @@ class ExpertSystemVacancySkillViewSet(viewsets.ModelViewSet):
 
 class ExpertSystemCandidateApplicationViewSet(viewsets.ModelViewSet):
     """
-    CRUD для работы со связью Вакансия-Навык
+    CRUD для работы со вакансиями кандитатов
     """
     permission_classes = [IsAuthenticated]
     queryset = ExpertSystemCandidateApplication.objects.select_related('vacancy', 'candidate').all()
     serializer_class = ExpertSystemCandidateApplicationSerializer
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['vacancy']
+    def perform_create(self, serializer):
+        user = self.request.user
+        try:
+            student_profile = ExpertSystemStudentProfile.objects.get(user=user)
+        except ExpertSystemStudentProfile.DoesNotExist:
+            raise ValidationError("Профиль студента не обнаружен, для данного пользователя")
+
+        serializer.save(candidate=student_profile)
+        
+    def get_queryset(self):
+        qs = super().get_queryset()
+        my = self.request.query_params.get('my')
+        if my == '1' and self.request.user.is_authenticated:
+            try:
+                profile = ExpertSystemStudentProfile.objects.get(user=self.request.user)
+                qs = qs.filter(candidate=profile)
+            except ExpertSystemStudentProfile.DoesNotExist:
+                return qs.none()
+        return qs
+
 
 class ExpertSystemOrientationTestResultViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
@@ -280,3 +316,309 @@ class GetUserSkills(BaseAPIView):
             result,
             status=status.HTTP_200_OK
         )
+
+class CreateTest(BaseAPIView):
+    permission_classes=[IsAuthenticated]
+    @swagger_auto_schema(
+        operation_description="Создание теста экспертной системы",
+        responses={
+            200: "Тест создан",
+            401: "Пользователь не авторизован",
+        },
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'title': openapi.Schema(
+                    type=openapi.TYPE_STRING, 
+                    description='Название'),
+                'skill': openapi.Schema(
+                    type=openapi.TYPE_STRING, 
+                    description='Навык'),
+                'description': openapi.Schema(
+                    type=openapi.TYPE_STRING, 
+                    description='Описание'),
+                'questions': openapi.Schema(
+                    type=openapi.TYPE_ARRAY,
+                    items=openapi.Items(type=openapi.TYPE_OBJECT),
+                    description='вопросы теста')
+            }
+        )
+    )
+    def post(self, request:Request):
+        title = request.data['title']
+        skill = request.data['skill']
+        description = request.data['description']
+        expskill = ExpertSystemSkill.objects.get(name =skill)
+        test = ExpertSystemTest.objects.create(name = title, skill = expskill, descriptions = description)
+        questions = request.data['questions']
+        for question in questions:
+            print(question)
+            expquestion =ExpertSystemQuestion.objects.create(text = question['text'], test = test)
+            for answer in question['answers']:
+                ExpertSystemAnswer.objects.create(text = answer['text'], is_correct = answer['isCorrect'], question = expquestion)
+        return Response(status=status.HTTP_200_OK)
+
+
+class GetAllTests(BaseAPIView):
+    permission_classes=[IsAuthenticated]
+    @swagger_auto_schema(
+        operation_description="Получение всех тестов экспертной системы",
+        responses={
+            200: "Тесты получены",
+            401: "Пользователь не авторизован",
+        },
+    )
+    def get(self, request:Request):
+        expstests = ExpertSystemTest.objects.all()
+        result =[]
+        for exptest in expstests:
+            title = exptest.name
+            id = exptest.id
+            description = exptest.descriptions
+            skill = exptest.skill.name
+            count_of_questions = len(ExpertSystemQuestion.objects.filter(test = exptest))
+            result.append({'id':id,'title':title, 'description':description, 'skill':skill, 'count_of_questions':count_of_questions})
+        return Response(result, status=status.HTTP_200_OK)
+    
+
+class DeleteTest(BaseAPIView):
+    permission_classes=[IsAuthenticated]
+    @swagger_auto_schema(
+        operation_description="Удаление теста",
+        responses={
+            200: "Тест удален",
+            401: "Пользователь не авторизован",
+        },
+    )
+    def delete(self, request:Request, id:int):
+        test = ExpertSystemTest.objects.get(id=id)
+        for question in ExpertSystemQuestion.objects.filter(test=test):
+            for answer in ExpertSystemAnswer.objects.filter(question=question):
+                answer.delete()
+            question.delete()
+        test.delete()
+        return Response(status=status.HTTP_200_OK)
+    
+
+    
+class GetTestForRedact(BaseAPIView):
+    permission_classes=[IsAuthenticated]
+    @swagger_auto_schema(
+        operation_description="Получение теста экспертной системы",
+        responses={
+            200: "Тест получены",
+            401: "Пользователь не авторизован",
+        },
+        manual_parameters=[
+        openapi.Parameter('id', openapi.IN_QUERY, type=openapi.TYPE_INTEGER, description='id теста')
+    ]
+    )
+    def get(self, request:Request):
+        test_id = request.query_params.get('id')
+        test = ExpertSystemTest.objects.get(id=test_id)
+        questions = []
+        for question in ExpertSystemQuestion.objects.filter(test=test):
+            answers = []
+            for answer in ExpertSystemAnswer.objects.filter(question=question):
+                answers.append({'text':answer.text, 'isCorrect':answer.is_correct})
+            questions.append({'text':question.text, 'answers':answers})
+        result = {'title':test.name, 'skill':test.skill.name, 'description':test.descriptions, 'questions':questions}
+        return Response(result, status=status.HTTP_200_OK)
+    
+class ChangeTest(BaseAPIView):
+    permission_classes=[IsAuthenticated]
+    @swagger_auto_schema(
+        operation_description="Создание теста экспертной системы",
+        responses={
+            200: "Тест создан",
+            401: "Пользователь не авторизован",
+        },
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'title': openapi.Schema(
+                    type=openapi.TYPE_STRING, 
+                    description='Название'),
+                'skill': openapi.Schema(
+                    type=openapi.TYPE_STRING, 
+                    description='Навык'),
+                'description': openapi.Schema(
+                    type=openapi.TYPE_STRING, 
+                    description='Описание'),
+                'questions': openapi.Schema(
+                    type=openapi.TYPE_ARRAY,
+                    items=openapi.Items(type=openapi.TYPE_OBJECT),
+                    description='вопросы теста')
+            }
+        )
+    )
+    def patch(self, request:Request, id:int):
+        title = request.data['title']
+        skill = request.data['skill']
+        description = request.data['description']
+        expskill = ExpertSystemSkill.objects.get(name =skill)
+        test = ExpertSystemTest.objects.get(id=id)
+        if(test.name != title):
+            test.name = title
+        if(test.skill != expskill):
+            test.skill = expskill
+        if(test.descriptions != description):
+            test.descriptions = description
+        questions = request.data['questions']
+        for question in ExpertSystemQuestion.objects.filter(test=test):
+            for answer in ExpertSystemAnswer.objects.filter(question=question):
+                answer.delete()
+            question.delete()
+        for question in questions:
+            expquestion =ExpertSystemQuestion.objects.create(text = question['text'], test = test)
+            for answer in question['answers']:
+                ExpertSystemAnswer.objects.create(text = answer['text'], is_correct = answer['isCorrect'], question = expquestion)
+        return Response(status=status.HTTP_200_OK)
+    
+
+class GetSkillsForCreateTest(BaseAPIView):
+    permission_classes=[IsAuthenticated]
+    @swagger_auto_schema(
+        operation_description="Получение умения для создания теста",
+        responses={
+            200: "Тест создан",
+            401: "Пользователь не авторизован",
+        },
+    )
+    def get(self, request:Request):
+        skills =[]
+        for expskill in ExpertSystemSkill.objects.all():
+            skills.append({'id':expskill.id,'name':expskill.name})
+        for exptest in ExpertSystemTest.objects.all():
+            for t in range(0, len(skills)-1):
+                print(skills[t])
+                if(exptest.skill.name == skills[t]['name']):
+                    skills.remove(skills[t])
+        return Response(skills,status=status.HTTP_200_OK)
+    
+
+class GetSkillsForRedactTest(BaseAPIView):
+    permission_classes=[IsAuthenticated]
+    @swagger_auto_schema(
+        operation_description="Получение умения для редактирования теста",
+        responses={
+            200: "Тест создан",
+            401: "Пользователь не авторизован",
+        },
+    )
+    def get(self, request:Request, id:int):
+        skills =[]
+        test = ExpertSystemTest.objects.get(id=id)
+        for expskill in ExpertSystemSkill.objects.all():
+            skills.append({'id':expskill.id,'name':expskill.name})
+        for exptest in ExpertSystemTest.objects.all():
+            if(exptest!= test):
+                for t in range(0, len(skills)-1):
+                    print(skills[t])
+                    if(exptest.skill.name == skills[t]['name']):
+                        skills.remove(skills[t])
+        return Response(skills,status=status.HTTP_200_OK)
+
+class GetTestidBySkill(BaseAPIView):
+    permission_classes=[IsAuthenticated]
+    @swagger_auto_schema(
+        operation_description="Получение id теста умения",
+        responses={
+            200: "Тест получен",
+            401: "Пользователь не авторизован",
+        },
+         manual_parameters=[
+        openapi.Parameter('skill', openapi.IN_QUERY, type=openapi.TYPE_STRING, description='умение')
+    ]
+    )
+    def get(self, request:Request):
+        testid = {'id':None}
+        try:
+            expskill = ExpertSystemSkill.objects.get(name = request.query_params.get('skill'))
+            test = ExpertSystemTest.objects.get(skill=expskill)
+            testid['id'] = test.id
+        except:
+            testid['id'] = None
+        return Response(testid,status=status.HTTP_200_OK)
+
+class GetTest(BaseAPIView):
+    permission_classes=[IsAuthenticated]
+    @swagger_auto_schema(
+        operation_description="Получение теста экспертной системы",
+        responses={
+            200: "Тест получены",
+            401: "Пользователь не авторизован",
+        },
+        manual_parameters=[
+        openapi.Parameter('id', openapi.IN_QUERY, type=openapi.TYPE_INTEGER, description='id теста')
+    ]
+    )
+    def get(self, request:Request):
+        test_id = request.query_params.get('id')
+        test = ExpertSystemTest.objects.get(id=test_id)
+        questions = []
+        for question in ExpertSystemQuestion.objects.filter(test=test):
+            answers = []
+            for answer in ExpertSystemAnswer.objects.filter(question=question):
+                answers.append({'text':answer.text,})
+            questions.append({'text':question.text, 'answers':answers})
+        result = {'title':test.name, 'skill':test.skill.name, 'description':test.descriptions, 'questions':questions}
+        return Response(result, status=status.HTTP_200_OK)
+
+class TestEvaluation(BaseAPIView):
+    permission_classes=[IsAuthenticated]
+    @swagger_auto_schema(
+        operation_description="Оценка результатов теста",
+        responses={
+            200: "Тест оценен",
+            401: "Пользователь не авторизован",
+        },
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'testid': openapi.Schema(
+                    type=openapi.TYPE_INTEGER, 
+                    description='id теста'),
+                'answers': openapi.Schema(
+                    type=openapi.TYPE_ARRAY,
+                    items= openapi.Items(type=openapi.TYPE_OBJECT),
+                    description='Навык'),
+            }
+        )
+    )
+    def post(self, request:Request):
+        test = ExpertSystemTest.objects.get(id = request.data['testid'])
+        expuser = ExpertSystemStudentProfile.objects.get(user = request.user)
+        results =[]
+        answers = []
+        for answer in request.data['answers']:
+            question = ExpertSystemQuestion.objects.get(text = answer['questiontext'], test=test)
+            anses = ExpertSystemAnswer.objects.filter(question = question)
+            ans = anses[answer['seletedAnswerId']]
+            print(ans)
+            if(ans.text == answer['selectedAnswerText']):
+                results.append(ans.is_correct)
+                answers.append({'question':question, 'answer':ans })
+            else:
+                for a in anses:
+                    if(a.text ==answer['selectedAnswerText']):
+                        results.append(a.is_correct)
+                        answers.append({'question':question, 'answer':a })
+                        break
+        corrected = 0
+        for res in results:
+            if(res):
+                corrected+=1
+        result = corrected/len(results)*100
+        passed = False
+        print(result)
+        if(result>=60):
+            passed=True
+            skill = ExpertSystemUserSkill.objects.get(user = expuser, skill = test.skill)
+            skill.status = 'confirmed'
+            skill.save()
+        exptestres = ExpertSystemTestResult.objects.create(user = expuser,test=test, score = result, passed= passed )
+        for answer in answers:
+            ExpertSystemTestUserAnswer.objects.create(result = exptestres, question = answer.get('question'), answer = answer.get('answer'))
+        result={'testresultid':exptestres.id}
+        return Response(result,status=status.HTTP_200_OK)

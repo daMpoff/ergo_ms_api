@@ -156,7 +156,7 @@ class ExpertSystemUserSkill(models.Model):
         verbose_name_plural = "Навыки пользователей"
 
     def __str__(self):
-        return f"{self.user.username} — {self.skill.name} ({self.status})"
+        return f"{self.user} — {self.skill.name} ({self.status})"
     
 class ExpertSystemRole(models.Model):
     """
@@ -359,7 +359,7 @@ class ExpertSystemTestResult(models.Model):
         verbose_name_plural = "Результаты тестов"
 
     def __str__(self):
-        return f"{self.user.username} — {self.test.name}: {self.score}"
+        return f"{self.user} — {self.test.name}: {self.score}"
 
 
 class ExpertSystemVacancy(models.Model):
@@ -516,6 +516,37 @@ class ExpertSystemOrientationUserAnswer(models.Model):
         unique_together = ('result', 'question')
         verbose_name = "Ответ на ориентационный вопрос"
         verbose_name_plural = "Ответы на ориентационные вопросы"
+
+    def __str__(self):
+        return f"{self.result.user} — {self.question.id} → {self.answer.text}"
+
+
+class ExpertSystemTestUserAnswer(models.Model):
+    """
+    Ответ студента на конкретный вопрос ориентационного теста.
+    Позволяет в любой момент пересчитать баллы, посмотреть историю ответов.
+    """
+    result = models.ForeignKey(
+        ExpertSystemTestResult,
+        on_delete=models.CASCADE,
+        related_name='user_answers',
+        verbose_name="Результат теста"
+    )
+    question = models.ForeignKey(
+        ExpertSystemQuestion,
+        on_delete=models.CASCADE,
+        verbose_name="Вопрос"
+    )
+    answer = models.ForeignKey(
+        ExpertSystemAnswer,
+        on_delete=models.CASCADE,
+        verbose_name="Выбранный ответ"
+    )
+
+    class Meta:
+        unique_together = ('result', 'question')
+        verbose_name = "Ответ на тестовые вопросы"
+        verbose_name_plural = "Ответы на тестовые вопросы"
 
     def __str__(self):
         return f"{self.result.user} — {self.question.id} → {self.answer.text}"
