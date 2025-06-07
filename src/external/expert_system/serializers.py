@@ -115,7 +115,8 @@ class ExpertSystemStudentProfileSerializer(serializers.ModelSerializer):
             'first_name', 'last_name',
             'study_group', 'group_name',
             'has_experience',
-            'email', 'phone'
+            'email', 'phone',
+            'role',
         ]
 
 class ExpertsystemCompanyProfileSerializer(serializers.ModelSerializer):
@@ -209,7 +210,7 @@ class ExpertSystemCandidateApplicationSerializer(serializers.ModelSerializer):
         fields = ['id', 'vacancy', 'candidate', 'applied_at', 'match_score']
 
 class ExpertSystemOrientationTestResultSerializer(serializers.ModelSerializer):
-    user = serializers.PrimaryKeyRelatedField(queryset=ExpertSystemStudentProfile.objects.all())
+    user = serializers.HiddenField(default=serializers.CurrentUserDefault())
     test = serializers.PrimaryKeyRelatedField(queryset=ExpertSystemOrientationTest.objects.all())
     best_role = serializers.PrimaryKeyRelatedField(queryset=ExpertSystemRole.objects.all(), allow_null=True)
 

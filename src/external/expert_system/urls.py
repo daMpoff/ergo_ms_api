@@ -29,8 +29,8 @@ router.register(r'test-results', ExpertSystemTestResultViewSet)
 router.register(r'vacancies', ExpertSystemVacancyViewSet)
 router.register(r'vacancy-skills', ExpertSystemVacancySkillViewSet)
 router.register(r'applications', ExpertSystemCandidateApplicationViewSet)
-router.register(r'orientation-results', ExpertSystemOrientationTestResultViewSet)
-router.register(r'orientation-answers', ExpertSystemOrientationUserAnswerViewSet)
+router.register(r'orientation-test-results', ExpertSystemOrientationTestResultViewSet)
+router.register(r'orientation-user-answers', ExpertSystemOrientationUserAnswerViewSet)
 
 urlpatterns = [
     path('', include(router.urls)),

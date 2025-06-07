@@ -56,6 +56,28 @@ class ExpertSystemStudentProfileViewSet(viewsets.ModelViewSet):
             return Response({'detail': 'Профиль не найден.'}, status=404)
         serializer = self.get_serializer(profile)
         return Response(serializer.data)
+    
+    @action(detail=False, methods=['patch'], url_path='me/set-role')
+    def set_role(self, request):
+        """
+        Позволяет выбрать профессию студенту (role_id в теле запроса)
+        """
+        try:
+            profile = ExpertSystemStudentProfile.objects.get(user=request.user)
+        except ExpertSystemStudentProfile.DoesNotExist:
+            return Response({'detail': 'Профиль не найден.'}, status=404)
+
+        role_id = request.data.get('role')
+        if not role_id:
+            return Response({'detail': 'role (id) обязателен.'}, status=400)
+        try:
+            role = ExpertSystemRole.objects.get(id=role_id)
+        except ExpertSystemRole.DoesNotExist:
+            return Response({'detail': 'Роль не найдена.'}, status=404)
+
+        profile.role = role
+        profile.save()
+        return Response({'detail': 'Роль успешно сохранена.'}, status=200)
 
 class ExpertsystemCompanyProfileViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
@@ -199,6 +221,9 @@ class ExpertSystemOrientationTestResultViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = ExpertSystemOrientationTestResult.objects.select_related('user', 'test', 'best_role').all()
     serializer_class = ExpertSystemOrientationTestResultSerializer
+    def perform_create(self, serializer):
+        student_profile = ExpertSystemStudentProfile.objects.get(user=self.request.user)
+        serializer.save(user=student_profile)
 
 class ExpertSystemOrientationUserAnswerViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
