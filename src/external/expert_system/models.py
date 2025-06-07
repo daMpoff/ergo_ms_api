@@ -57,6 +57,13 @@ class ExpertSystemStudentProfile(models.Model):
         blank=True,
         default=''
     )
+    role = models.ForeignKey(
+    'ExpertSystemRole', 
+    on_delete=models.SET_NULL,
+    null=True,
+    blank=True,
+    verbose_name='Выбранная профессия'
+)
 
     def __str__(self):
         return f"{self.last_name} {self.first_name}"
