@@ -18,7 +18,7 @@ from .models import (
     ExpertSystemOrientationAnswer, ExpertSystemTest, ExpertSystemQuestion, ExpertSystemAnswer,
     ExpertSystemTestResult, ExpertSystemVacancy, ExpertSystemVacancySkill,
     ExpertSystemCandidateApplication, ExpertSystemOrientationTestResult,
-    ExpertSystemOrientationUserAnswer, ExpertSystemTestUserAnswer
+    ExpertSystemOrientationUserAnswer, ExpertSystemTestUserAnswer, ExpertSystemCourse
 )
 
 from .serializers import (
@@ -28,7 +28,7 @@ from .serializers import (
     ExpertSystemOrientationAnswerSerializer, ExpertSystemTestSerializer, ExpertSystemQuestionSerializer,
     ExpertSystemAnswerSerializer, ExpertSystemTestResultSerializer, ExpertSystemVacancySerializer,
     ExpertSystemVacancySkillSerializer, ExpertSystemCandidateApplicationSerializer,
-    ExpertSystemOrientationTestResultSerializer, ExpertSystemOrientationUserAnswerSerializer
+    ExpertSystemOrientationTestResultSerializer, ExpertSystemOrientationUserAnswerSerializer, ExpertSystemCourseSerializer
 )
 class ExpertSystemStudyGroupViewSet(viewsets.ModelViewSet):
     """
@@ -211,6 +211,16 @@ class ExpertSystemVacancyViewSet(viewsets.ModelViewSet):
     # для поиска по заголовку, описанию или имени навыка
     search_fields = ['title', 'description', 'required_skills__name']
 
+    def get_queryset(self):
+        user = self.request.user
+
+        if hasattr(user, 'company_profile'):
+            company_profile = user.company_profile
+            return ExpertSystemVacancy.objects.filter(employer=company_profile)\
+                    .select_related('employer')\
+                    .prefetch_related('required_skills')
+        return ExpertSystemVacancy.objects.select_related('employer').prefetch_related('required_skills')
+
     def perform_create(self, serializer):
         company_profile = self.request.user.company_profile
         serializer.save(employer=company_profile)
@@ -232,6 +242,7 @@ class ExpertSystemCandidateApplicationViewSet(viewsets.ModelViewSet):
     serializer_class = ExpertSystemCandidateApplicationSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['vacancy']
+
     def perform_create(self, serializer):
         user = self.request.user
         try:
@@ -257,6 +268,7 @@ class ExpertSystemOrientationTestResultViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = ExpertSystemOrientationTestResult.objects.select_related('user', 'test', 'best_role').all()
     serializer_class = ExpertSystemOrientationTestResultSerializer
+
     def perform_create(self, serializer):
         student_profile = ExpertSystemStudentProfile.objects.get(user=self.request.user)
         serializer.save(user=student_profile)
@@ -265,6 +277,19 @@ class ExpertSystemOrientationUserAnswerViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = ExpertSystemOrientationUserAnswer.objects.select_related('result', 'question', 'answer').all()
     serializer_class = ExpertSystemOrientationUserAnswerSerializer
+
+class ExpertSystemCourseViewSet(viewsets.ModelViewSet):
+    queryset = ExpertSystemCourse.objects.all()
+    serializer_class = ExpertSystemCourseSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        if hasattr(user, 'company_profile'):
+            company_profile = user.company_profile
+            return ExpertSystemCourse.objects.filter(employer=company_profile)
+        return ExpertSystemCourse.objects.all()
+
 
 class SetUserSkills(BaseAPIView):
     permission_classes = [IsAuthenticated]
