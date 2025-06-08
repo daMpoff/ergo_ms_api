@@ -10,7 +10,7 @@ from .views import (
     ExpertSystemOrientationTestResultViewSet, ExpertSystemOrientationUserAnswerViewSet,
     SetUserSkills, GetUserSkills, GetUserSkills, CreateTest, GetAllTests, DeleteTest,
     GetTestForRedact, ChangeTest, GetSkillsForCreateTest, GetSkillsForRedactTest,GetTestidBySkill, GetTest,
-    TestEvaluation
+    TestEvaluation, ExpertSystemCourseViewSet
 )
 
 router = DefaultRouter()
@@ -33,6 +33,7 @@ router.register(r'vacancy-skills', ExpertSystemVacancySkillViewSet)
 router.register(r'applications', ExpertSystemCandidateApplicationViewSet)
 router.register(r'orientation-test-results', ExpertSystemOrientationTestResultViewSet)
 router.register(r'orientation-user-answers', ExpertSystemOrientationUserAnswerViewSet)
+router.register(r'courses', ExpertSystemCourseViewSet)
 
 
 urlpatterns = [
