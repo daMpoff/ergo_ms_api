@@ -1,0 +1,177 @@
+[
+  {
+    "id": 1,
+    "vacancy": 1,
+    "technologies": [1, 2],
+    "competencies": [1, 2],
+    "description": "Профиль компетенций для Python-разработчика. Требуется опыт работы с Python, знание фреймворков Django/Flask, опыт работы с базами данных."
+  },
+  {
+    "id": 2,
+    "vacancy": 2,
+    "technologies": [3, 4],
+    "competencies": [3, 4],
+    "description": "Профиль компетенций для Frontend разработчика. Требуется опыт работы с React, знание JavaScript/TypeScript, понимание принципов UI/UX."
+  },
+  {
+    "id": 3,
+    "vacancy": 3,
+    "technologies": [5, 6],
+    "competencies": [5, 6],
+    "description": "Профиль компетенций для DevOps инженера. Требуется опыт работы с Docker, Kubernetes, CI/CD системами, мониторингом."
+  },
+  {
+    "id": 4,
+    "vacancy": 4,
+    "technologies": [7, 8],
+    "competencies": [7, 8],
+    "description": "Профиль компетенций для Data Scientist. Требуется опыт работы с Python, библиотеками для анализа данных, знание методов машинного обучения."
+  },
+  {
+    "id": 5,
+    "vacancy": 5,
+    "technologies": [9, 10],
+    "competencies": [9, 10],
+    "description": "Профиль компетенций для QA инженера. Требуется опыт ручного и автоматизированного тестирования, знание инструментов тестирования."
+  },
+  {
+    "id": 6,
+    "vacancy": 6,
+    "technologies": [11, 12],
+    "competencies": [11, 12],
+    "description": "Профиль компетенций для Backend разработчика. Требуется опыт работы с Node.js, PostgreSQL, разработки API и работы с базами данных."
+  },
+  {
+    "id": 7,
+    "vacancy": 7,
+    "technologies": [13, 14],
+    "competencies": [13, 14],
+    "description": "Профиль компетенций для Android разработчика. Требуется опыт работы с Kotlin, Android SDK, знание принципов Material Design."
+  },
+  {
+    "id": 8,
+    "vacancy": 8,
+    "technologies": [15, 16],
+    "competencies": [15, 16],
+    "description": "Профиль компетенций для iOS разработчика. Требуется опыт работы со Swift, iOS SDK, знание принципов Human Interface Guidelines."
+  },
+  {
+    "id": 9,
+    "vacancy": 9,
+    "technologies": [17, 18],
+    "competencies": [17, 18],
+    "description": "Профиль компетенций для Fullstack разработчика. Требуется опыт работы с JavaScript, Python, разработки API и фронтенда."
+  },
+  {
+    "id": 10,
+    "vacancy": 10,
+    "technologies": [19, 20],
+    "competencies": [19, 20],
+    "description": "Профиль компетенций для Project Manager. Требуется опыт управления IT-проектами, знание Agile методологий, навыки коммуникации."
+  },
+  {
+    "id": 11,
+    "vacancy": 11,
+    "technologies": [21, 22],
+    "competencies": [21, 22],
+    "description": "Профиль компетенций для Business Analyst. Требуется опыт в аналитике, знание UML, навыки моделирования бизнес-процессов."
+  },
+  {
+    "id": 12,
+    "vacancy": 12,
+    "technologies": [23, 24],
+    "competencies": [23, 24],
+    "description": "Профиль компетенций для System Administrator. Требуется опыт работы с Linux, сетевыми протоколами, администрированием серверов."
+  },
+  {
+    "id": 13,
+    "vacancy": 13,
+    "technologies": [25, 26],
+    "competencies": [25, 26],
+    "description": "Профиль компетенций для UI/UX Designer. Требуется опыт работы с Figma, Sketch, знание принципов дизайна интерфейсов."
+  },
+  {
+    "id": 14,
+    "vacancy": 14,
+    "technologies": [27, 28],
+    "competencies": [27, 28],
+    "description": "Профиль компетенций для Game Developer. Требуется опыт работы с Unity, C#, знание игровых механик и физики."
+  },
+  {
+    "id": 15,
+    "vacancy": 15,
+    "technologies": [29, 30],
+    "competencies": [29, 30],
+    "description": "Профиль компетенций для Network Engineer. Требуется опыт работы с Cisco, сетевыми протоколами, проектированием сетей."
+  },
+  {
+    "id": 16,
+    "vacancy": 16,
+    "technologies": [31, 32],
+    "competencies": [31, 32],
+    "description": "Профиль компетенций для Cloud Engineer. Требуется опыт работы с AWS, Azure, развертыванием облачных решений."
+  },
+  {
+    "id": 17,
+    "vacancy": 17,
+    "technologies": [33, 34],
+    "competencies": [33, 34],
+    "description": "Профиль компетенций для Security Specialist. Требуется опыт работы с SIEM, проведением аудитов безопасности, анализом угроз."
+  },
+  {
+    "id": 18,
+    "vacancy": 18,
+    "technologies": [35, 36],
+    "competencies": [35, 36],
+    "description": "Профиль компетенций для Product Owner. Требуется опыт управления продуктом, формирования бэклога, приоритизации задач."
+  },
+  {
+    "id": 19,
+    "vacancy": 19,
+    "technologies": [37, 38],
+    "competencies": [37, 38],
+    "description": "Профиль компетенций для Scrum Master. Требуется опыт работы по Scrum, фасилитации командных процессов."
+  },
+  {
+    "id": 20,
+    "vacancy": 20,
+    "technologies": [39, 40],
+    "competencies": [39, 40],
+    "description": "Профиль компетенций для BI Analyst. Требуется опыт работы с BI-инструментами, созданием отчетов, анализом данных."
+  },
+  {
+    "id": 21,
+    "vacancy": 21,
+    "technologies": [41, 42],
+    "competencies": [41, 42],
+    "description": "Профиль компетенций для SRE. Требуется опыт работы с мониторингом, алертингом, обеспечением SLA."
+  },
+  {
+    "id": 22,
+    "vacancy": 22,
+    "technologies": [43, 44],
+    "competencies": [43, 44],
+    "description": "Профиль компетенций для ML Engineer. Требуется опыт работы с TensorFlow, PyTorch, построением ML-моделей."
+  },
+  {
+    "id": 23,
+    "vacancy": 23,
+    "technologies": [45, 46],
+    "competencies": [45, 46],
+    "description": "Профиль компетенций для Tech Lead. Требуется опыт в архитектуре ПО, проведении код-ревью, техническом руководстве командой."
+  },
+  {
+    "id": 24,
+    "vacancy": 24,
+    "technologies": [47, 48],
+    "competencies": [47, 48],
+    "description": "Профиль компетенций для Support Engineer. Требуется опыт в технической поддержке, решении инцидентов, консультировании пользователей."
+  },
+  {
+    "id": 25,
+    "vacancy": 25,
+    "technologies": [49, 50],
+    "competencies": [49, 50],
+    "description": "Профиль компетенций для HR Specialist. Требуется опыт в HR, рекрутменте, проведении интервью, адаптации персонала."
+  }
+] 
