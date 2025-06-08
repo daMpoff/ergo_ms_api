@@ -236,7 +236,11 @@ class ExpertSystemOrientationUserAnswerSerializer(serializers.ModelSerializer):
         fields = ['id', 'result', 'question', 'answer']
         
 class ExpertSystemCourseSerializer(serializers.ModelSerializer):
+    role_name = serializers.SerializerMethodField()
+
     class Meta:
         model = ExpertSystemCourse
-        fields = '__all__'
+        fields = [f.name for f in ExpertSystemCourse._meta.fields] + ['role_name']
 
+    def get_role_name(self, obj):
+        return obj.role.name if obj.role else None
