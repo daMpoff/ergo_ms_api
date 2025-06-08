@@ -211,3 +211,13 @@ class RunTestsCommand(PoetryCommand):
 
     def __init__(self):
         super().__init__(self.django_command_name)
+
+class ExportDataCommand(PoetryCommand):
+    """
+    Команда для экспорта данных, хранимых в базе данных
+    """
+    poetry_command_name = 'export'
+    django_command_name = 'dumpdata'
+
+    def __init__(self):
+        super().__init__(self.django_command_name)
