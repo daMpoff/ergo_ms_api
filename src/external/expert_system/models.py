@@ -550,6 +550,12 @@ class ExpertSystemTestUserAnswer(models.Model):
     def __str__(self):
         return f"{self.result.user} — {self.question.id} → {self.answer.text}"
 class ExpertSystemCourse(models.Model):
+    employer = models.ForeignKey(
+        ExpertsystemCompanyProfile,
+        on_delete=models.CASCADE,
+        related_name='courses',
+        verbose_name="Работодатель"
+    )
     title = models.CharField("Название курса", max_length=200)
     description = models.TextField("Описание курса")
     role = models.ForeignKey(
