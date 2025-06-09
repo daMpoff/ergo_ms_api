@@ -647,3 +647,43 @@ class TestEvaluation(BaseAPIView):
             ExpertSystemTestUserAnswer.objects.create(result = exptestres, question = answer.get('question'), answer = answer.get('answer'))
         result={'testresultid':exptestres.id}
         return Response(result,status=status.HTTP_200_OK)
+
+class GetTestResult(BaseAPIView):
+    permission_classes=[IsAuthenticated]
+    @swagger_auto_schema(
+        operation_description="Получение результатов теста пользователя по ID",
+        responses={
+            200: "Результаты получены",
+            401: "Пользователь не авторизован",
+            404: "Результат не найден"
+        },
+        manual_parameters=[
+            openapi.Parameter('id', openapi.IN_QUERY, type=openapi.TYPE_INTEGER, description='id результата теста')
+        ]
+    )
+    def get(self, request: Request):
+        result_id = request.query_params.get('id')
+        try:
+            test_result = ExpertSystemTestResult.objects.get(id=result_id)
+            user_answers = ExpertSystemTestUserAnswer.objects.filter(result=test_result)
+            
+            answers = []
+            for user_answer in user_answers:
+                answers.append({
+                    'question': user_answer.question.text,
+                    'answer': user_answer.answer.text,
+                    'is_correct': user_answer.answer.is_correct
+                })
+            
+            result = {
+                'id': test_result.id,
+                'test_name': test_result.test.name,
+                'skill': test_result.test.skill.name,
+                'score': test_result.score,
+                'passed': test_result.passed,
+                'answers': answers
+            }
+            return Response(result, status=status.HTTP_200_OK)
+        except ExpertSystemTestResult.DoesNotExist:
+            return Response({'detail': 'Результат теста не найден'}, status=status.HTTP_404_NOT_FOUND)
+
