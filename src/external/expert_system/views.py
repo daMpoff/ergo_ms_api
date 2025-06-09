@@ -417,6 +417,11 @@ class DeleteTest(BaseAPIView):
     )
     def delete(self, request:Request, id:int):
         test = ExpertSystemTest.objects.get(id=id)
+        for exptestresult in ExpertSystemTestResult.objects.filter(test=test):
+            print(exptestresult)
+            for exptestuseranswer in ExpertSystemTestUserAnswer.objects.filter(result =exptestresult):
+                exptestuseranswer.delete()
+            exptestresult.delete()
         for question in ExpertSystemQuestion.objects.filter(test=test):
             for answer in ExpertSystemAnswer.objects.filter(question=question):
                 answer.delete()
@@ -620,7 +625,6 @@ class TestEvaluation(BaseAPIView):
             question = ExpertSystemQuestion.objects.get(text = answer['questiontext'], test=test)
             anses = ExpertSystemAnswer.objects.filter(question = question)
             ans = anses[answer['seletedAnswerId']]
-            print(ans)
             if(ans.text == answer['selectedAnswerText']):
                 results.append(ans.is_correct)
                 answers.append({'question':question, 'answer':ans })
@@ -636,11 +640,18 @@ class TestEvaluation(BaseAPIView):
                 corrected+=1
         result = corrected/len(results)*100
         passed = False
-        print(result)
+        student_profile = ExpertSystemStudentProfile.objects.get(user= request.user)
+        test_result = ExpertSystemTestResult.objects.get(test=test, user=student_profile)
+        ExpertSystemTestUserAnswer.objects.filter(result=test_result).delete()
+        test_result.delete()
+        skill = ExpertSystemUserSkill.objects.get(user = expuser, skill = test.skill)
         if(result>=60):
-            passed=True
-            skill = ExpertSystemUserSkill.objects.get(user = expuser, skill = test.skill)
+            passed=True    
             skill.status = 'confirmed'
+            skill.save()
+        else:
+            passed=False    
+            skill.status = 'unconfirmed'
             skill.save()
         exptestres = ExpertSystemTestResult.objects.create(user = expuser,test=test, score = result, passed= passed )
         for answer in answers:
@@ -686,4 +697,92 @@ class GetTestResult(BaseAPIView):
             return Response(result, status=status.HTTP_200_OK)
         except ExpertSystemTestResult.DoesNotExist:
             return Response({'detail': 'Результат теста не найден'}, status=status.HTTP_404_NOT_FOUND)
+
+class GetTestResultBySkillId(BaseAPIView):
+    permission_classes=[IsAuthenticated]
+    @swagger_auto_schema(
+        operation_description="Получение результатов теста пользователя по ID",
+        responses={
+            200: "Результаты получены",
+            401: "Пользователь не авторизован",
+            404: "Результат не найден"
+        },
+        manual_parameters=[
+            openapi.Parameter('id', openapi.IN_QUERY, type=openapi.TYPE_INTEGER, description='id навыка')
+        ]
+    )
+    def get(self, request: Request):
+        try:
+            skill_id = request.query_params.get('id')
+            expertsystemskill = ExpertSystemSkill.objects.get(id = skill_id)
+            expertsystemtest = ExpertSystemTest.objects.get(skill = expertsystemskill)
+            try:
+                studentprof = ExpertSystemStudentProfile.objects.get(user = request.user)
+                test_result = ExpertSystemTestResult.objects.get(test = expertsystemtest, user = studentprof)
+                result ={'id':test_result.id}
+                return Response(result, status=status.HTTP_200_OK)
+            except:
+                return Response({'detail': 'Результат теста не найден'}, status=status.HTTP_404_NOT_FOUND)
+        except:
+            return Response({'detail': 'Тест не найден'}, status=status.HTTP_404_NOT_FOUND)
+
+class DeleteTestResultBySkill(BaseAPIView):
+    permission_classes=[IsAuthenticated]
+    @swagger_auto_schema(
+        operation_description="Удаление результатов теста пользователя по навыку",
+        responses={
+            200: "Результат теста удален",
+            401: "Пользователь не авторизован",
+            404: "Результат не найден"
+        },
+        manual_parameters=[
+            openapi.Parameter('skill_id', openapi.IN_QUERY, type=openapi.TYPE_INTEGER, description='ID навыка')
+        ]
+    )
+    def delete(self, request: Request):
+        try:
+            user_skill_id = request.query_params.get('skill_id')
+            if not user_skill_id:
+                return Response({'detail': 'ID навыка обязателен'}, status=status.HTTP_400_BAD_REQUEST)
+            print(user_skill_id)
+            # Получаем навык
+            user_skill = ExpertSystemUserSkill.objects.get(id = user_skill_id)
+            skill = user_skill.skill
+            
+            # Получаем тест для этого навыка
+            test = ExpertSystemTest.objects.get(skill=skill)
+            
+            # Получаем профиль студента
+            student_profile = ExpertSystemStudentProfile.objects.get(user=request.user)
+            
+            # Получаем результат теста
+            test_result = ExpertSystemTestResult.objects.get(test=test, user=student_profile)
+            
+            # Удаляем все ответы пользователя для этого результата
+            ExpertSystemTestUserAnswer.objects.filter(result=test_result).delete()
+            
+            # Удаляем сам результат теста
+            test_result.delete()
+            
+            # Если тест был пройден успешно, сбрасываем статус навыка
+            user_skill = ExpertSystemUserSkill.objects.get(user=student_profile, skill=skill)
+            if user_skill.status == 'confirmed':
+                user_skill.status = 'pending'
+                user_skill.save()
+            
+            return Response({'detail': 'Результат теста успешно удален'}, status=status.HTTP_200_OK)
+            
+        except ExpertSystemSkill.DoesNotExist:
+            return Response({'detail': 'Навык не найден'}, status=status.HTTP_404_NOT_FOUND)
+        except ExpertSystemTest.DoesNotExist:
+            return Response({'detail': 'Тест для данного навыка не найден'}, status=status.HTTP_404_NOT_FOUND)
+        except ExpertSystemStudentProfile.DoesNotExist:
+            return Response({'detail': 'Профиль студента не найден'}, status=status.HTTP_404_NOT_FOUND)
+        except ExpertSystemTestResult.DoesNotExist:
+            return Response({'detail': 'Результат теста не найден'}, status=status.HTTP_404_NOT_FOUND)
+        except ExpertSystemUserSkill.DoesNotExist:
+            # Если навык не был добавлен пользователю, просто удаляем результат
+            return Response({'detail': 'Результат теста успешно удален'}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'detail': f'Ошибка при удалении: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 

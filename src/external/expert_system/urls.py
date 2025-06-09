@@ -10,7 +10,7 @@ from .views import (
     ExpertSystemOrientationTestResultViewSet, ExpertSystemOrientationUserAnswerViewSet,
     SetUserSkills, GetUserSkills, GetUserSkills, CreateTest, GetAllTests, DeleteTest,
     GetTestForRedact, ChangeTest, GetSkillsForCreateTest, GetSkillsForRedactTest,GetTestidBySkill, GetTest,
-    TestEvaluation, ExpertSystemCourseViewSet, GetTestResult
+    TestEvaluation, ExpertSystemCourseViewSet, GetTestResult, GetTestResultBySkillId, DeleteTestResultBySkill
 )
 
 router = DefaultRouter()
@@ -50,5 +50,7 @@ urlpatterns = [
     path('get-test-id-by-skill', GetTestidBySkill.as_view(), name='Get test id by skill'),
     path('get-test-for-redact', GetTestForRedact.as_view(), name='Get test'),
     path('evaluate-test', TestEvaluation.as_view(), name='Evaluate test'),
-    path('get-test-result', GetTestResult.as_view(), name='Get test result')
-
+    path('get-test-result', GetTestResult.as_view(), name='Get test result'),
+    path('get-test-result-by-skill-id', GetTestResultBySkillId.as_view(), name='Get test result by skill id'),
+    path('delete-test-result-by-skill', DeleteTestResultBySkill.as_view(), name='Delete test result by skill')
+]
