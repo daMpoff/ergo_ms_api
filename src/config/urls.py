@@ -7,6 +7,8 @@
 из внешних модулей, находящихся в директории `EXTERNAL_MODULES_DIR`.
 """
 
+from django.urls import path, include
+
 from src.config.settings.auto_api import AUTO_API_CONFIG_PATH
 from src.core.utils.auto_api.methods_generation import generate_routes_from_config
 
@@ -24,6 +26,12 @@ urlpatterns += core_modules_urlpatterns
 # обнаруженные в директории EXTERNAL_MODULES_DIR
 external_modules_urlpatterns = discover_installed_app_urls(EXTERNAL_MODULES_DIR, prefix='src.external')
 urlpatterns += external_modules_urlpatterns
+
+# Добавляем дополнительные URL patterns с дефисами для совместимости с фронтендом
+urlpatterns += [
+    # Добавляем маршрут с дефисом для модуля porosity_analysis
+    path('porosity-analysis/', include('src.external.porosity_analysis.urls')),
+]
 
 # Добавляем URL-конфигурации из конфигурационного файла auto_api.yaml
 config_urlpatterns = generate_routes_from_config(AUTO_API_CONFIG_PATH)

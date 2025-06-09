@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
+from drf_yasg import openapi
 from ..bi_connections.models import Connection
 from .models import FileUpload, Dataset, DataSetTable, DataSetField
 
@@ -63,6 +64,12 @@ class DatasetSerializer(serializers.ModelSerializer):
         
 class FileUploadSerializer(serializers.ModelSerializer):
     file_url = serializers.SerializerMethodField()
+    # Добавляем swagger_schema_fields для корректной генерации схемы
+    file = serializers.FileField(
+        required=False,
+        allow_null=True,
+        help_text="Файл для загрузки"
+    )
 
     class Meta:
         model = FileUpload
@@ -73,6 +80,15 @@ class FileUploadSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'uploaded_at']
         extra_kwargs = {
             'owner': {'read_only': True},
+        }
+        swagger_schema_fields = {
+            "properties": {
+                "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Файл для загрузки"
+                }
+            }
         }
 
     def get_file_url(self, obj):

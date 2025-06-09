@@ -80,6 +80,13 @@ class DatasetDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
+        # Добавляем проверку для избежания ошибки с AnonymousUser при генерации Swagger
+        if getattr(self, 'swagger_fake_view', False):
+            return Dataset.objects.none()
+        
+        if not self.request.user.is_authenticated:
+            return Dataset.objects.none()
+            
         return Dataset.objects.filter(owner=self.request.user)
 
 
@@ -91,9 +98,18 @@ class DatasetViewSet(viewsets.ModelViewSet):
     """
     Полный CRUD для Dataset через ViewSet.
     """
-    queryset = Dataset.objects.all()
     serializer_class = DatasetSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        # Добавляем проверку для избежания ошибки с AnonymousUser при генерации Swagger
+        if getattr(self, 'swagger_fake_view', False):
+            return Dataset.objects.none()
+        
+        if not self.request.user.is_authenticated:
+            return Dataset.objects.none()
+            
+        return Dataset.objects.filter(owner=self.request.user)
 
     def perform_create(self, serializer):
         dataset = serializer.save(owner=self.request.user)
@@ -140,9 +156,18 @@ class DataSetTableViewSet(viewsets.ModelViewSet):
     """
     CRUD для присоединённых таблиц датасета.
     """
-    queryset = DataSetTable.objects.all()
     serializer_class = DataSetTableSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        # Добавляем проверку для избежания ошибки с AnonymousUser при генерации Swagger
+        if getattr(self, 'swagger_fake_view', False):
+            return DataSetTable.objects.none()
+        
+        if not self.request.user.is_authenticated:
+            return DataSetTable.objects.none()
+            
+        return DataSetTable.objects.filter(dataset__owner=self.request.user)
     
     def perform_create(self, serializer):
         table = serializer.save()
@@ -183,9 +208,18 @@ class DataSetFieldViewSet(viewsets.ModelViewSet):
     """
     CRUD для полей, которые входят в датасет.
     """
-    queryset = DataSetField.objects.all()
     serializer_class = DataSetFieldSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        # Добавляем проверку для избежания ошибки с AnonymousUser при генерации Swagger
+        if getattr(self, 'swagger_fake_view', False):
+            return DataSetField.objects.none()
+        
+        if not self.request.user.is_authenticated:
+            return DataSetField.objects.none()
+            
+        return DataSetField.objects.filter(dataset__owner=self.request.user)
 
 # ==============================================================================
 # FileUpload endpoints
@@ -201,6 +235,13 @@ class FileUploadView(generics.ListCreateAPIView):
     parser_classes = [MultiPartParser, FormParser]
 
     def get_queryset(self):
+        # Добавляем проверку для избежания ошибки с AnonymousUser при генерации Swagger
+        if getattr(self, 'swagger_fake_view', False):
+            return FileUpload.objects.none()
+        
+        if not self.request.user.is_authenticated:
+            return FileUpload.objects.none()
+            
         return FileUpload.objects.filter(owner=self.request.user)
 
     def perform_create(self, serializer):
@@ -217,6 +258,13 @@ class FileUploadDetailView(generics.RetrieveUpdateDestroyAPIView):
     parser_classes = [MultiPartParser, FormParser]
 
     def get_queryset(self):
+        # Добавляем проверку для избежания ошибки с AnonymousUser при генерации Swagger
+        if getattr(self, 'swagger_fake_view', False):
+            return FileUpload.objects.none()
+        
+        if not self.request.user.is_authenticated:
+            return FileUpload.objects.none()
+            
         return FileUpload.objects.filter(owner=self.request.user)
 
     def retrieve(self, request, *args, **kwargs):
@@ -308,6 +356,13 @@ class FileUploadByConnectionView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
+        # Добавляем проверку для избежания ошибки с AnonymousUser при генерации Swagger
+        if getattr(self, 'swagger_fake_view', False):
+            return FileUpload.objects.none()
+        
+        if not self.request.user.is_authenticated:
+            return FileUpload.objects.none()
+            
         conn_id = self.kwargs['connection_id']
         return FileUpload.objects.filter(owner=self.request.user, connection_id=conn_id).order_by('-uploaded_at')
 
