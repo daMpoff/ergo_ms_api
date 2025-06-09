@@ -57,6 +57,13 @@ class ExpertSystemStudentProfile(models.Model):
         blank=True,
         default=''
     )
+    role = models.ForeignKey(
+    'ExpertSystemRole', 
+    on_delete=models.SET_NULL,
+    null=True,
+    blank=True,
+    verbose_name='Выбранная профессия'
+)
 
     def __str__(self):
         return f"{self.last_name} {self.first_name}"
@@ -466,7 +473,6 @@ class ExpertSystemOrientationTestResult(models.Model):
         verbose_name="Тест"
     )
     taken_at = models.DateTimeField(auto_now_add=True, verbose_name="Дата прохождения")
-    # Можно хранить сразу лучшую роль и процент
     best_role = models.ForeignKey(
         ExpertSystemRole,
         on_delete=models.SET_NULL,
@@ -543,3 +549,21 @@ class ExpertSystemTestUserAnswer(models.Model):
 
     def __str__(self):
         return f"{self.result.user} — {self.question.id} → {self.answer.text}"
+class ExpertSystemCourse(models.Model):
+    employer = models.ForeignKey(
+        ExpertsystemCompanyProfile,
+        on_delete=models.CASCADE,
+        related_name='courses',
+        verbose_name="Работодатель"
+    )
+    title = models.CharField("Название курса", max_length=200)
+    description = models.TextField("Описание курса")
+    role = models.ForeignKey(
+        ExpertSystemRole,
+        on_delete=models.CASCADE,
+        related_name='courses',
+        verbose_name="Профессия (роль)"
+    )
+
+    def __str__(self):
+        return f"{self.title} ({self.role.name})"

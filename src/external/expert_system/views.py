@@ -9,6 +9,7 @@ from src.core.utils.base.base_views import BaseAPIView
 from rest_framework.request import Request
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter
+from rest_framework.exceptions import ValidationError
 
 from .models import (
     ExpertSystemStudyGroup, ExpertSystemStudentProfile, ExpertsystemCompanyProfile,
@@ -17,7 +18,7 @@ from .models import (
     ExpertSystemOrientationAnswer, ExpertSystemTest, ExpertSystemQuestion, ExpertSystemAnswer,
     ExpertSystemTestResult, ExpertSystemVacancy, ExpertSystemVacancySkill,
     ExpertSystemCandidateApplication, ExpertSystemOrientationTestResult,
-    ExpertSystemOrientationUserAnswer, ExpertSystemTestUserAnswer
+    ExpertSystemOrientationUserAnswer, ExpertSystemTestUserAnswer, ExpertSystemCourse
 )
 
 from .serializers import (
@@ -27,7 +28,7 @@ from .serializers import (
     ExpertSystemOrientationAnswerSerializer, ExpertSystemTestSerializer, ExpertSystemQuestionSerializer,
     ExpertSystemAnswerSerializer, ExpertSystemTestResultSerializer, ExpertSystemVacancySerializer,
     ExpertSystemVacancySkillSerializer, ExpertSystemCandidateApplicationSerializer,
-    ExpertSystemOrientationTestResultSerializer, ExpertSystemOrientationUserAnswerSerializer
+    ExpertSystemOrientationTestResultSerializer, ExpertSystemOrientationUserAnswerSerializer, ExpertSystemCourseSerializer
 )
 class ExpertSystemStudyGroupViewSet(viewsets.ModelViewSet):
     """
@@ -36,8 +37,6 @@ class ExpertSystemStudyGroupViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = ExpertSystemStudyGroup.objects.all()
     serializer_class = ExpertSystemStudyGroupSerializer
-
-
 
 class ExpertSystemStudentProfileViewSet(viewsets.ModelViewSet):
     """
@@ -59,6 +58,28 @@ class ExpertSystemStudentProfileViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(profile)
         return Response(serializer.data)
     
+    @action(detail=False, methods=['patch'], url_path='me/set-role')
+    def set_role(self, request):
+        """
+        Позволяет выбрать профессию студенту (role_id в теле запроса)
+        """
+        try:
+            profile = ExpertSystemStudentProfile.objects.get(user=request.user)
+        except ExpertSystemStudentProfile.DoesNotExist:
+            return Response({'detail': 'Профиль не найден.'}, status=404)
+
+        role_id = request.data.get('role')
+        if not role_id:
+            return Response({'detail': 'role (id) обязателен.'}, status=400)
+        try:
+            role = ExpertSystemRole.objects.get(id=role_id)
+        except ExpertSystemRole.DoesNotExist:
+            return Response({'detail': 'Роль не найдена.'}, status=404)
+
+        profile.role = role
+        profile.save()
+        return Response({'detail': 'Роль успешно сохранена.'}, status=200)
+
 class ExpertsystemCompanyProfileViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = ExpertsystemCompanyProfile.objects.select_related('user').prefetch_related(
@@ -75,6 +96,19 @@ class ExpertsystemCompanyProfileViewSet(viewsets.ModelViewSet):
         except ExpertsystemCompanyProfile.DoesNotExist:
             return Response({'detail': 'Профиль не найден.'}, status=404)
         serializer = self.get_serializer(profile)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'], url_path='my-vacancies')
+    def my_vacancies(self, request):
+        """
+        Возвращает вакансии, созданные текущим работодателем (компанией)
+        """
+        try:
+            profile = ExpertsystemCompanyProfile.objects.prefetch_related('vacancies').get(user=request.user)
+        except ExpertsystemCompanyProfile.DoesNotExist:
+            return Response({'detail': 'Профиль работодателя не найден.'}, status=404)
+        vacancies = profile.vacancies.all()
+        serializer = ExpertSystemVacancySerializer(vacancies, many=True)
         return Response(serializer.data)
 
 class ExpertSystemSkillViewSet(viewsets.ModelViewSet):
@@ -103,7 +137,7 @@ class ExpertSystemRoleViewSet(viewsets.ModelViewSet):
 
 class ExpertSystemTrajectoryStepViewSet(viewsets.ModelViewSet):
     """
-    CRUD для шага обучени
+    CRUD для шага обучения
     """
     permission_classes = [IsAuthenticated]
     queryset = ExpertSystemTrajectoryStep.objects.select_related('role').all()
@@ -177,6 +211,16 @@ class ExpertSystemVacancyViewSet(viewsets.ModelViewSet):
     # для поиска по заголовку, описанию или имени навыка
     search_fields = ['title', 'description', 'required_skills__name']
 
+    def get_queryset(self):
+        user = self.request.user
+
+        if hasattr(user, 'company_profile'):
+            company_profile = user.company_profile
+            return ExpertSystemVacancy.objects.filter(employer=company_profile)\
+                    .select_related('employer')\
+                    .prefetch_related('required_skills')
+        return ExpertSystemVacancy.objects.select_related('employer').prefetch_related('required_skills')
+
     def perform_create(self, serializer):
         company_profile = self.request.user.company_profile
         serializer.save(employer=company_profile)
@@ -191,21 +235,61 @@ class ExpertSystemVacancySkillViewSet(viewsets.ModelViewSet):
 
 class ExpertSystemCandidateApplicationViewSet(viewsets.ModelViewSet):
     """
-    CRUD для работы со связью Вакансия-Навык
+    CRUD для работы со вакансиями кандитатов
     """
     permission_classes = [IsAuthenticated]
     queryset = ExpertSystemCandidateApplication.objects.select_related('vacancy', 'candidate').all()
     serializer_class = ExpertSystemCandidateApplicationSerializer
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['vacancy']
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        try:
+            student_profile = ExpertSystemStudentProfile.objects.get(user=user)
+        except ExpertSystemStudentProfile.DoesNotExist:
+            raise ValidationError("Профиль студента не обнаружен, для данного пользователя")
+
+        serializer.save(candidate=student_profile)
+        
+    def get_queryset(self):
+        qs = super().get_queryset()
+        my = self.request.query_params.get('my')
+        if my == '1' and self.request.user.is_authenticated:
+            try:
+                profile = ExpertSystemStudentProfile.objects.get(user=self.request.user)
+                qs = qs.filter(candidate=profile)
+            except ExpertSystemStudentProfile.DoesNotExist:
+                return qs.none()
+        return qs
+
 
 class ExpertSystemOrientationTestResultViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = ExpertSystemOrientationTestResult.objects.select_related('user', 'test', 'best_role').all()
     serializer_class = ExpertSystemOrientationTestResultSerializer
 
+    def perform_create(self, serializer):
+        student_profile = ExpertSystemStudentProfile.objects.get(user=self.request.user)
+        serializer.save(user=student_profile)
+
 class ExpertSystemOrientationUserAnswerViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = ExpertSystemOrientationUserAnswer.objects.select_related('result', 'question', 'answer').all()
     serializer_class = ExpertSystemOrientationUserAnswerSerializer
+
+class ExpertSystemCourseViewSet(viewsets.ModelViewSet):
+    queryset = ExpertSystemCourse.objects.all()
+    serializer_class = ExpertSystemCourseSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        if hasattr(user, 'company_profile'):
+            company_profile = user.company_profile
+            return ExpertSystemCourse.objects.filter(employer=company_profile)
+        return ExpertSystemCourse.objects.all()
+
 
 class SetUserSkills(BaseAPIView):
     permission_classes = [IsAuthenticated]

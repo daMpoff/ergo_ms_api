@@ -8,7 +8,7 @@ from .models import (
     ExpertSystemOrientationAnswer, ExpertSystemTest, ExpertSystemQuestion, ExpertSystemAnswer,
     ExpertSystemTestResult, ExpertSystemVacancy, ExpertSystemVacancySkill,
     ExpertSystemCandidateApplication, ExpertSystemOrientationTestResult,
-    ExpertSystemOrientationUserAnswer
+    ExpertSystemOrientationUserAnswer, ExpertSystemCourse
 )
 
 class ExpertSystemUserSkillSerializer(serializers.ModelSerializer):
@@ -115,7 +115,8 @@ class ExpertSystemStudentProfileSerializer(serializers.ModelSerializer):
             'first_name', 'last_name',
             'study_group', 'group_name',
             'has_experience',
-            'email', 'phone'
+            'email', 'phone',
+            'role',
         ]
 
 class ExpertsystemCompanyProfileSerializer(serializers.ModelSerializer):
@@ -202,14 +203,22 @@ class ExpertSystemVacancySkillSerializer(serializers.ModelSerializer):
 
 class ExpertSystemCandidateApplicationSerializer(serializers.ModelSerializer):
     vacancy = serializers.PrimaryKeyRelatedField(queryset=ExpertSystemVacancy.objects.all())
-    candidate = serializers.PrimaryKeyRelatedField(queryset=ExpertSystemStudentProfile.objects.all())
-
+    vacancy_title = serializers.CharField(source='vacancy.title', read_only=True)
+    candidate = serializers.PrimaryKeyRelatedField(read_only=True)
+    candidate_name = serializers.SerializerMethodField()
+    match_score = serializers.FloatField(required=False)
     class Meta:
         model = ExpertSystemCandidateApplication
-        fields = ['id', 'vacancy', 'candidate', 'applied_at', 'match_score']
+        fields = ['id', 'vacancy', 'candidate', 'applied_at', 'match_score', 'candidate_name', 'vacancy_title']
+        
+    def get_candidate_name(self, obj):
+        try:
+            return f"{obj.candidate.first_name} {obj.candidate.last_name}".strip()
+        except Exception:
+            return f"ID: {obj.candidate_id}"
 
 class ExpertSystemOrientationTestResultSerializer(serializers.ModelSerializer):
-    user = serializers.PrimaryKeyRelatedField(queryset=ExpertSystemStudentProfile.objects.all())
+    user = serializers.HiddenField(default=serializers.CurrentUserDefault())
     test = serializers.PrimaryKeyRelatedField(queryset=ExpertSystemOrientationTest.objects.all())
     best_role = serializers.PrimaryKeyRelatedField(queryset=ExpertSystemRole.objects.all(), allow_null=True)
 
@@ -225,3 +234,13 @@ class ExpertSystemOrientationUserAnswerSerializer(serializers.ModelSerializer):
     class Meta:
         model = ExpertSystemOrientationUserAnswer
         fields = ['id', 'result', 'question', 'answer']
+        
+class ExpertSystemCourseSerializer(serializers.ModelSerializer):
+    role_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ExpertSystemCourse
+        fields = [f.name for f in ExpertSystemCourse._meta.fields] + ['role_name']
+
+    def get_role_name(self, obj):
+        return obj.role.name if obj.role else None
