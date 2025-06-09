@@ -63,6 +63,7 @@ class SectionTaskView(APIView):
                     card = {
                         'id': task.id,
                         'title': task.text,
+                        'isdone':task.isdone,
                         'priority': task.priority,
                         'description': task.description,
                         'user_id': task.user.id if task.user else None,
@@ -433,6 +434,33 @@ class DeleteSectionView(APIView):
                     "success": False,
                     "error": str(e),
                     "message": "Ошибка при удалении раздела"
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class ToggleTaskStatusView(APIView):
+    @transaction.atomic
+    def post(self, request, task_id):
+        try:
+            task = get_object_or_404(Task, id=task_id)
+            task.isdone = not task.isdone  # Инвертируем текущее значение
+            task.save()
+            
+            return Response(
+                {
+                    "success": True,
+                    "new_status": task.isdone,
+                    "message": f"Статус задачи успешно изменён на {'выполнена' if task.isdone else 'не выполнена'}"
+                },
+                status=status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            return Response(
+                {
+                    "success": False,
+                    "error": str(e),
+                    "message": "Ошибка при изменении статуса задачи"
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
