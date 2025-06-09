@@ -40,7 +40,7 @@ scripts/
 | createsuperuser | createsuperuser | Создание суперпользователя |
 | celery_worker | celery_worker | Запуск Celery worker |
 | celery_beat | celery_beat | Запуск Celery beat |
-
+| export | dumpdata | Экспорт данных |
 
 ## Использование
 
@@ -84,7 +84,10 @@ poetry run cmd add_module cms adp
 poetry run cmd add_module cms adp superuser
 poetry run cmd add_module cms adp roles
 ```
-
+7. Экспорт данных:
+```bash
+poetry run cmd export [app[.Model]] [--output путь/к/файлу.json|xml|yaml] [--format json|xml|yaml]
+```
 ### Интеграция с Poetry
 
 Для работы скриптов необходимо добавить следующую секцию в `pyproject.toml`:
