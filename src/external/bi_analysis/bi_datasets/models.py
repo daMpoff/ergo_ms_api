@@ -31,6 +31,7 @@ class FileUpload(models.Model):
     file = models.FileField(upload_to='uploads/')
     uploaded_at = models.DateTimeField(auto_now_add=True)
     owner = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, related_name='uploaded_files')
+    columns_info = models.JSONField(null=True, blank=True, default=dict)
 
     original_filename = models.CharField(max_length=255, blank=True, null=True)
     file_type = models.CharField(max_length=50, blank=True, null=True)
@@ -61,6 +62,9 @@ class Dataset(models.Model):
     )
     table_ref   = models.CharField(max_length=255, blank=True, null=True)
 
+    def fields_for_current_dataset(self):
+        return self.fields.all()
+    
     def __str__(self):
         return self.name
 
@@ -86,6 +90,9 @@ class DataSetTable(models.Model):
         FileUpload, null=True, blank=True, on_delete=models.SET_NULL, related_name='dataset_tables'
     )
     sheet_name = models.CharField(max_length=255, blank=True, null=True)
+    joined_on_type = models.CharField(max_length=16, null=True, blank=True)
+    joined_on_left = models.CharField(max_length=128, null=True, blank=True)
+    joined_on_right = models.CharField(max_length=128, null=True, blank=True)
 
     def __str__(self):
         return f"{self.dataset.name} → {self.table_name}"

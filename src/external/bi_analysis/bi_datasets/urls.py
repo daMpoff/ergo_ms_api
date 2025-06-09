@@ -1,28 +1,33 @@
 from django.urls import path, include
-from .views import DataSetFieldViewSet, DataSetTableViewSet
-from .views import (
-    DatasetListCreateView, DatasetDetailView, DatasetPreviewView,
-    FileUploadView, FileUploadDetailView,
-    FinalizeUploadView, XlsxSheetListView,
-    XlsxTempPreviewView, FileUploadByConnectionView, DataSetFieldViewSet,
-    RenameDatasetColumnsView
-)
 from rest_framework.routers import SimpleRouter
+from .views import (
+    DatasetDetailView, DatasetPreviewView,
+    DataSetTableViewSet, DataSetFieldViewSet,
+    TempUploadView, FileUploadDetailView,
+    FinalizeUploadView, XlsxSheetListView,
+    XlsxTempPreviewView, FileUploadByConnectionView, AddTableToDatasetView,
+    RenameDatasetColumnsView, DatasetListCreateView, DatasetJoinTableView, DataSetTableColumnsView
+)
 
 router = SimpleRouter()
-router.register(r'fields', DataSetFieldViewSet, basename='dataset-fields')
 router.register(r'tables', DataSetTableViewSet, basename='dataset-tables')
+router.register(r'fields', DataSetFieldViewSet, basename='dataset-fields')
 
 urlpatterns = [
-    path('', include(router.urls)),
-    path('', DatasetListCreateView.as_view(), name='dataset-list-create'),
-    path('<int:pk>/', DatasetDetailView.as_view(), name='dataset-detail'),
-    path('<int:pk>/preview/', DatasetPreviewView.as_view(), name='dataset-preview'),
-    path('<int:pk>/rename_columns/', RenameDatasetColumnsView.as_view()),
-    path('upload/', FileUploadView.as_view(), name='file-upload'),
+    path('upload/', TempUploadView.as_view(), name='temp-upload'),
     path('upload/<int:pk>/', FileUploadDetailView.as_view(), name='file-upload-detail'),
     path('upload/finalize/', FinalizeUploadView.as_view(), name='finalize-upload'),
     path('xlsx/sheets/', XlsxSheetListView.as_view(), name='xlsx-sheet-list'),
     path('xlsx/preview/', XlsxTempPreviewView.as_view(), name='xlsx-preview'),
     path('connection/<int:connection_id>/files/', FileUploadByConnectionView.as_view(), name='fileupload-by-connection'),
+    path('<int:pk>/auto-join/', DatasetJoinTableView.as_view(), name='dataset-auto-join'),
+    path('<int:pk>/add-table/', AddTableToDatasetView.as_view(), name="add_table_to_dataset"),
+    path('tables/<int:pk>/columns/', DataSetTableColumnsView.as_view(), name='dataset-table-columns'),
+
+    path('', DatasetListCreateView.as_view(), name='bi_datasets-list-create'),
+    path('<int:pk>/', DatasetDetailView.as_view(), name='bi_datasets-detail'),
+    path('<int:pk>/preview/', DatasetPreviewView.as_view(), name='bi_datasets-preview'),
+    path('<int:pk>/rename_columns/', RenameDatasetColumnsView.as_view(), name='bi_datasets-rename-columns'),
+
+    path('', include(router.urls)),
 ]
