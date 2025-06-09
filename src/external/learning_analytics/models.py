@@ -1,40 +1,5 @@
 from django.db import models
 
-# Модель Technology представляет ту или иную технологию, осваиваемую в процессе изучения дисциплин.
-class Technology(models.Model):
-    """
-    Модель Technology представляет ту или иную технологию, осваиваемую в процессе изучения дисциплин.
-
-    Attributes:
-        name (CharField): Название технологии. Максимальная длина — 60 символов.
-        description (TextField): Описание технологии. Максимальная длина — 400 символов.
-        popularity (DecimalField): Уровень популярности технологии от 0 до 100, %.
-        rating (DecimalField): Рейтинг технологии от 0 до 5.
-    """
-    name = models.CharField(max_length=60)
-    description = models.TextField(max_length=400)
-    popularity = models.DecimalField(max_digits=4, decimal_places=2)
-    rating = models.DecimalField(max_digits=3, decimal_places=2)
-
-    def __str__(self):
-        return f"{self.name} - {self.description}"
-
-# Модель Competention представляет компетенции 
-class Competention(models.Model):
-    """
-    Модель Competention представляет компетенции.
-
-    Attributes:
-        code (CharField): Уникальный код компетенции. Максимальная длина — 10 символов.
-        name (CharField): Название компетенции. Максимальная длина — 60 символов.
-        description (TextField): Описание компетенции. Максимальная длина — 400 символов.
-    """
-    code = models.CharField(max_length=10)
-    name = models.CharField(max_length=200)
-    description = models.TextField(max_length=400)
-
-    def __str__(self):
-        return f"{self.code} ({self.name})"
 
 # Модель Employer представляет работодателя
 class Employer(models.Model):
@@ -63,5 +28,4 @@ class Employer(models.Model):
     class Meta:
         verbose_name = "Работодатель"
         verbose_name_plural = "Работодатели"
-
-
+        db_table = "la_employer"

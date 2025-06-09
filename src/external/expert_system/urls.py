@@ -51,4 +51,4 @@ urlpatterns = [
     path('get-test-for-redact', GetTestForRedact.as_view(), name='Get test'),
     path('evaluate-test', TestEvaluation.as_view(), name='Evaluate test'),
     path('get-test-result', GetTestResult.as_view(), name='Get test result')
-]
+

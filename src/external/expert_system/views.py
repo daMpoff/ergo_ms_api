@@ -686,3 +686,4 @@ class GetTestResult(BaseAPIView):
             return Response(result, status=status.HTTP_200_OK)
         except ExpertSystemTestResult.DoesNotExist:
             return Response({'detail': 'Результат теста не найден'}, status=status.HTTP_404_NOT_FOUND)
+
