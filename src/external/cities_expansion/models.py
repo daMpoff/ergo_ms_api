@@ -81,7 +81,7 @@ class Task(models.Model):
     
     task_id = models.AutoField(primary_key=True)
     date = models.DateTimeField()
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='cities_expansion_tasks')
     status = models.CharField(max_length=20, choices=StatusChoices.choices)
     status_description = models.TextField()
 
