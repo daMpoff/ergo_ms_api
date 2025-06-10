@@ -69,7 +69,8 @@ class SectionTaskView(APIView):
                         'user_id': task.user.id if task.user else None,
                         'section_id':task.section_id,
                         'parenttask_id': task.parenttask_id,
-                        'subtasks': list(subtasks)  # Преобразуем QuerySet в список
+                        'subtasks': list(subtasks),  # Преобразуем QuerySet в список
+                        'deadline':task.deadline
                     }
                     cards.append(card)
 
@@ -461,6 +462,107 @@ class ToggleTaskStatusView(APIView):
                     "success": False,
                     "error": str(e),
                     "message": "Ошибка при изменении статуса задачи"
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+class UpdateTaskView(APIView):
+    @transaction.atomic
+    def post(self, request, task_id):
+        try:
+            task = get_object_or_404(Task, id=task_id)
+            
+            # Обновляем поля задачи из данных запроса
+            fields_to_update = {
+                'text': 'text',
+                'description': 'description',
+                'is_completed': 'isdone',
+                'deadline': 'deadline',
+                'priority': 'priority',
+                'section': 'section_id',
+                'parenttask': 'parenttask_id',
+                'assignee_id': 'assignee_id',
+                'title': 'text'  # Если title сохраняется в text
+            }
+            
+            for field, model_field in fields_to_update.items():
+                if field in request.data:
+                    setattr(task, model_field, request.data[field])
+            
+            task.save()
+            
+            return Response(
+                {
+                    "success": True,
+                    "message": "Задача успешно обновлена",
+                    "task": {
+                        "id": task.id,
+                        "title": task.text,  # Или другое поле, если title хранится отдельно
+                        "text": task.text,
+                        "description": task.description,
+                        "is_completed": task.isdone,
+                        "dateofcreation": task.dateofcreation,
+                        "deadline": task.deadline,
+                        "priority": task.priority,
+                        "section": task.section_id,
+                        "parenttask": task.parenttask_id,
+                        "assignee_id": task.assignee_id,
+                        "user": task.user_id
+                    }
+                },
+                status=status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            return Response(
+                {
+                    "success": False,
+                    "error": str(e),
+                    "message": "Ошибка при обновлении задачи"
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class UpdateSectionView(APIView):
+    @transaction.atomic
+    def post(self, request, section_id):
+        try:
+            section = get_object_or_404(Section, id=section_id)
+            
+            # Проверяем наличие нового названия в запросе
+            if 'name' not in request.data or not request.data['name'].strip():
+                return Response(
+                    {
+                        "success": False,
+                        "message": "Название раздела не может быть пустым"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Обновляем название раздела
+            new_name = request.data['name'].strip()
+            section.name = new_name
+            section.save()
+            
+            return Response(
+                {
+                    "success": True,
+                    "message": "Название раздела успешно изменено",
+                    "section": {
+                        "id": section.id,
+                        "name": section.name,
+                        "project": section.project_id
+                    }
+                },
+                status=status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            return Response(
+                {
+                    "success": False,
+                    "error": str(e),
+                    "message": "Ошибка при изменении названия раздела"
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )

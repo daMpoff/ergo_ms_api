@@ -2,7 +2,7 @@ from django.urls import path
 
 
 from src.external.crm.tasks.views import SectionTaskView,SectionCreateView,TaskCreateView,DeleteTaskView,SubtaskCreateView,DeleteSectionView,ToggleTaskStatusView
-
+from src.external.crm.tasks.views import UpdateTaskView, UpdateSectionView
 
 urlpatterns = [
     path('section-tasks/', SectionTaskView.as_view(), name='section-tasks'),
@@ -12,6 +12,9 @@ urlpatterns = [
     path('new-subtask/', SubtaskCreateView.as_view(), name='subtask-create'),
     path('delete-section/<int:section_id>/', DeleteSectionView.as_view(), name='delete_section'),
     path('toggle-task/<int:task_id>/', ToggleTaskStatusView.as_view(), name='toggle_task'),
+    path('update-task/<int:task_id>/', UpdateTaskView.as_view(), name='update_task'),
+    path('update-section/<int:section_id>/',UpdateSectionView.as_view(), name='update_section'),
+
 
 
 ]
