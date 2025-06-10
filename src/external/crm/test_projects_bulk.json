@@ -1,0 +1,27 @@
+[
+    {
+        "name": "CRM Система",
+        "dateofcreation": "2025-02-01",
+        "creator": 1
+    },
+    {
+        "name": "Микросервисная архитектура",
+        "dateofcreation": "2025-02-15",
+        "creator": 1
+    },
+    {
+        "name": "Мобильное приложение",
+        "dateofcreation": "2025-03-01",
+        "creator": 1
+    },
+    {
+        "name": "Аналитическая платформа",
+        "dateofcreation": "2025-03-15",
+        "creator": 1
+    },
+    {
+        "name": "Интеграционное решение",
+        "dateofcreation": "2025-04-01",
+        "creator": 1
+    }
+]
