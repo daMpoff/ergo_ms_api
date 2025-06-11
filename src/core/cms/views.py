@@ -62,6 +62,7 @@ class AddGroupCategory(BaseAPIView):
             return Response(
                 status= status.HTTP_403_FORBIDDEN
             )
+        
 class GetGroupCategories(BaseAPIView):
     permission_classes = [IsAuthenticated]
     @swagger_auto_schema(
@@ -73,20 +74,32 @@ class GetGroupCategories(BaseAPIView):
         },
     )
     def get(self, request: Request):
-        if(request.user.is_superuser):
-            categories = GroupCategory.objects.all()
+        access = False
+        exps = GetUserExpandedPermissions(request.user)
+        for exp in exps:
+            if exp.permission_mark.id == 4:
+                access = True
+                break
+        if(request.user.is_superuser | access):
             cats = []
-            for cat in categories:
-                cats.append({"id": cat.id, "name": cat.name})
+            if( request.user.is_superuser):
+                categories = GroupCategory.objects.all()
+                for cat in categories:
+                    cats.append({"id": cat.id, "name": cat.name})
+            else:
+                for exp in exps:
+                    if(exp.permission_mark.id==4):
+                        cats.append({"id": exp.group_category.id, "name": exp.group_category.name})
             result = {"categories": cats}
             return Response(
-                result,
-                status=status.HTTP_200_OK
-            )
+                    result,
+                    status=status.HTTP_200_OK
+                )
         else:
             return Response(
                 status= status.HTTP_403_FORBIDDEN
             )
+        
 class ChangeGroupCategory(BaseAPIView):
     permission_classes = [IsAuthenticated]
     @swagger_auto_schema(
@@ -195,7 +208,7 @@ class AddGroup(BaseAPIView):
         access = False
         exps = GetUserExpandedPermissions(request.user)
         for exp in exps:
-            if exp.permission_mark.id == 4 & exp.group_category.name == request.data['category_name']:
+            if exp.permission_mark.id == 4 and (exp.group_category.name == request.data['category_name']):
                 access = True
                 break
         if(request.user.is_superuser | access):
@@ -247,7 +260,7 @@ class ChangeGroup(BaseAPIView):
         groups = request.user.groups.all()
         exps = GetUserExpandedPermissions(request.user)
         for exp in exps:
-            if exp.permission_mark.id == 4 & exp.group_category.name == eg.category.name:
+            if exp.permission_mark.id == 4 and (exp.group_category.name == eg.category.name):
                 access = True
                 break
         if(request.user.is_superuser | access):
@@ -284,7 +297,7 @@ class DeleteGroup(BaseAPIView):
         access = False
         exps = GetUserExpandedPermissions(request.user)
         for exp in exps:
-            if exp.permission_mark.id == 4 & exp.group_category.name == eg.category.name:
+            if exp.permission_mark.id == 4 and (exp.group_category.name == eg.category.name):
                 access = True
                 break
         if(request.user.is_superuser | access):
@@ -297,7 +310,7 @@ class DeleteGroup(BaseAPIView):
             return Response(
                 status=status.HTTP_403_FORBIDDEN
             )
-class GetUserGroups(BaseAPIView):    
+class GetGroupsByCategory(BaseAPIView):    
     permission_classes = [IsAuthenticated]
     @swagger_auto_schema(
         operation_description="Получение групп пользователя.",
@@ -354,8 +367,8 @@ class GetGroups(BaseAPIView):
                         cat_list.append(exp.group_category.name)
                 for cat in cat_list:                
                     for group in groups:
-                        if group.category.name == cat:
-                            expanded_group = ExpandedGroup.objects.get(group_id = group.id)
+                        expanded_group = ExpandedGroup.objects.get(group_id = group.id)
+                        if expanded_group.category.name == cat:
                             permissions = group.permissions.all()
                             permissions_list = []
                             for permission in permissions:
@@ -385,8 +398,8 @@ class AddGroupPermissions(BaseAPIView):
             type=openapi.TYPE_OBJECT,
             properties={
                 'group_name': openapi.Schema(type=openapi.TYPE_STRING, description='Имя группы'),
-                
-                'permissions_name': openapi.Schema(type=openapi.TYPE_ARRAY,items=openapi.Items(type=openapi.TYPE_STRING), description='Имя права')
+                'permissions_name': openapi.Schema(type=openapi.TYPE_ARRAY,items=openapi.Items(type=openapi.TYPE_STRING), description='Имя права'),
+                'change_other_groups': openapi.Schema(type=openapi.TYPE_BOOLEAN, description='изменять другие группы'),
             }
         )
     )
@@ -405,6 +418,12 @@ class AddGroupPermissions(BaseAPIView):
                 exp_permission = ExpandedPermission.objects.get(permission=permission)
                 if(exp_permission.group_category == exp_group.category):
                     group.permissions.add(permission)
+                    if(request.data['change_other_groups']):
+                        groups = Group.objects.all()
+                        for group in groups:
+                            expand_group = ExpandedGroup.objects.get(group=group)
+                            if(expand_group.level > exp_group.level and exp_group.category == expand_group.category and not(group.permissions.contains(permission))):
+                                group.permissions.add(permission)
                 else:
                     return Response(status=status.HTTP_400_BAD_REQUEST)
             group.save()
@@ -423,7 +442,8 @@ class RemoveGroupPermissions(BaseAPIView):
             type=openapi.TYPE_OBJECT,
             properties={
                 'group_name': openapi.Schema(type=openapi.TYPE_STRING, description='Имя группы'),
-                'permissions_name': openapi.Schema(type=openapi.TYPE_ARRAY,items=openapi.Items(type=openapi.TYPE_STRING), description='Имя права')
+                'permissions_name': openapi.Schema(type=openapi.TYPE_ARRAY,items=openapi.Items(type=openapi.TYPE_STRING), description='Имя права'),
+                'change_other_groups': openapi.Schema(type=openapi.TYPE_BOOLEAN, description='изменять другие группы'),
             }
         )
     )
@@ -442,10 +462,15 @@ class RemoveGroupPermissions(BaseAPIView):
                 permission = Permission.objects.get(name = permission_name)
                 exp_permission = ExpandedPermission.objects.get(permission=permission)
                 group.permissions.remove(permission)
+                if(request.data['change_other_groups']):
+                        groups = Group.objects.all()
+                        for group in groups:
+                            expand_group = ExpandedGroup.objects.get(group=group)
+                            if(expand_group.level < exp_group.level and exp_group.category == expand_group.category and (group.permissions.contains(permission))):
+                                group.permissions.remove(permission)
             group.save()
             return Response(status=status.HTTP_200_OK)
         
-
 #Управление правами
 class GetPermissions(BaseAPIView):
     permission_classes = [IsAuthenticated]
@@ -466,12 +491,11 @@ class GetPermissions(BaseAPIView):
                 break
         if(request.user.is_superuser | access):
             ExpandedPermissions = ExpandedPermission.objects.all()
+            permissions_list = []
             if(request.user.is_superuser):
-                permissions_list = []
                 for expperm in ExpandedPermissions:
                     permission = expperm.permission
                     accession = Accession.objects.get(permission = expperm)
-                    print(accession)
                     if(expperm.permission_mark.id <3):
                         permissions_list.append({'id':permission.id, 'name':permission.name,
                     'category_name':expperm.group_category.name, 'accession_type':expperm.permission_mark.name,
@@ -492,12 +516,21 @@ class GetPermissions(BaseAPIView):
                         cat_list.append(exp.group_category.name)
                 for cat in cat_list:                
                     for expperm in ExpandedPermissions:
-                        if expperm.category.name == cat:
+                        if expperm.group_category.name == cat:
                             permission = expperm.permission
                             accession = Accession.objects.get(permission = expperm)
-                            permissions_list.append({'id':permission.id, 'name':permission.name,
+                            if(expperm.permission_mark.id <3):
+                                permissions_list.append({'id':permission.id, 'name':permission.name,
                             'category_name':expperm.group_category.name, 'accession_type':expperm.permission_mark.name,
                             'path':accession.path.path, 'component_id':accession.component_id.componentid})
+                            elif (expperm.permission_mark.id ==3):
+                                permissions_list.append({'id':permission.id, 'name':permission.name,
+                            'category_name':expperm.group_category.name, 'accession_type':expperm.permission_mark.name,
+                            'path':accession.path.path, 'component_id':''})
+                            else:
+                                permissions_list.append({'id':permission.id, 'name':permission.name,
+                            'category_name':expperm.group_category.name, 'accession_type':expperm.permission_mark.name,
+                            'path':'', 'component_id':''})
                 result = {"permissions":permissions_list}
             return Response(result, status=status.HTTP_200_OK)
         else:
@@ -550,18 +583,17 @@ class AddPermission(BaseAPIView):
                     access = True
                     break
             if(access or request.user.is_superuser):
+                page = CMSPage.objects.get(path = request.data['path'])
                 content_type = ContentType.objects.get_or_create(app_label='cms', model='none')
                 categoryy = GroupCategory.objects.get(name = request.data['category_name'])
                 permission = Permission.objects.create(name=request.data['permission_name'], content_type_id =content_type[0].id, codename =request.data['permission_name'])
                 exp =ExpandedPermission.objects.create(permission = permission,
-                
                 permission_mark = pm, group_category = categoryy)
-                page = CMSPage.objects.get(path = request.data['path'])
-                print(page)
-                print('===============')
-                comp = CMSPageComponent.objects.get(page = page, componentid =request.data['component_id'])
-                print(comp)
-                Accession.objects.create(permission = exp, path = page, component_id = comp)
+                if(request.data['component_id']!= ''):
+                    comp = CMSPageComponent.objects.get(page = page, componentid =request.data['component_id'])
+                    Accession.objects.create(permission = exp, path = page, component_id = comp)
+                else:
+                    Accession.objects.create(permission = exp, path = page)
                 return Response(status=status.HTTP_200_OK)
             else:
                 return Response(
@@ -789,14 +821,13 @@ class CheckAccessToComponent(BaseAPIView):
             401: "Пользователь не авторизован"
         },
         manual_parameters=[
-        openapi.Parameter('path', openapi.IN_QUERY, description="Path of page", type=openapi.TYPE_STRING),
+        openapi.Parameter('path', openapi.IN_QUERY, description="Путь страницы", type=openapi.TYPE_STRING),
     ],
     )
     def get(self, request: Request):
         result = []
         try:
             page = CMSPage.objects.get(path = request.query_params.get('path'))
-            
             comps = CMSPageComponent.objects.filter(page=page)
             for comp in comps:
                 result.append({'component':comp.componentid,'read':False,'write':False })
@@ -805,39 +836,38 @@ class CheckAccessToComponent(BaseAPIView):
                     res['read'] = True
                     res['write'] = True
             else:
-                print('t1')
                 groups = Group.objects.filter(user =request.user)
                 permisson_list = []
                 for group in groups:
                     perms = Permission.objects.filter(group = group)
                     for perm in perms:
                         permisson_list.append(perm)
-                print('t2')
                 perms = Permission.objects.filter(user = request.user)
                 for perm in perms:
                     permisson_list.append(perm)
-                print('fdgfdf')
                 for perm in permisson_list: 
-                    print(perm)
                     expanded_permission = ExpandedPermission.objects.get(permission = perm)
                     pm = expanded_permission.permission_mark
-                    accession = Accession.objects.get(permission = expanded_permission)
-                    print(accession.path.path)
-                    print(accession.component_id.componentid)
-                    print(pm.name)
-                    if(accession.path == page and accession.component_id!=None):
-                        for r in result:
-                            if(r['component']== accession.component_id.componentid):
-                                if(pm.name=='ComponentAccessionToRead'):
-                                    r['read'] = True
-                                elif(pm.name=='ComponentAccessionToReadAndWrite'):
-                                    r['read'] = True
-                                    r['write'] = True
-                return Response(
-                    result,
-                    status=status.HTTP_200_OK
-                )
-        except:        return Response(
+                    if(pm.name!='PageAccession'):
+                        accession = Accession.objects.get(permission = expanded_permission)
+                        if(accession.path == page and accession.component_id!=None):
+                            for r in result:
+                                if(r['component']== accession.component_id.componentid):
+                                    if(pm.name=='ComponentAccessionToRead'):
+                                        r['read'] = True
+                                    elif(pm.name=='ComponentAccessionToReadAndWrite'):
+                                        r['read'] = True
+                                        r['write'] = True
+            return Response(
+                result,
+                status=status.HTTP_200_OK
+            )
+        except CMSPageComponent.DoesNotExist:
+            return Response({'details':'Данной страницы нет в базе данных ограничений'}, status=status.HTTP_404_NOT_FOUND)
+        except CMSPageComponent.DoesNotExist:
+            return Response({'details':'У данной страницы нет ограничений на компоненты'}, status=status.HTTP_404_NOT_FOUND)
+        except:        
+            return Response(
             result,
             status=status.HTTP_200_OK
         )
@@ -853,10 +883,11 @@ class CheckAccessToAdminPanel(BaseAPIView):
         },
     )
     def get(self, request: Request):
-        result = {'access':False}
+        result = {'access_to_panel':False, 'access_to_category':False}
         perms =[]
         if(request.user.is_superuser):
-            result['access'] = True
+            result['access_to_panel'] = True
+            result['access_to_category'] =True
         else:
             user = request.user
             groups = user.groups.all()
@@ -865,14 +896,14 @@ class CheckAccessToAdminPanel(BaseAPIView):
                 for permission in permissions:
                     expanded_permission = ExpandedPermission.objects.get(permission = permission)
                     if(expanded_permission.permission_mark.id == 4):
-                        result['access'] = True
+                        result['access_to_panel'] = True
                         break
-            if(result['access'] == False):
+            if(result['access_to_panel'] == False):
                 permissions = user.user_permissions.all()
                 for permission in permissions:
                     expanded_permission = ExpandedPermission.objects.get(permission = permission)
                     if(expanded_permission.permission_mark.id == 4):
-                        result['access'] = True
+                        result['access_to_panel'] = True
                         break
         return Response(
             result,
@@ -897,7 +928,7 @@ class GetUserGroupsAndPermissions(BaseAPIView):
             if exp.permission_mark.id == 4:
                 access = True
         if(access or request.user.is_superuser):
-            if(request.user.is_superuser):
+            if(request.user.is_superuser): 
                 users = User.objects.all()
                 for user in users:
                     groups = user.groups.all()
@@ -926,13 +957,13 @@ class GetUserGroupsAndPermissions(BaseAPIView):
                         for group in groups:
                             exp_group = ExpandedGroup.objects.get(group=group)
                             for cat in catlist:
-                                if(exp_group.group_category==cat):
+                                if(exp_group.category==cat):
                                     groups_user.append(group.name)
                     perms = user.user_permissions.all()
                     user_perms = []
                     if(len(perms) > 0):
                         for perm in perms:
-                            exp_perm = ExpandedPermission.objects.get(perm)
+                            exp_perm = ExpandedPermission.objects.get(permission =perm)
                             for cat in catlist:
                                 if(exp_perm.group_category == cat):
                                     user_perms.append(perm.name)
@@ -989,7 +1020,7 @@ class AddUserGroup(BaseAPIView):
                     exp_group = ExpandedGroup.objects.get(group=group)
                     cat_checked = False
                     for cat in catlist:
-                        if(cat == exp_group.group_category):
+                        if(cat == exp_group.category):
                             cat_checked = True
                     if(cat_checked):
                         user.groups.add(group)
@@ -1022,11 +1053,8 @@ class RemoveUserGroup(BaseAPIView):
                 access = True
                 break
         if(access or request.user.is_superuser):
+            user = User.objects.get(id = request.data['user_id'])
             if(request.user.is_superuser):
-                print('====================')
-                print(request.data)
-                print('====================')
-                user = User.objects.get(id = request.data['user_id'])
                 for group_name in request.data['groups_name']:
                     group = Group.objects.get(name = group_name)
                     user.groups.remove(group)
@@ -1036,13 +1064,12 @@ class RemoveUserGroup(BaseAPIView):
                 for exp in exps:
                     if(exp.permission_mark.id==4):
                         catlist.append(exp.group_category)
-                user = User.objects.get(username = request.data['username'])
                 for group_name in request.data['groups_name']:
                     group = Group.objects.get(name = group_name)
                     exp_group = ExpandedGroup.objects.get(group=group)
                     cat_checked = False
                     for cat in catlist:
-                        if(cat == exp_group.group_category):
+                        if(cat == exp_group.    category):
                             cat_checked = True
                     if(cat_checked):
                         user.groups.remove(group)
@@ -1051,7 +1078,6 @@ class RemoveUserGroup(BaseAPIView):
                 user.save()
         return Response(status=status.HTTP_200_OK)   
     
-
 class RemoveUserPermission(BaseAPIView):
     permission_classes = [IsAuthenticated]
     @swagger_auto_schema(
@@ -1103,7 +1129,6 @@ class RemoveUserPermission(BaseAPIView):
         else:
             return Response(status=status.HTTP_403_FORBIDDEN)
         
-
 class AddUserPermission(BaseAPIView):
     permission_classes = [IsAuthenticated]
     @swagger_auto_schema(
@@ -1171,7 +1196,7 @@ class GetUserName(BaseAPIView):
             user.username,
             status=status.HTTP_200_OK
         )
-class GetUserGroups(BaseAPIView):
+class GetGroupsByCategory(BaseAPIView):
     permission_classes = [IsAuthenticated]
     @swagger_auto_schema(
         operation_description="Получение групп пользователя",
@@ -1182,16 +1207,36 @@ class GetUserGroups(BaseAPIView):
         },
     )
     def get(self, request: Request):
-        user = request.user
-        groups = Group.objects.all()
-        groups_list = []
-        for group in groups:
-            groups_list.append(group.name)
-        result = {'groups':groups_list}
-        return Response(
-            result,
-            status=status.HTTP_200_OK
-        )
+        access = False
+        exps = GetUserExpandedPermissions(request.user)
+        for exp in exps:
+            if exp.permission_mark.id == 4:
+                access = True
+                break
+        if(access or request.user.is_superuser):
+            groups_list = []
+            groups = Group.objects.all()
+            if(request.user.is_superuser):
+                for group in groups:
+                    groups_list.append(group.name)
+            else:
+                cats = []
+                for exp in exps:
+                    if exp.permission_mark.id == 4:
+                        cats.append(exp.group_category)
+                for group in groups:
+                    exp_group = ExpandedGroup.objects.get(group=group)
+                    for cat in cats:
+                        if(exp_group.category == cat):
+                            groups_list.append(group.name)
+            result = {'groups':groups_list}
+            return Response(
+                result,
+                status=status.HTTP_200_OK
+            )
+        else:
+            return Response(status= status.HTTP_403_FORBIDDEN)
+        
 class GetUserPermissions(BaseAPIView):
     permission_classes = [IsAuthenticated]
     @swagger_auto_schema(
@@ -1203,22 +1248,38 @@ class GetUserPermissions(BaseAPIView):
         },
     )
     def get(self, request: Request):
-        user = request.user
         permissions = Permission.objects.all()
         permissions_list = []
-        for permission in permissions:
-            permissions_list.append(permission.name)
-        result = {'permissions':permissions_list}
-        return Response(
-            result,
-            status=status.HTTP_200_OK
-        )
+        access = False
+        exps = GetUserExpandedPermissions(request.user)
+        for exp in exps:
+            if exp.permission_mark.id == 4:
+                access = True
+                break
+        if(access or request.user.is_superuser):
+            if(request.user.is_superuser):
+                for permission in permissions:
+                    permissions_list.append(permission.name)
+            else:
+                cats = []
+                for exp in exps:
+                    if exp.permission_mark.id == 4:
+                        cats.append(exp.group_category)
+                for permission in permissions:
+                    exp_permission = ExpandedPermission.objects.get(permission=permission)
+                    for cat in cats:
+                        if(exp_permission.group_category == cat):
+                            permissions_list.append(permission.name)
+            result = {'permissions':permissions_list}
+            return Response(
+                result,
+                status=status.HTTP_200_OK
+            )
+        else:
+            return Response(status=status.HTTP_403_FORBIDDEN)
     
-
-
-
-
-class GetAllProgectPagesPath(BaseAPIView):
+#Работа со страницами и компонентами
+class PatchAllProgectPages(BaseAPIView):
     permission_classes = [IsAuthenticated]
     @swagger_auto_schema(
         operation_description='Получение и обновление всех путей проекта из файла маршрутов, исключая mainRoutes',
@@ -1244,7 +1305,8 @@ class GetAllProgectPagesPath(BaseAPIView):
                     content = file.read()
                     const_pattern = r'const\s+(\w+Routes?)\s*='
                     route_constants = re.findall(const_pattern, content)
-                    route_constants = [const for const in route_constants if const != 'mainRoutes'& const!= 'adminpanelRoutes']
+                    route_constants = [const for const in route_constants if (const != 'mainRoutes')& (const!= 'adminpanelRoutes')
+                        & (const!= 'userRoutes') & (const!='settingsRoutes') &(const!= 'startRoutes')]
                     for const_name in route_constants:
                         const_pattern = f"const {const_name} = \[(.*?)\]"
                         const_match = re.search(const_pattern, content, re.DOTALL)
@@ -1253,7 +1315,6 @@ class GetAllProgectPagesPath(BaseAPIView):
                         mainpath = re.search(const_pattern,content_const).group(1)
                         const_pattern = r'children:(.*)'
                         children = re.search(const_pattern, content_const, re.DOTALL)
-
                         if children:
                             const_pattern = f"path: '(.*?)'"
                             paths1 = re.findall(const_pattern,children.group(1))
@@ -1261,8 +1322,10 @@ class GetAllProgectPagesPath(BaseAPIView):
                                 paths.append(mainpath+'/'+p)
                             
                         else:
-                            paths.append(mainpath)
-                            
+                            const_pattern =f"path: '(.*?)'"
+                            mainpathes = re.findall(const_pattern,content_const)
+                            for mainp in mainpathes:
+                                paths.append(mainp)
                 for p in paths:
                     CMSPage.objects.get_or_create(path = p)
                 return Response(
@@ -1467,11 +1530,18 @@ class RemovePageComponent(BaseAPIView):
                     page = page,
                     componentid=request.query_params.get('component_id')
                 )
-                component.delete()
-                return Response(
-                    {'message': 'Компонент успешно удален'},
-                    status=status.HTTP_200_OK
-                )
+                if(len(Accession.objects.filter(component_id=component))==0):
+                    component.delete()
+                    return Response(
+                        {'message': 'Компонент успешно удален'},
+                        status=status.HTTP_200_OK
+                    )
+                else:
+                    return Response(
+                        {'message': 'Нельзя удалить компонент, пока он связан с правами'},
+                        status=status.HTTP_200_OK
+                    )
+                
             except CMSPageComponent.DoesNotExist:
                 return Response(
                     {'error': 'Компонент не найден на странице'},
@@ -1524,7 +1594,6 @@ class UpdatePageComponent(BaseAPIView):
                 break
         if(request.user.is_superuser | access):
             try:
-                print(request.data)
                 page = CMSPage.objects.get(path=request.data['path'])
                 # Проверяем существование компонента для изменения
                 component = CMSPageComponent.objects.get(
@@ -1594,38 +1663,51 @@ class GetPageComponents(BaseAPIView):
                 status=status.HTTP_403_FORBIDDEN
             )
         
-class GetClosedPages(BaseAPIView):
+class GetClosedPagesForUser(BaseAPIView):
     permission_classes = [IsAuthenticated]
     @swagger_auto_schema(
-        operation_description="Получение всех страниц CMS с типом доступа 'closepage'",
+        operation_description="Получение закрытых страниц CMS, к которым у пользователя нет доступа",
         responses={
-            200: "Страницы с типом 'closepage' получены",
+            200: "Закрытые страницы получены",
             401: "Пользователь не авторизован",
             403: "Нет доступа"
         }
     )
     def get(self, request: Request):
-        access = False
-        exps = GetUserExpandedPermissions(request.user)
-        for exp in exps:
-            if exp.permission_mark.id == 4:
-                access = True
-                break
-        if(request.user.is_superuser or access):
-            pages = CMSPage.objects.filter(liminationtype='closepage')
-            pages_list = []
-            for page in pages:
-                pages_list.append({
-                    'id': page.id,
-                    'path': page.path,
-                    'type': page.liminationtype
-                })
+        # Если пользователь суперпользователь, возвращаем пустой список
+        if request.user.is_superuser:
             return Response(
-                {'pages': pages_list},
+                {'pages': []},
                 status=status.HTTP_200_OK
             )
         else:
+            all_closed_pages = CMSPage.objects.filter(liminationtype='closepage')
+            user_permissions = []
+            user_groups = request.user.groups.all()
+            for group in user_groups:
+                group_permissions = group.permissions.all()
+                user_permissions.extend(group_permissions)
+            personal_permissions = request.user.user_permissions.all()
+            user_permissions.extend(personal_permissions)
+            accessible_pages = set()
+            for permission in user_permissions:
+                try:
+                    expanded_permission = ExpandedPermission.objects.get(permission=permission)
+                    accession = Accession.objects.get(permission=expanded_permission)
+                    if accession.path:
+                        accessible_pages.add(accession.path.path)
+                except (ExpandedPermission.DoesNotExist, Accession.DoesNotExist):
+                    continue
+            inaccessible_closed_pages = []
+            for page in all_closed_pages:
+                if page.path not in accessible_pages:
+                    inaccessible_closed_pages.append({
+                        'id': page.id,
+                        'path': page.path,
+                        'type': page.liminationtype
+                    })
+            
             return Response(
-                status=status.HTTP_403_FORBIDDEN
+                {'pages': inaccessible_closed_pages},
+                status=status.HTTP_200_OK
             )
-

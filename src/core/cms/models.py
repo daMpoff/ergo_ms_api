@@ -10,6 +10,8 @@ class Review(models.Model):
 class GroupURL(models.Model):
     url = models.CharField(max_length=255, default='')
     group_id = models.ForeignKey(Group, on_delete=models.CASCADE)
+    class Meta:
+        default_permissions = ()
 
 class PermissionMark(models.Model):
     name = models.CharField(max_length=255, default='')
