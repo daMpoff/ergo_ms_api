@@ -32,9 +32,9 @@ class RecursiveField(serializers.Serializer):
 class InstanceSerializer(serializers.ModelSerializer):
     children = RecursiveField(many=True, read_only=True)
     template_name = serializers.CharField(source='template.name', read_only=True)
-    component_type = serializers.CharField(source='template.component_type', read_only=True)
+    component_type = serializers.CharField(source='template.component_type.name', read_only=True)
     parent = serializers.PrimaryKeyRelatedField(queryset=CmsShortcodeInstance.objects.all(), allow_null=True, required=False)
-
+    uid = serializers.CharField()
     class Meta:
         model = CmsShortcodeInstance
         fields = [
@@ -47,7 +47,9 @@ class InstanceSerializer(serializers.ModelSerializer):
             'class_list',
             'extra_data',
             'position',
-            'children'
+            'children',
+            'uid',
+            'allow_children'
         ]
 
 class PageSerializer(serializers.ModelSerializer):

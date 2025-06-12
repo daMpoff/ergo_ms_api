@@ -49,6 +49,10 @@ class CmsShortcodeInstance(models.Model):
     position = models.PositiveIntegerField(default=0)
     date_of_creation = models.DateTimeField(auto_now_add=True)
     last_update = models.DateTimeField(auto_now=True)
+    uid = models.CharField(max_length=64, unique=True, db_index=True)
+    is_active = models.BooleanField(default=True)
+    icon_name = models.CharField(max_length=100, blank=True, null=True)
+    allow_children = models.BooleanField(default=False)
 
     class Meta:
         # При получении моделей, сортировка будет происходить по значению position
