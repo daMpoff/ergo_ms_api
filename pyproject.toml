@@ -41,6 +41,7 @@ tensorflow = "^2.19.0"
 pymssql = "^2.3.4"
 clickhouse-connect = "^0.8.16"
 openpyxl = "^3.1.5"
+django-filter = "^25.1"
 
 [tool.poetry.scripts]
 cmd = "commands.__main__:main"
