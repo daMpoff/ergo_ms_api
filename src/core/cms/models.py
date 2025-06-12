@@ -1,165 +1,41 @@
 from django.db import models
-from django.core.exceptions import ValidationError
-from django.contrib.auth.models import Group, Permission
-from django.core.validators import FileExtensionValidator
-from django.utils.translation import gettext_lazy as _
-class UploadedFile(models.Model):
-    file = models.FileField(upload_to='uploads/')
-    uploaded_at = models.DateTimeField(auto_now_add=True)
+from django.contrib.auth.models import (User, Group, Permission)
+from django.utils import timezone
 
-    def __str__(self):
-        return self.file.name
+class Review(models.Model):
+    author_id = models.ForeignKey(User, on_delete=models.CASCADE)
+    text = models.TextField(default='')
+    rating = models.IntegerField(default=0)
 
-class GeneralSettings(models.Model):
-    site_name = models.CharField(_("Название сайта"), max_length=255, default="My Site")
-    site_tagline = models.CharField(_("Tagline"), max_length=255, blank=True)
-    site_url = models.URLField(_("URL сайта"), max_length=200)
-    admin_email = models.EmailField(_("Email администратора"), max_length=254)
-    roles = models.ManyToManyField(
-    Group,
-    verbose_name=_("Роли пользователей"),
-    blank=True,
-    help_text=_("Группы пользователей, доступных в системе")
-)
-    # Настройки главной страницы
-    class HomePageChoices(models.TextChoices):
-        STATIC = "static", _("Статическая страница")
-        LATEST = "latest", _("Последние сообщения")
-    homepage_type = models.CharField(
-        _("Тип домашней страницы"),
-        max_length=10,
-        choices=HomePageChoices.choices,
-        default=HomePageChoices.LATEST
-    )
-    posts_per_page = models.PositiveIntegerField(_("Посты на страницу"), default=10)
-    discourage_search_engines = models.BooleanField(
-        _("Discourage Search Engines"),
-        default=False,
-        help_text=_("Запретить индексацию сайта")
-    )
-    privacy_policy = models.TextField(_("Политика конфиденциальности"), blank=True)
+class GroupURL(models.Model):
+    url = models.CharField(max_length=255, default='')
+    group_id = models.ForeignKey(Group, on_delete=models.CASCADE)
 
-    class Meta:
-        verbose_name = _("Общие настройки")
-        verbose_name_plural = _("Общие настройки")
+class PermissionMark(models.Model):
+    name = models.CharField(max_length=255, default='')
 
-    def __str__(self):
-        return _("Общие настройки")
-
-
-class AppearanceSettings(models.Model):
-    # Хранит настройки темы
-    theme_name = models.CharField(_("Название темы"), max_length=100, default="default")
-    # Дополнительные JSON-настройки, например, цветовые схемы
-    config = models.JSONField(_("Конфигурация темы"), default=dict, blank=True)
-
-    class Meta:
-        verbose_name = _("Настройки внешнего вида")
-        verbose_name_plural = _("Настройки внешнего вида")
-
-    def __str__(self):
-        return f"{self.theme_name}"
-
-
-class SEOSettings(models.Model):
-    meta_title_template = models.CharField(
-        _("Шаблон мета-заголовка"),
-        max_length=255,
-        help_text=_("Шаблон заголовка, например: '%page_title% | %site_name%'"),
-        default="%page_title% | %site_name%"
-    )
-    meta_description = models.TextField(_("Мета-описание"), blank=True)
-    analytics_script = models.TextField(
-        _("Скрипт для аналитики"),
-        blank=True,
-        help_text=_("Код для вставки (Google Analytics, Яндекс.Метрика и т.д.)")
-    )
-
-    class Meta:
-        verbose_name = _("SEO найтройки")
-        verbose_name_plural = _("SEO настройки")
-
-    def __str__(self):
-        return _("SEO настройки")
-
-
-class SecuritySettings(models.Model):
-    enable_backup = models.BooleanField(
-        _("Enable Backup"),
-        default=True,
-        help_text=_("Показывать кнопку резервного копирования")
-    )
-    last_backup = models.DateTimeField(
-        _("Last Backup Time"),
-        null=True,
-        blank=True
-    )
-
-    class Meta:
-        verbose_name = _("Security Settings")
-        verbose_name_plural = _("Security Settings")
-
-    def __str__(self):
-        return _("Security Settings")
-
-
-class MediaSettings(models.Model):
-    max_upload_size = models.PositiveIntegerField(
-        _("Max Upload Size (bytes)"),
-        default=5 * 1024 * 1024,
-        help_text=_("Максимальный размер загружаемого файла")
-    )
-    allowed_file_types = models.CharField(
-        _("Allowed File Extensions"),
-        max_length=255,
-        default="jpg,jpeg,png,gif,svg,mp4,mp3,pdf",
-        help_text=_("Через запятую, без точек")
-    )
-
-    class Meta:
-        verbose_name = _("Media Settings")
-        verbose_name_plural = _("Media Settings")
-
-    def __str__(self):
-        return _("Media Settings")
-
-    def clean(self):
-        exts = [e.strip().lower() for e in self.allowed_file_types.split(",")]
-        for ext in exts:
-            if not ext.isalnum():
-                raise ValidationError(
-                    _("Недопустимое расширение файла: %(ext)s"), params={"ext": ext}
-                )
-
-
-class PermalinkSettings(models.Model):
-    structure = models.CharField(
-        _("URL Structure"),
-        max_length=255,
-        default="/%year%/%month%/%slug%/",
-        help_text=_("Например: /%year%/%month%/%slug%/")
-    )
-
-    class Meta:
-        verbose_name = _("Permalink Settings")
-        verbose_name_plural = _("Permalink Settings")
-
-    def __str__(self):
-        return _("Permalink Settings")
-
-
-class EmailSettings(models.Model):
-    smtp_host = models.CharField(_("SMTP Host"), max_length=255, blank=True)
-    smtp_port = models.PositiveIntegerField(_("SMTP Port"), default=25)
-    use_tls = models.BooleanField(_("Use TLS"), default=True)
-    username = models.CharField(_("SMTP Username"), max_length=255, blank=True)
-    password = models.CharField(_("SMTP Password"), max_length=255, blank=True)
-    default_from = models.EmailField(_("Default From Email"), blank=True)
-
-    class Meta:
-        verbose_name = _("Email Settings")
-        verbose_name_plural = _("Email Settings")
-
-    def __str__(self):
-        return _("Email Settings")
+class Object_Type(models.Model):
+    name = models.CharField(max_length=100, default='')
     
+class Object(models.Model):
+    objectlink = models.CharField(max_length=255, default='')
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    type = models.ForeignKey(Object_Type, on_delete=models.CASCADE)
+
+class GroupCategory(models.Model):
+    name = models.CharField(max_length=255, default='')
+
+class ExpandedPermission(models.Model):
+    permission = models.OneToOneField(Permission, on_delete=models.CASCADE)
+    permission_mark = models.ForeignKey(PermissionMark, on_delete=models.CASCADE)
+    group_category = models.ForeignKey(GroupCategory, on_delete=models.CASCADE)
+
+class Accession(models.Model):
+    path = models.CharField(max_length=255, default='')
+    component_id = models.CharField(max_length=255, default='')
+    permission = models.OneToOneField(ExpandedPermission, on_delete=models.CASCADE, default=0)
+
+class ExpandedGroup(models.Model):
+    group = models.OneToOneField(Group, on_delete=models.CASCADE)
+    category = models.ForeignKey(GroupCategory, on_delete=models.CASCADE)
+    level = models.IntegerField(default=0)
