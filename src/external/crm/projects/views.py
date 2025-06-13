@@ -462,3 +462,95 @@ class ProjectTasksCountView(APIView):
                 {"error": str(e), "message": "Ошибка при получении данных."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+class UpdateProjectView(APIView):
+    @transaction.atomic
+    def post(self, request, project_id):
+        try:
+            project = get_object_or_404(Project, id=project_id)
+            
+            # Обновляем поля проекта из данных запроса
+            fields_to_update = {
+                'name': 'name',
+                'deadline': 'deadline',
+                'description': 'description',
+                'creator': 'creator_id'  # Если нужно изменить создателя
+            }
+            
+            for field, model_field in fields_to_update.items():
+                if field in request.data:
+                    # Особое поле для обработки ForeignKey
+                    if field == 'creator':
+                        creator_id = request.data[field]
+                        creator = get_object_or_404(User, id=creator_id)
+                        setattr(project, model_field, creator)
+                    else:
+                        setattr(project, model_field, request.data[field])
+            
+            project.save()
+            
+            return Response(
+                {
+                    "success": True,
+                    "message": "Проект успешно обновлен",
+                    "project": {
+                        "id": project.id,
+                        "name": project.name,
+                        "dateofcreation": project.dateofcreation,
+                        "creator": project.creator_id,
+                        "deadline": project.deadline,
+                        "description": project.description
+                    }
+                },
+                status=status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            return Response(
+                {
+                    "success": False,
+                    "error": str(e),
+                    "message": "Ошибка при обновлении проекта"
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class ProjectUsersView(APIView):
+    def get(self, request, project_id):
+        try:
+            # Получаем проект или возвращаем 404 если не найден
+            project = get_object_or_404(Project, id=project_id)
+            
+            # Получаем все связи User_Project для данного проекта
+            user_projects = User_Project.objects.filter(project=project)
+            
+            # Собираем данные пользователей
+            users_data = []
+            for user_project in user_projects:
+                user = user_project.user
+                users_data.append({
+                    'id': user.id,
+                    'first_name': user.first_name,
+                    'last_name': user.last_name,
+                    'is_new': user_project.isnew  # Добавляем статус isnew из связи
+                })
+            
+            return Response(
+                {
+                    "success": True,
+                    "project_id": project.id,
+                    "project_name": project.name,
+                    "users": users_data
+                },
+                status=status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            return Response(
+                {
+                    "success": False,
+                    "error": str(e),
+                    "message": "Ошибка при получении пользователей проекта"
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
