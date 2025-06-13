@@ -24,3 +24,6 @@ media/*
 
 resources/*
 !resources/.gitignore
+
+*.keras
+*.joblib
