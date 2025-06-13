@@ -42,6 +42,12 @@ class ConnectionDetailView(generics.RetrieveUpdateDestroyAPIView):
             raise PermissionDenied('У вас нет доступа к этому подключению')
         return obj
     
+    def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            # Для генерации схемы Swagger возвращаем пустой queryset
+            return Connection.objects.none()
+        return Connection.objects.filter(owner=self.request.user)
+    
 class CheckConnectionView(APIView):
     permission_classes = [IsAuthenticated]
 
