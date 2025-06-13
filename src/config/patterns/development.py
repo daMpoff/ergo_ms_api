@@ -7,9 +7,17 @@
 
 from src.config.patterns.local import *
 from src.config.env import env
+from celery.schedules import crontab
 
 SECRET_KEY = env.str('API_SECRET_KEY')
 
 DEBUG = True
+
+CELERY_BEAT_SCHEDULE = {
+    'sync-every-5-minutes': {
+        'task': 'external.bi_analysis.tasks.sync_data_from_sources',
+        'schedule': crontab(minute='*/5'),
+    },
+}
 
 ALLOWED_HOSTS = env.list('API_ALLOWED_HOSTS', default=['localhost', '127.0.0.1'])

@@ -16,6 +16,14 @@ class GroupURL(models.Model):
 class PermissionMark(models.Model):
     name = models.CharField(max_length=255, default='')
 
+class Object_Type(models.Model):
+    name = models.CharField(max_length=100, default='')
+    
+class Object(models.Model):
+    objectlink = models.CharField(max_length=255, default='')
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    type = models.ForeignKey(Object_Type, on_delete=models.CASCADE)
+
 class GroupCategory(models.Model):
     name = models.CharField(max_length=255, default='')
 

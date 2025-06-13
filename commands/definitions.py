@@ -187,3 +187,78 @@ class StopCeleryBeatCommand(PoetryCommand):
 
     def __init__(self):
         super().__init__(self.django_command_name)
+        
+class FlushDatabaseCommand(PoetryCommand):
+    """
+    Команда для полной очистки базы данных (flush).
+
+    Удаляет все данные из базы и сбрасывает ID автоинкрементов.
+    """
+    poetry_command_name = 'flush'
+    django_command_name = 'flush'
+
+    def __init__(self):
+        super().__init__(self.django_command_name)
+
+class RunTestsCommand(PoetryCommand):
+    """
+    Команда для запуска unit-тестов Django.
+
+    Запускает все тесты в проекте или указанных приложениях.
+    """
+    poetry_command_name = 'test'
+    django_command_name = 'test'
+
+    def __init__(self):
+        super().__init__(self.django_command_name)
+
+class ExportDataCommand(PoetryCommand):
+    """
+    Команда для экспорта данных, хранимых в базе данных
+    """
+    poetry_command_name = 'export'
+    django_command_name = 'dumpdata'
+
+    def __init__(self):
+        super().__init__(self.django_command_name)
+
+class ImportDataCommand(PoetryCommand):
+    """
+    Команда для экспорта данных, хранимых в базе данных
+    """
+    poetry_command_name = 'import'
+    django_command_name = 'loaddata'
+
+    def __init__(self):
+        super().__init__(self.django_command_name)
+
+class FetchBitcoinPriceCommand(PoetryCommand):
+    """
+    Команда для получения текущей цены биткоина и сохранения её в БД.
+    """
+    poetry_command_name = "fetch_price"
+    django_command_name = "fetch_price"
+
+    def __init__(self):
+        super().__init__(self.django_command_name)
+
+class FetchNewsCommand(PoetryCommand):
+    """
+    Команда для получения и анализа новостей.
+    """
+    poetry_command_name = "fetch_news"
+    django_command_name = "fetch_news"
+
+    def __init__(self):
+        super().__init__(self.django_command_name)
+
+class FetchStockCommand(PoetryCommand):
+    """
+    Команда для получения исторических цен на акции (например, Tesla, Лукойл)
+    и сохранения их в БД.
+    """
+    poetry_command_name = "fetch_stock"
+    django_command_name = "fetch_stock"
+
+    def __init__(self):
+        super().__init__(self.django_command_name)
