@@ -2,7 +2,7 @@
 Файл для определения Poetry команд.
 """
 
-from commands.base import PoetryCommand
+from commands.base import PoetryCommand, FetchBitcoinPriceCommand, FetchNewsCommand, FetchStockCommand
 
 class MakeMigrationsCommand(PoetryCommand):
     """
