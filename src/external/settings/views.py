@@ -12,6 +12,9 @@ from src.core.utils.database.main import OrderedDictQueryExecutor
 from src.core.utils.management.commands.add_module import Command
 from django.contrib.auth import authenticate
 from django.utils.crypto import get_random_string
+from rest_framework import generics
+from .models import Category
+from .serializers import CategorySerializer
 
 from django.contrib.auth.models import User
 
@@ -72,5 +75,9 @@ class FileViewSet(viewsets.ModelViewSet):
         instance.file.delete(save=False)
         self.perform_destroy(instance)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+class CategoryViewSet(viewsets.ModelViewSet):
+    queryset = Category.objects.all()
+    serializer_class = CategorySerializer
     
     

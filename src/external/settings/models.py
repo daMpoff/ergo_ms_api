@@ -153,5 +153,21 @@ class UploadedFile(models.Model):
 
     def __str__(self):
         return self.alt_name or self.file.name
+class Category(models.Model):
+    name = models.CharField(max_length=255, verbose_name="Название категории")
+    parent = models.ForeignKey(
+        'self', null=True, blank=True,
+        on_delete=models.CASCADE,
+        related_name='children',
+        verbose_name="Родительская категория"
+    )
+
+    class Meta:
+        verbose_name = "Категория"
+        verbose_name_plural = "Категории"
+
+    def __str__(self):
+        return self.name
+
 
     

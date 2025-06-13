@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import UploadedFile
+from .models import Category
 from .models import (
     GeneralSettings, AppearanceSettings,
     SecuritySettings, MediaSettings, PermalinkSettings, EmailSettings
@@ -60,3 +61,8 @@ class UploadedFileSerializer(serializers.ModelSerializer):
 
     def get_size(self, obj):
         return obj.file.size
+class CategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Category
+        fields = ['id', 'name', 'parent']
+
