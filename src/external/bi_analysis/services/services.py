@@ -161,17 +161,15 @@ def auto_join_table(dataset, table, left_column, right_column,
     # 3. Формируем SELECT-часть
     main_cols = introspect_columns(src_name)
     join_cols = introspect_columns(table.table_name)
-    aliases   = set(main_cols)
+    left_set   = set(main_cols)
     select_sql = []
 
     select_sql += [f'a."{col}" AS "{col}"' for col in main_cols]
 
     for col in join_cols:
-        alias = col
-        while alias in aliases:
-            alias = f"{alias}__right"
-        aliases.add(alias)
-        select_sql.append(f'b."{col}" AS "{alias}"')
+        if col in left_set:
+            continue
+        select_sql.append(f'b."{col}" AS "{col}"')
 
     select_clause = ", ".join(select_sql)
 
