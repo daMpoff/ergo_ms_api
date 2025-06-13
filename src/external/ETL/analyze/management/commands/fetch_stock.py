@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from django.core.management.base import BaseCommand, CommandError
 from django.utils.dateparse import parse_date
 try:
-    from external.ETL.analyze.scripts import fetch_historical_stock_prices, SELECTED_STOCKS
+    from src.external.ETL.analyze.scripts import fetch_historical_stock_prices, SELECTED_STOCKS
 except ImportError:
     def fetch_historical_stock_prices(*args, **kwargs):
         raise ImportError("Не удалось импортировать 'fetch_historical_stock_prices'.")

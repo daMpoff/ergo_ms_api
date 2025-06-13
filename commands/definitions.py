@@ -2,7 +2,7 @@
 Файл для определения Poetry команд.
 """
 
-from commands.base import PoetryCommand, FetchBitcoinPriceCommand, FetchNewsCommand, FetchStockCommand
+from commands.base import PoetryCommand
 
 class MakeMigrationsCommand(PoetryCommand):
     """
@@ -228,6 +228,37 @@ class ImportDataCommand(PoetryCommand):
     """
     poetry_command_name = 'import'
     django_command_name = 'loaddata'
+
+    def __init__(self):
+        super().__init__(self.django_command_name)
+
+class FetchBitcoinPriceCommand(PoetryCommand):
+    """
+    Команда для получения текущей цены биткоина и сохранения её в БД.
+    """
+    poetry_command_name = "fetch_price"
+    django_command_name = "fetch_price"
+
+    def __init__(self):
+        super().__init__(self.django_command_name)
+
+class FetchNewsCommand(PoetryCommand):
+    """
+    Команда для получения и анализа новостей.
+    """
+    poetry_command_name = "fetch_news"
+    django_command_name = "fetch_news"
+
+    def __init__(self):
+        super().__init__(self.django_command_name)
+
+class FetchStockCommand(PoetryCommand):
+    """
+    Команда для получения исторических цен на акции (например, Tesla, Лукойл)
+    и сохранения их в БД.
+    """
+    poetry_command_name = "fetch_stock"
+    django_command_name = "fetch_stock"
 
     def __init__(self):
         super().__init__(self.django_command_name)

@@ -2,7 +2,7 @@ import datetime
 from django.core.management.base import BaseCommand
 from django.utils.timezone import make_aware
 
-from external.ETL.analyze.scripts import (
+from src.external.ETL.analyze.scripts import (
     fetch_historical_crypto_prices,
     SELECTED_COINS,
     fetch_historical_asset_prices,
