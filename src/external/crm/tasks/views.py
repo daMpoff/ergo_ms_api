@@ -8,6 +8,7 @@ from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from django.utils import timezone
 from datetime import datetime
+from django.db.models import Q
 
 
 from src.core.utils.database.main import OrderedDictQueryExecutor
@@ -505,8 +506,7 @@ class UpdateTaskView(APIView):
                         "priority": task.priority,
                         "section": task.section_id,
                         "parenttask": task.parenttask_id,
-                        "assignee_id": task.assignee_id,
-                        "user": task.user_id
+                        "user": task.assignee_id
                     }
                 },
                 status=status.HTTP_200_OK
@@ -563,6 +563,40 @@ class UpdateSectionView(APIView):
                     "success": False,
                     "error": str(e),
                     "message": "Ошибка при изменении названия раздела"
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class TaskAssigneeView(APIView):
+    def get(self, request, task_id):
+        try:
+            # Получаем задачу или возвращаем 404 если не найдена
+            task = get_object_or_404(Task, id=task_id)
+            
+            # Получаем исполнителя задачи
+            assignee = task.user
+            
+            # Формируем данные ответа
+            response_data = {
+                "success": True,
+                "task_id": task.id,
+                "task_text": task.text,
+                "assignee": {
+                    'id': assignee.id,
+                    'first_name': assignee.first_name,
+                    'last_name': assignee.last_name,
+                },
+                "status": "done" if task.isdone else "in_progress"
+            }
+            
+            return Response(response_data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {
+                    "success": False,
+                    "error": str(e),
+                    "message": "Ошибка при получении исполнителя задачи"
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
