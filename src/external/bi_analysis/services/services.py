@@ -1,6 +1,6 @@
 import csv
 from uuid import uuid4
-from django.db import connection
+from django.db import connection, transaction
 from rest_framework.exceptions import ValidationError
 import pandas as pd
 
@@ -135,74 +135,64 @@ def safe_drop_table(table_name):
     with connection.cursor() as cursor:
         cursor.execute(f'DROP TABLE IF EXISTS "{table_name}" CASCADE;')
 
-def auto_join_table(dataset, table, left_column, right_column, join_type='INNER JOIN'):
-    dataset.refresh_from_db(fields=['table_ref'])
-    print(f"[AUTOJOIN_DEBUG] dataset.id={dataset.id} table_ref={dataset.table_ref}")
-    
-    temp_name = dataset.table_ref
+def auto_join_table(dataset, table, left_column, right_column,
+                    join_type: str = "INNER JOIN"):
 
-    # Всегда работаем только с последней временной таблицей
-    if temp_name.endswith('_joined'):
-        base_name = temp_name[:-7]
-        joined_name = temp_name  # Уже суффикс есть — перезаписываем поверх
-    else:
-        base_name = temp_name
-        joined_name = f"{base_name}_joined"
+    dataset.refresh_from_db(fields=["table_ref"])
+    src_name   = dataset.table_ref              # текущая temp- или *_joined
+    base_name  = src_name[:-7] if src_name.endswith("_joined") else src_name
+    target_name = f"{base_name}_joined"         # то имя, на которое хотим выйти
+    work_name   = f"{target_name}_{uuid4().hex[:6]}"  # временное, чтобы не конфликтовать
 
-    safe_drop_table(joined_name)  # Удаляем, если есть
+    # 1. Проверяем, что источник существует
+    if not table_exists(src_name):
+        raise ValueError(f"Таблица {src_name} не найдена, JOIN невозможен")
 
-    if not table_exists(temp_name):
-        raise ValueError(f"Временная таблица {temp_name} не существует, невозможно выполнить авто-JOIN.")
+    # 2. Собираем DISTINCT-значения, чтобы убедиться, что JOIN имеет смысл
+    with connection.cursor() as c:
+        c.execute(f'SELECT DISTINCT "{left_column}" FROM "{src_name}" LIMIT 5000')
+        main_vals = {r[0] for r in c.fetchall()}
+        c.execute(f'SELECT DISTINCT "{right_column}" FROM "{table.table_name}" LIMIT 5000')
+        join_vals = {r[0] for r in c.fetchall()}
 
-    # Проверяем наличие общих значений для ключей
-    with connection.cursor() as cursor:
-        cursor.execute(f'SELECT DISTINCT "{left_column}" FROM "{temp_name}" LIMIT 5000')
-        main_values = set(row[0] for row in cursor.fetchall())
-    with connection.cursor() as cursor:
-        cursor.execute(f'SELECT DISTINCT "{right_column}" FROM "{table.table_name}" LIMIT 5000')
-        table_values = set(row[0] for row in cursor.fetchall())
+    if not (main_vals & join_vals):
+        raise ValueError("Нет общих значений; авто-JOIN прерван")
 
-    common_values = main_values & table_values
-    if not common_values:
-        raise ValueError(
-            f"Нет общих значений между столбцами '{left_column}' в таблицах '{temp_name}' и '{table.table_name}'. "
-            f"JOIN невозможен. Проверьте содержимое."
-        )
-
-    # --- Генерируем уникальные алиасы ---
-    main_cols = introspect_columns(temp_name)
+    # 3. Формируем SELECT-часть
+    main_cols = introspect_columns(src_name)
     join_cols = introspect_columns(table.table_name)
-    main_set = set(main_cols)
-    all_aliases = set(main_cols)
+    aliases   = set(main_cols)
+    select_sql = []
 
-    select_parts = []
-    for col in main_cols:
-        select_parts.append(f'a."{col}" AS "{col}"')
+    select_sql += [f'a."{col}" AS "{col}"' for col in main_cols]
 
     for col in join_cols:
         alias = col
-        if alias in all_aliases:
-            # Подбираем уникальный алиас
-            i = 1
-            while f"{col}__right" + (f"_{i}" if i > 1 else "") in all_aliases:
-                i += 1
-            alias = f"{col}__right" + (f"_{i}" if i > 1 else "")
-        all_aliases.add(alias)
-        select_parts.append(f'b."{col}" AS "{alias}"')
+        while alias in aliases:
+            alias = f"{alias}__right"
+        aliases.add(alias)
+        select_sql.append(f'b."{col}" AS "{alias}"')
 
-    select_sql = ', '.join(select_parts)
+    select_clause = ", ".join(select_sql)
 
-    join_sql = f'''
-        CREATE TABLE "{joined_name}" AS
-        SELECT {select_sql}
-        FROM "{temp_name}" a
-        {join_type} "{table.table_name}" b ON a."{left_column}" = b."{right_column}";
+    # 4. Создаём новую таблицу с уникальным именем
+    create_sql = f'''
+        CREATE TABLE "{work_name}" AS
+        SELECT {select_clause}
+        FROM "{src_name}"  a
+        {join_type} "{table.table_name}" b
+              ON a."{left_column}" = b."{right_column}";
     '''
 
-    with connection.cursor() as cursor:
-        cursor.execute(join_sql)
+    # 5. Меняем таблицы в одной транзакции
+    with transaction.atomic():
+        with connection.cursor() as c:
+            c.execute(create_sql)                 # создаём new
+            safe_drop_table(target_name)          # дроп старую  *_joined
+            c.execute(f'ALTER TABLE "{work_name}" RENAME TO "{target_name}";')
 
-    dataset.table_ref = joined_name
+    # 6. Обновляем dataset
+    dataset.table_ref = target_name
     dataset.save(update_fields=["table_ref"])
 
     return left_column
