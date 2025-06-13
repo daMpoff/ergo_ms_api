@@ -197,6 +197,39 @@ def auto_join_table(dataset, table, left_column, right_column,
 
     return left_column
 
+def rebuild_dataset_joins(dataset):
+    """
+    Полностью перестраивает temp_<…>_joined от нуля:
+    1.  Берёт главную temp-таблицу (joined_on is NULL).
+    2.  Ставит её в dataset.table_ref.
+    3.  Идёт по оставшимся DataSetTable-ам (joined_on ≠ NULL) в порядке id
+        и последовательно вызывает auto_join_table().
+    """
+    from .services import auto_join_table, safe_drop_table
+
+    base_tbl = dataset.tables.filter(joined_on_type__isnull=True).first()
+    if not base_tbl:
+        raise ValueError("Не найдена главная таблица")
+
+    # 1. Чистим старый *_joined
+    if dataset.table_ref and dataset.table_ref.endswith("_joined"):
+        safe_drop_table(dataset.table_ref)
+
+    dataset.table_ref = base_tbl.table_name
+    dataset.save(update_fields=["table_ref"])
+
+    # 2. Достраиваем остальные JOIN-ы заново
+    for t in (
+        dataset.tables.filter(joined_on_type__isnull=False)
+        .order_by("id")            # либо по order, если он есть
+    ):
+        auto_join_table(
+            dataset,
+            t,
+            t.joined_on_left,
+            t.joined_on_right,
+            t.joined_on_type or "INNER JOIN",
+        )
 
 def create_temp_table_from_staging(staging_name):
     """

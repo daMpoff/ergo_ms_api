@@ -76,6 +76,40 @@ class DatasetListCreateView(generics.ListCreateAPIView):
         )
 
         populate_initial_fields(dataset, temp_name, staging_table=main_table)
+        
+class DatasetRemoveRelationView(APIView):
+    """
+    POST /bi_analysis/bi_datasets/<pk>/remove-relation/
+    { "right_table_id": 1339 }
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        right_id = request.data.get("right_table_id")
+        if not right_id:
+            return Response(
+                {"success": False, "error": "right_table_id is required"}, status=400
+            )
+
+        dataset = get_object_or_404(Dataset, pk=pk, owner=request.user)
+        try:
+            tbl = dataset.tables.get(pk=right_id)
+        except DataSetTable.DoesNotExist:
+            return Response(
+                {"success": False, "error": "table not found in dataset"}, status=404
+            )
+
+        # 1. “отвязываем” таблицу
+        tbl.joined_on_type = tbl.joined_on_left = tbl.joined_on_right = None
+        tbl.joined_on = {}
+        tbl.save()
+
+        # 2. Перестраиваем temp_…_joined без неё
+        from ..services.services import rebuild_dataset_joins
+        rebuild_dataset_joins(dataset)
+
+        serializer = DatasetDetailSerializer(dataset)
+        return Response({"success": True, "dataset": serializer.data})
 
 class DatasetListView(generics.ListAPIView):
     queryset = Dataset.objects.all()

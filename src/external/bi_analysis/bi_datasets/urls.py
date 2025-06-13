@@ -5,7 +5,7 @@ from .views import (
     DataSetTableViewSet, DataSetFieldViewSet,
     TempUploadView, FileUploadDetailView,
     FinalizeUploadView, XlsxSheetListView,
-    XlsxTempPreviewView, FileUploadByConnectionView, AddTableToDatasetView,
+    XlsxTempPreviewView, FileUploadByConnectionView, AddTableToDatasetView, DatasetRemoveRelationView,
     RenameDatasetColumnsView, DatasetListCreateView, DatasetJoinTableView, DataSetTableColumnsView
 )
 
@@ -28,6 +28,7 @@ urlpatterns = [
     path('<int:pk>/', DatasetDetailView.as_view(), name='bi_datasets-detail'),
     path('<int:pk>/preview/', DatasetPreviewView.as_view(), name='bi_datasets-preview'),
     path('<int:pk>/rename_columns/', RenameDatasetColumnsView.as_view(), name='bi_datasets-rename-columns'),
+    path('<int:pk>/remove-relation/', DatasetRemoveRelationView.as_view(), name='dataset-remove-relation'),
 
     path('', include(router.urls)),
 ]
