@@ -1,7 +1,12 @@
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
-from .models import Chart
+from .models import Chart, Dataset
 from .serializers import ChartSerializer
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.response import Response
+from rest_framework import status
+from django.shortcuts import get_object_or_404
+from .methods import fetch_columns_and_types
 
 class ChartListCreateView(generics.ListCreateAPIView):
     queryset = Chart.objects.all()
@@ -27,3 +32,25 @@ class ChartDetailView(generics.RetrieveUpdateDestroyAPIView):
         if not user.is_authenticated:
             return self.queryset.none()
         return self.queryset.filter(owner=user)
+    
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def dataset_columns(request, pk: int):
+    ds = get_object_or_404(
+        Dataset.objects.only('id', 'owner', 'table_ref'),
+        pk=pk, owner=request.user
+    )
+
+    try:
+        cols = fetch_columns_and_types(ds.table_ref)
+    except Exception as exc:
+        return Response(
+            {"detail": f"Не удалось получить колонки: {exc}"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+    return Response({
+        "dataset_id": pk,
+        "columns": cols
+    })
