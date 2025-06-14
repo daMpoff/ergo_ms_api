@@ -51,7 +51,7 @@ class DatasetListCreateView(generics.ListCreateAPIView):
 
     @transaction.atomic
     def perform_create(self, serializer):
-        dataset = serializer.save(owner=self.request.user)
+        dataset = serializer.save(owner=self.request.user, is_temporary=True)
         if not dataset.file_source:
             raise ValidationError("file_source is required for dataset creation")
 
@@ -111,9 +111,13 @@ class DatasetRemoveRelationView(APIView):
         return Response({"success": True, "dataset": serializer.data})
 
 class DatasetListView(generics.ListAPIView):
-    queryset = Dataset.objects.all()
     serializer_class = DatasetShortSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return (Dataset.objects
+                .filter(owner=self.request.user, is_temporary=False)
+                .order_by('-created_at'))
 
 class DatasetDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Dataset.objects.all()
@@ -121,8 +125,6 @@ class DatasetDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def get_serializer_class(self):
         if self.request.method in ('PUT', 'PATCH'):
-            if self.request.accepted_renderer.format == 'json':
-                return DatasetDetailFullSerializer
             return DatasetUpdateSerializer
         return DatasetDetailFullSerializer
     

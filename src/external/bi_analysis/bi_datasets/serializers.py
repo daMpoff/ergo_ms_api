@@ -72,7 +72,7 @@ class DataSetTableSerializer(serializers.ModelSerializer):
 class DatasetUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model  = Dataset
-        fields = ['id', 'name', 'description', 'is_temporary', 'owner']
+        fields = ['id', 'name', 'description', 'owner']
         read_only_fields = ['id', 'owner']
 
 class DataSetFieldSerializer(serializers.ModelSerializer):
@@ -116,9 +116,16 @@ class DatasetDetailFullSerializer(serializers.ModelSerializer):
 
 # --- Для списка (list) ---
 class DatasetShortSerializer(serializers.ModelSerializer):
+    owner_username = serializers.CharField(source='owner.username', read_only=True)
+    storage_type   = serializers.SerializerMethodField()
+
+    def get_storage_type(self, obj):
+        return 'postgres'
+
     class Meta:
-        model = Dataset
-        fields = ['id', 'name', 'description', 'created_at']
+        model  = Dataset
+        fields = ['id', 'name', 'owner_username',
+                  'storage_type', 'created_at']
 
 # --- Для create/update ---
 class DatasetSerializer(serializers.ModelSerializer):
@@ -150,6 +157,7 @@ class DatasetSerializer(serializers.ModelSerializer):
             'table_ref',
             'tables',
             'fields',
+            'is_temporary',
         ]
         read_only_fields = ['id', 'created_at', 'owner']
 
