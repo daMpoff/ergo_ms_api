@@ -71,30 +71,49 @@ class Dataset(models.Model):
 
 class DataSetTable(models.Model):
     dataset    = models.ForeignKey(
-        Dataset,
-        related_name="tables",
-        on_delete=models.CASCADE
+        Dataset, related_name="tables", on_delete=models.CASCADE
     )
     connection = models.ForeignKey(
-        Connection,
-        on_delete=models.CASCADE,
-        related_name='dataset_tables'
+        Connection, related_name="dataset_tables", on_delete=models.CASCADE
     )
+
     table_name = models.CharField(max_length=200)
     alias      = models.CharField(max_length=100, blank=True)
-    joined_on  = JSONField(default=dict)
+
+    # ключ и порядок
+    joined_on  = models.JSONField(default=dict)      # {type, left, right}
     order      = models.PositiveSmallIntegerField(default=0)
 
-    # Новые поля:
-    file_upload = models.ForeignKey(
-        FileUpload, null=True, blank=True, on_delete=models.SET_NULL, related_name='dataset_tables'
+    # ← ОСТАВЛЯЕМ ровно ОДНО поле file_upload
+    file_upload  = models.ForeignKey(
+        FileUpload, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="dataset_tables"
     )
-    sheet_name = models.CharField(max_length=255, blank=True, null=True)
-    joined_on_type = models.CharField(max_length=16, null=True, blank=True)
-    joined_on_left = models.CharField(max_length=128, null=True, blank=True)
-    joined_on_right = models.CharField(max_length=128, null=True, blank=True)
 
-    def __str__(self):
+    # «человеческое» имя и схема колонок
+    display_name = models.CharField(max_length=255, blank=True)
+    columns_info = models.JSONField(null=True, blank=True)
+
+    # --- новые атрибуты ---
+    sheet_name       = models.CharField(max_length=255, blank=True, null=True)
+    joined_on_type   = models.CharField(max_length=16,  blank=True, null=True)
+    joined_on_left   = models.CharField(max_length=128, blank=True, null=True)
+    joined_on_right  = models.CharField(max_length=128, blank=True, null=True)
+
+    # ----------------------
+
+    def save(self, *args, **kwargs):
+        """Если таблица привязана к FileUpload — подтянуть имя и columns_info."""
+        if self.file_upload_id:
+            if not self.display_name:
+                self.display_name = self.file_upload.original_filename
+
+            if self.columns_info is None and self.file_upload.columns_info:
+                self.columns_info = self.file_upload.columns_info
+
+        super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
         return f"{self.dataset.name} → {self.table_name}"
 
 

@@ -29,6 +29,7 @@ from .serializers import (
     DataSetTableSerializer,
     DataSetFieldSerializer,
     DatasetShortSerializer, 
+    DatasetUpdateSerializer,
     DatasetDetailFullSerializer
 )
 
@@ -36,8 +37,7 @@ from ..services.services import (
     create_temp_table_from_source,
     import_file_upload_to_table,
     populate_initial_fields,
-    auto_join_table,
-    create_temp_table_from_staging
+    auto_join_table
 )
 
 # ==============================================================================
@@ -57,23 +57,24 @@ class DatasetListCreateView(generics.ListCreateAPIView):
 
         staging_name = import_file_upload_to_table(dataset.file_source.id)
 
-        # НЕ СОХРАНЯЕМ staging в DataSetTable
-        # staging_table = DataSetTable.objects.create(..., table_name=staging_name, ...)
-
-        dataset.table_ref = staging_name  # временно
+        dataset.table_ref = staging_name
         dataset.save(update_fields=['table_ref'])
 
         temp_name = create_temp_table_from_source(dataset)
         dataset.table_ref = temp_name
         dataset.save(update_fields=['table_ref'])
 
-        # Сохраняем только temp_... в DataSetTable
         main_table = DataSetTable.objects.create(
             dataset=dataset,
             connection=dataset.connection,
             table_name=temp_name,
-            joined_on={}
+            joined_on={},
+            file_upload=dataset.file_source 
         )
+        
+        if dataset.file_source and dataset.file_source.columns_info:
+            main_table.columns_info = dataset.file_source.columns_info
+            main_table.save(update_fields=["display_name", "columns_info"])
 
         populate_initial_fields(dataset, temp_name, staging_table=main_table)
         
@@ -99,12 +100,10 @@ class DatasetRemoveRelationView(APIView):
                 {"success": False, "error": "table not found in dataset"}, status=404
             )
 
-        # 1. “отвязываем” таблицу
         tbl.joined_on_type = tbl.joined_on_left = tbl.joined_on_right = None
         tbl.joined_on = {}
         tbl.save()
 
-        # 2. Перестраиваем temp_…_joined без неё
         from ..services.services import rebuild_dataset_joins
         rebuild_dataset_joins(dataset)
 
@@ -117,18 +116,15 @@ class DatasetListView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
 class DatasetDetailView(generics.RetrieveUpdateDestroyAPIView):
-    """
-    GET    /datasets/{pk}/    — детали датасета
-    PUT    /datasets/{pk}/    — обновление
-    DELETE /datasets/{pk}/    — удаление
-    """
     queryset = Dataset.objects.all()
     permission_classes = [permissions.IsAuthenticated]
 
     def get_serializer_class(self):
-        if self.request.query_params.get('full') == '1':
-            return DatasetDetailFullSerializer
-        return DatasetDetailSerializer
+        if self.request.method in ('PUT', 'PATCH'):
+            if self.request.accepted_renderer.format == 'json':
+                return DatasetDetailFullSerializer
+            return DatasetUpdateSerializer
+        return DatasetDetailFullSerializer
     
 class DataSetTableColumnsView(APIView):
     def get(self, request, pk):
@@ -176,21 +172,18 @@ class DatasetJoinTableView(APIView):
 class AddTableToDatasetView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
-    def post(self, request, pk):  # pk — id датасета
+    def post(self, request, pk):
         file_id = request.data.get('file_id')
         dataset = Dataset.objects.get(pk=pk)
 
         file_upload = FileUpload.objects.get(pk=file_id)
         connection = file_upload.connection or dataset.connection
 
-        # 1. Импортируем файл во staging_...
         staging_name = import_file_upload_to_table(file_upload.id)
 
-        # 2. Создаём temp_... из staging_...
-        from ..services.services import create_temp_table_from_staging  # Импортируй, где нужно
+        from ..services.services import create_temp_table_from_staging
         temp_name = create_temp_table_from_staging(staging_name)
 
-        # 3. Создаём DataSetTable только для temp_...
         data_table = DataSetTable.objects.create(
             dataset=dataset,
             connection=connection,
@@ -199,7 +192,6 @@ class AddTableToDatasetView(APIView):
             file_upload=file_upload
         )
 
-        # 4. Возвращаем только temp_... во всех полях
         return Response({
             "id": data_table.id,
             "table_ref": data_table.table_name,

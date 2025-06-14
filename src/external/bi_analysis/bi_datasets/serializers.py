@@ -34,7 +34,7 @@ class DataSetTableSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'dataset', 'connection', 'table_name', 'alias',
             'joined_on', 'order', 'table_ref', 'display_name',
-            'file_upload_id', 'file_upload_name',
+            'file_upload_id', 'file_upload_name', 'columns_info',
             'joined_on_type', 'joined_on_left', 'joined_on_right'
         ]
         read_only_fields = ['id']
@@ -43,12 +43,13 @@ class DataSetTableSerializer(serializers.ModelSerializer):
         return obj.table_name
     
     def get_display_name(self, obj):
-        # Всегда через file_upload, если есть
-        if getattr(obj, 'file_upload', None) and getattr(obj, 'sheet_name', None):
-            filename = obj.file_upload.original_filename
-            filename = filename.replace('.xlsx', '')
+        if obj.display_name and not obj.display_name.startswith('temp_'):
+            return obj.display_name
+
+        if obj.file_upload and obj.sheet_name:
+            filename = obj.file_upload.original_filename.replace('.xlsx', '')
             return f"{filename} – {obj.sheet_name}"
-        elif getattr(obj, 'file_upload', None):
+        elif obj.file_upload:
             return obj.file_upload.original_filename
         else:
             return obj.table_name
@@ -67,6 +68,12 @@ class DataSetTableSerializer(serializers.ModelSerializer):
                 "right_column": obj.joined_on_right,
             }
         return None
+
+class DatasetUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = Dataset
+        fields = ['id', 'name', 'description', 'is_temporary', 'owner']
+        read_only_fields = ['id', 'owner']
 
 class DataSetFieldSerializer(serializers.ModelSerializer):
     source_table_name = serializers.SerializerMethodField()
@@ -101,14 +108,11 @@ class DatasetDetailSerializer(serializers.ModelSerializer):
 
 # --- Detail сериализаторы ---
 class DatasetDetailFullSerializer(serializers.ModelSerializer):
-    tables = DataSetTableSerializer(many=True, read_only=True)
-    fields = DataSetFieldSerializer(many=True, read_only=True)
+    tables  = DataSetTableSerializer(many=True, read_only=True)
+    fields  = DataSetFieldSerializer(many=True, read_only=True)
     class Meta:
-        model = Dataset
-        fields = [
-            'id', 'name', 'description', 'created_at',
-            'tables', 'fields',
-        ]
+        model  = Dataset
+        fields = '__all__'
 
 # --- Для списка (list) ---
 class DatasetShortSerializer(serializers.ModelSerializer):
