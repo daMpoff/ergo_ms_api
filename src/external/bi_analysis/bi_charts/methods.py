@@ -54,9 +54,29 @@ def fetch_columns_and_types(table_name: str):
         elif pg_type in PG_DATE:
             t = 'date'
         elif pg_type == 'text':
-            t = _probe_type(table_name, name)    # ← эвристика
+            t = _probe_type(table_name, name)
         else:
             t = 'string'
 
         cols.append({"name": name, "pg_type": pg_type, "type": t})
     return cols
+
+
+def get_rows_for_chart(pk):
+    """
+    Получить все строки итоговой (временной) таблицы для выбранного чарта/dataset.
+    :param pk: ID чарта/датасета
+    :return: Список словарей — строки итоговой таблицы
+    """
+    from src.external.bi_analysis.bi_datasets.models import Dataset
+    dataset = Dataset.objects.get(pk=pk)
+    table_name = dataset.table_ref
+
+    with connection.cursor() as cursor:
+        cursor.execute(f'SELECT * FROM "{table_name}" LIMIT 10000')
+        columns = [col[0] for col in cursor.description]
+        result = [
+            dict(zip(columns, row))
+            for row in cursor.fetchall()
+        ]
+    return result

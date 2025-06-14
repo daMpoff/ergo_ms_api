@@ -6,7 +6,8 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework import status
 from django.shortcuts import get_object_or_404
-from .methods import fetch_columns_and_types
+from .methods import fetch_columns_and_types, get_rows_for_chart
+from rest_framework.views import APIView
 
 class ChartListCreateView(generics.ListCreateAPIView):
     queryset = Chart.objects.all()
@@ -32,6 +33,11 @@ class ChartDetailView(generics.RetrieveUpdateDestroyAPIView):
         if not user.is_authenticated:
             return self.queryset.none()
         return self.queryset.filter(owner=user)
+    
+class ChartRowsAPIView(APIView):
+    def get(self, request, pk):
+        rows = get_rows_for_chart(pk)
+        return Response(rows)
     
 
 @api_view(['GET'])
