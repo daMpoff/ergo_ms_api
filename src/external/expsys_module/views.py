@@ -32,11 +32,12 @@ from rest_framework.request import Request
 import pandas as pd
 from src.external.expsys_module.models import (Skill, Vacance)
 from django.db import connection
-from src.external.lms.models import Subject
+from src.external.lms.models import Subject,Grade
 from src.external.expsys_module.models import Competence,Indicator_Subject,Indicator,Indicator_Competence
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
 from django.utils import timezone
+from django.db.models import Count
 
 from django.db import transaction
 from django.shortcuts import get_object_or_404
@@ -703,6 +704,310 @@ class DeleteIndicator(APIView):
                     "success": False,
                     "error": str(e),
                     "message": "Ошибка при удалении индикатора компетенции"
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class StudentGradesView(APIView):
+    def get(self, request):
+        try:
+            student_id = request.query_params.get('student_id')
+            subject_id = request.query_params.get('subject_id')
+            
+            grades_query = Grade.objects.all()
+            
+            if student_id:
+                grades_query = grades_query.filter(student_id=student_id)
+            
+            if subject_id:
+                grades_query = grades_query.filter(subject_id=subject_id)
+            
+            grades_data = []
+            
+            for grade in grades_query:
+                student = grade.student
+                grades_data.append({
+                    "student_id": student.id,
+                    "student_fio": f"{student.last_name} {student.first_name}".strip(),
+                    "subject_id": grade.subject.id,
+                    "subject_name": grade.subject.name,
+                    "grade": grade.grade,
+                    "grade_date": grade.related,
+                    "last_update": grade.lastupdate
+                })
+            
+            return Response(
+                {
+                    "success": True,
+                    "message": "Данные об оценках успешно получены",
+                    "grades": grades_data
+                },
+                status=status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            return Response(
+                {
+                    "success": False,
+                    "error": str(e),
+                    "message": "Ошибка при получении данных об оценках"
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+class CompetenceMasteryAllStudentsView(APIView):
+    def get(self, request):
+        try:
+            competence_id = request.query_params.get('competence_id')
+            
+            if not competence_id:
+                return Response(
+                    {
+                        "success": False,
+                        "message": "Необходимо указать competence_id"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            competence = get_object_or_404(Competence, id=competence_id)
+            
+            # Получаем все индикаторы для данной компетенции через промежуточную модель
+            indicator_competences = Indicator_Competence.objects.filter(competence=competence)
+            indicators_count = indicator_competences.count()
+            
+            if indicators_count == 0:
+                return Response(
+                    {
+                        "success": False,
+                        "message": "Для данной компетенции не найдены индикаторы"
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            base_coef = 100 / indicators_count
+            students_data = []
+            
+            # Получаем всех студентов, у которых есть оценки по предметам этой компетенции
+            # Через связи: Competence -> Indicator_Competence -> Indicator -> Indicator_Subject -> Subject -> Grade
+            students_with_grades = User.objects.filter(
+                grade__subject__indicator_subject__indicator__indicator_competence__competence=competence
+            ).distinct()
+            
+            for student in students_with_grades:
+                total_mastery = 0
+                subjects_data = []
+                
+                # Для каждого индикатора компетенции
+                for ic in indicator_competences:
+                    indicator = ic.indicator
+                    
+                    # Получаем связанные предметы через Indicator_Subject
+                    indicator_subjects = Indicator_Subject.objects.filter(indicator=indicator)
+                    
+                    for isub in indicator_subjects:
+                        subject = isub.subject
+                        
+                        # Получаем последнюю оценку студента по этому предмету
+                        grade = Grade.objects.filter(
+                            student=student,
+                            subject=subject
+                        ).order_by('-related').first()
+                        
+                        if grade:
+                            mastery_contribution = (base_coef * grade.grade) / 100
+                            total_mastery += mastery_contribution
+                            
+                            subjects_data.append({
+                                "subject_id": subject.id,
+                                "subject_name": subject.name,
+                                "indicator_id": indicator.id,
+                                "indicator_name": indicator.name,
+                                "grade": grade.grade,
+                                "mastery_contribution": mastery_contribution,
+                                "grade_date": grade.related.strftime('%Y-%m-%d') if grade.related else None
+                            })
+                
+                # Округляем общий уровень освоения
+                total_mastery = round(total_mastery, 2)
+                
+                students_data.append({
+                    "student_id": student.id,
+                    "student_fio": f"{student.last_name} {student.first_name}".strip(),
+                    "total_mastery": total_mastery,
+                    "subjects": subjects_data
+                })
+            
+            # Сортируем студентов по уровню освоения (от большего к меньшему)
+            students_data.sort(key=lambda x: x['total_mastery'], reverse=True)
+            
+            # Рассчитываем средний уровень освоения по всем студентам
+            avg_mastery = round(
+                sum(s['total_mastery'] for s in students_data) / len(students_data) if students_data else 0,
+                2
+            )
+            
+            return Response(
+                {
+                    "success": True,
+                    "message": "Данные об освоении компетенции для всех студентов успешно получены",
+                    "data": {
+                        "competence_id": competence.id,
+                        "competence_name": competence.name,
+                        "indicators_count": indicators_count,
+                        "average_mastery": avg_mastery,
+                        "students": students_data
+                    }
+                },
+                status=status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            return Response(
+                {
+                    "success": False,
+                    "error": str(e),
+                    "message": "Ошибка при расчете уровня освоения компетенции"
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class UpdateSubjectView(APIView):
+    @transaction.atomic
+    def post(self, request, subject_id):
+        try:
+            subject = get_object_or_404(Subject, id=subject_id)
+            
+            # Обновляем поля предмета из данных запроса
+            fields_to_update = {
+                'name': 'name',
+                'description': 'description',
+                'teacher': 'teacher_id'  # Обработка ForeignKey отдельно
+            }
+            
+            for field, model_field in fields_to_update.items():
+                if field in request.data:
+                    # Особое поле для обработки ForeignKey
+                    if field == 'teacher':
+                        teacher_id = request.data[field]
+                        teacher = get_object_or_404(User, id=teacher_id)
+                        setattr(subject, model_field, teacher)
+                    else:
+                        setattr(subject, model_field, request.data[field])
+            
+            # Обновляем дату последнего изменения
+            subject.lastupdate = timezone.now()
+            subject.save()
+            
+            return Response(
+                {
+                    "success": True,
+                    "message": "Предмет успешно обновлен",
+                    "subject": {
+                        "id": subject.id,
+                        "name": subject.name,
+                        "description": subject.description,
+                        "creationdate": subject.creationdate,
+                        "lastupdate": subject.lastupdate,
+                        "teacher": {
+                            "id": subject.teacher.id,
+                            "username": subject.teacher.username,
+                            "full_name": f"{subject.teacher.last_name} {subject.teacher.first_name}"
+                        }
+                    }
+                },
+                status=status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            return Response(
+                {
+                    "success": False,
+                    "error": str(e),
+                    "message": "Ошибка при обновлении предмета"
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class UpdateCompetenceView(APIView):
+    @transaction.atomic
+    def post(self, request, competence_id):
+        try:
+            competence = get_object_or_404(Competence, id=competence_id)
+            
+            # Обновляем поля компетенции из данных запроса
+            fields_to_update = {
+                'name': 'name',
+                'description': 'description',
+                'category': 'category'
+            }
+            
+            for field, model_field in fields_to_update.items():
+                if field in request.data:
+                    setattr(competence, model_field, request.data[field])
+            
+            competence.save()
+            
+            return Response(
+                {
+                    "success": True,
+                    "message": "Компетенция успешно обновлена",
+                    "competence": {
+                        "id": competence.id,
+                        "name": competence.name,
+                        "description": competence.description,
+                        "category": competence.category
+                    }
+                },
+                status=status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            return Response(
+                {
+                    "success": False,
+                    "error": str(e),
+                    "message": "Ошибка при обновлении компетенции"
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class UpdateIndicatorView(APIView):
+    @transaction.atomic
+    def post(self, request, indicator_id):
+        try:
+            indicator = get_object_or_404(Indicator, id=indicator_id)
+            
+            # Обновляем поля индикатора из данных запроса
+            fields_to_update = {
+                'name': 'name',
+                'description': 'description'
+            }
+            
+            for field, model_field in fields_to_update.items():
+                if field in request.data:
+                    setattr(indicator, model_field, request.data[field])
+            
+            indicator.save()
+            
+            return Response(
+                {
+                    "success": True,
+                    "message": "Индикатор успешно обновлен",
+                    "indicator": {
+                        "id": indicator.id,
+                        "name": indicator.name,
+                        "description": indicator.description
+                    }
+                },
+                status=status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            return Response(
+                {
+                    "success": False,
+                    "error": str(e),
+                    "message": "Ошибка при обновлении индикатора"
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )

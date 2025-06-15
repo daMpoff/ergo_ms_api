@@ -1,7 +1,7 @@
 from django.urls import path
 from src.external.expsys_module.views import PostCompetenciesandVacations
 from src.external.expsys_module.views import  TeacherSubjectsView,SubjectCreateView,SubjectIndicatorsCompetenciesView,CompetenciesView,IndicatorSubjectsCountView,IndicatorsView,CompetenceCreateView,IndicatorCreateView,CompetenceIndicatorsView,DeleteSubject
-from src.external.expsys_module.views import DeleteCompetence,DeleteIndicator
+from src.external.expsys_module.views import DeleteCompetence,DeleteIndicator,StudentGradesView,CompetenceMasteryAllStudentsView,UpdateSubjectView,UpdateCompetenceView,UpdateIndicatorView
 
 
 urlpatterns = [
@@ -18,6 +18,12 @@ urlpatterns = [
      path('competenceindicators/', CompetenceIndicatorsView.as_view(), name='competenceindicators'),
      path('delete-competence/<int:competence_id>/',DeleteCompetence.as_view(), name='delete_competence'),
      path('delete-indicator/<int:indicator_id>/',DeleteIndicator.as_view(), name='delete_indicator'),
+     path('information/', StudentGradesView.as_view(), name='information'),
+     path('information-competence/', CompetenceMasteryAllStudentsView.as_view(), name='information_competence'),
+     path('update-subject/<int:subject_id>/',UpdateSubjectView.as_view(), name='update_subject'),
+     path('update-competence/<int:competence_id>/',UpdateCompetenceView.as_view(), name='update_competence'),
+     path('update-indicator/<int:indicator_id>/',UpdateIndicatorView.as_view(), name='update_indicator'),
+
 
 
 
