@@ -1,6 +1,8 @@
 from django.db import models
 from django.contrib.auth.models import User
 
+from src.external.settings.models import Category, Tag
+
 class CmsShortcodeCategory(models.Model):
     name = models.CharField(max_length=100)
 
@@ -27,7 +29,6 @@ class CmsShortcodeTemplate(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.component_type})"
-
     
 class CmsPage(models.Model):
     name = models.CharField(max_length=100, unique=True)
@@ -35,10 +36,42 @@ class CmsPage(models.Model):
     creator = models.ForeignKey(User, on_delete=models.CASCADE)
     date_of_creation = models.DateTimeField(auto_now_add=True)
     last_update = models.DateTimeField(auto_now=True)
+    
+    # Добавляем категорию
+    category = models.ForeignKey(
+        Category,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='pages',
+        verbose_name="Категория страницы"
+    )
+
+    # Добавляем теги
+    tags = models.ManyToManyField(
+        Tag,
+        blank=True,
+        related_name="pages",
+        verbose_name="Теги страницы"
+    )
+
+    is_homepage = models.BooleanField(
+        default=False,
+        verbose_name="Главная страница",
+        help_text="Является ли эта страница главной"
+    )
+
+    @classmethod
+    def get_homepage(cls):
+        return cls.objects.filter(is_homepage=True).first()
+    
+    def save(self, *args, **kwargs):
+        if self.is_homepage:
+            CmsPage.objects.filter(is_homepage=True).exclude(pk=self.pk).update(is_homepage=False)
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.name
-
     
 class CmsShortcodeInstance(models.Model):
     page = models.ForeignKey(CmsPage, on_delete=models.CASCADE, related_name='instances', db_index=True)

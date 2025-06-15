@@ -1,3 +1,5 @@
+from src.external.settings.models import Category, Tag
+from src.external.settings.serializers import CategorySerializer, TagSerializer
 from rest_framework import serializers
 from .models import CmsPage, CmsShortcodeCategory, CmsShortcodeTemplate, CmsShortcodeInstance
 
@@ -54,12 +56,18 @@ class InstanceSerializer(serializers.ModelSerializer):
 
 class PageSerializer(serializers.ModelSerializer):
     instances = InstanceSerializer(many=True, read_only=True)
+    category = CategorySerializer(read_only=True)
+    category_id = serializers.PrimaryKeyRelatedField(
+        queryset=Category.objects.all(), source='category', write_only=True, required=False
+    )
+    tags = TagSerializer(many=True, read_only=True)
+    tags_ids = serializers.PrimaryKeyRelatedField(
+        queryset=Tag.objects.all(), many=True, source='tags', write_only=True, required=False
+    )
 
     class Meta:
         model = CmsPage
         fields = [
-            'id',
-            'name',
-            'slug',
-            'instances'
+            'id', 'name', 'slug', 'category', 'category_id',
+            'tags', 'tags_ids', 'is_homepage', 'instances'
         ]
