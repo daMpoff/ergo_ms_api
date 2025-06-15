@@ -1,6 +1,6 @@
 from django.db import models
 from rest_framework import viewsets, status
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from .models import CmsPage, CmsShortcodeCategory, CmsShortcodeTemplate, CmsShortcodeInstance
@@ -9,35 +9,51 @@ from .serializers import CmsCategorySerializer, PageSerializer, TemplateSerializ
 class ShortcodeCategoryViewSet(viewsets.ModelViewSet):
     queryset = CmsShortcodeCategory.objects.all()
     serializer_class = CmsCategorySerializer
-    permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        if self.action in ['list', 'retrieve']:
+            return [AllowAny()]
+        return [IsAuthenticated()]
 
 class TemplateViewSet(viewsets.ModelViewSet):
     queryset = CmsShortcodeTemplate.objects.all()
     serializer_class = TemplateSerializer
-    permission_classes = [IsAuthenticated]
-    
+
+    def get_permissions(self):
+        if self.action in ['list', 'retrieve']:
+            return [AllowAny()]
+        return [IsAuthenticated()]
+
     def perform_create(self, serializer):
         serializer.save(creator=self.request.user)
 
 class PageViewSet(viewsets.ModelViewSet):
     queryset = CmsPage.objects.all()
     serializer_class = PageSerializer
-    permission_classes = [IsAuthenticated]
     lookup_field = 'slug'
-    
+
+    def get_permissions(self):
+        if self.action in ['list', 'retrieve']:
+            return [AllowAny()]
+        return [IsAuthenticated()]
+
     def perform_create(self, serializer):
         serializer.save(creator=self.request.user)
 
 class InstanceViewSet(viewsets.ModelViewSet):
     queryset = CmsShortcodeInstance.objects.all()
     serializer_class = InstanceSerializer
-    permission_classes = [IsAuthenticated]
 
-    @action(detail=False, methods=['get'], url_path='tree')
+    def get_permissions(self):
+        if self.action in ['list', 'retrieve', 'tree']:
+            return [AllowAny()]
+        return [IsAuthenticated()]
+
+    @action(detail=False, methods=['get'], url_path='tree', permission_classes=[AllowAny])
     def tree(self, request):
         page_id = request.query_params.get('page')
         if not page_id:
-            return Response({'detail': 'page param required'}, status=400)
+            return Response({'detail': 'Необходим id страницы'}, status=400)
         roots = CmsShortcodeInstance.objects.filter(page_id=page_id, parent=None)
         serializer = self.get_serializer(roots, many=True)
         return Response(serializer.data)
@@ -62,7 +78,7 @@ class InstanceViewSet(viewsets.ModelViewSet):
                 page_id=page_id
             )
 
-    @action(detail=False, methods=['post'], url_path='bulk_create')
+    @action(detail=False, methods=['post'], url_path='bulk_create', permission_classes=[IsAuthenticated])
     def bulk_create(self, request):
         """
         Сохраняет полное дерево инстансов для страницы.
@@ -89,7 +105,7 @@ class InstanceViewSet(viewsets.ModelViewSet):
                 extra_data=item.get('extra_data', {}),
                 page_id=page_id,
                 position=item.get('position', 0),
-                uid=item.get('uid'), # новое поле!
+                uid=item.get('uid'),
                 # parent — пока не указываем
                 # любые доп.поля аналогично (например, is_active, icon_name и т.д.)
                 is_active=item.get('is_active', True),
@@ -112,4 +128,3 @@ class InstanceViewSet(viewsets.ModelViewSet):
         instances = CmsShortcodeInstance.objects.filter(page_id=page_id)
         serializer = self.get_serializer(instances, many=True)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
-
