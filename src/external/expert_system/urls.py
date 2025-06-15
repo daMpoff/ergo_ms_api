@@ -8,7 +8,9 @@ from .views import (
     ExpertSystemAnswerViewSet, ExpertSystemTestResultViewSet, ExpertSystemVacancyViewSet,
     ExpertSystemVacancySkillViewSet, ExpertSystemCandidateApplicationViewSet,
     ExpertSystemOrientationTestResultViewSet, ExpertSystemOrientationUserAnswerViewSet,
-    SetUserSkillTest, GetUserSkillTests, GetUserSkills
+    SetUserSkills, GetUserSkills, GetUserSkills, CreateTest, GetAllTests, DeleteTest,
+    GetTestForRedact, ChangeTest, GetSkillsForCreateTest, GetSkillsForRedactTest,GetTestidBySkill, GetTest,
+    TestEvaluation, ExpertSystemCourseViewSet, GetTestResult, GetTestResultBySkillId, DeleteTestResultBySkill
 )
 
 router = DefaultRouter()
@@ -29,13 +31,26 @@ router.register(r'test-results', ExpertSystemTestResultViewSet)
 router.register(r'vacancies', ExpertSystemVacancyViewSet)
 router.register(r'vacancy-skills', ExpertSystemVacancySkillViewSet)
 router.register(r'applications', ExpertSystemCandidateApplicationViewSet)
-router.register(r'orientation-results', ExpertSystemOrientationTestResultViewSet)
-router.register(r'orientation-answers', ExpertSystemOrientationUserAnswerViewSet)
+router.register(r'orientation-test-results', ExpertSystemOrientationTestResultViewSet)
+router.register(r'orientation-user-answers', ExpertSystemOrientationUserAnswerViewSet)
+router.register(r'courses', ExpertSystemCourseViewSet)
+
 
 urlpatterns = [
     path('', include(router.urls)),
-    path('set-user-skill-test', SetUserSkillTest.as_view(), name ='Set user skill test'),
-    path('get-user-skill-tests', GetUserSkillTests.as_view(), name ='Get user skill tests'),
-    path('get-user-skills', GetUserSkills.as_view(), name ='Get user skills')
-    
+    path('set-user-skills', SetUserSkills.as_view(), name ='Set user skills'),
+    path('get-user-skills', GetUserSkills.as_view(), name ='Get user skills'),
+    path('create-test', CreateTest.as_view(), name ='Create test'),
+    path('get-all-tests', GetAllTests.as_view(), name='Get all tests'),
+    path('delete-test/<int:id>/', DeleteTest.as_view(), name='Delete test'),
+    path('get-test', GetTest.as_view(), name='Get test'),
+    path('patch-test/<int:id>/', ChangeTest.as_view(), name='Change test'),
+    path('get-skills-for-create-test', GetSkillsForCreateTest.as_view(), name='Get skills for create test'),
+    path('get-skills-for-redact-test/<int:id>/', GetSkillsForRedactTest.as_view(), name='Get skills for redact test'),
+    path('get-test-id-by-skill', GetTestidBySkill.as_view(), name='Get test id by skill'),
+    path('get-test-for-redact', GetTestForRedact.as_view(), name='Get test'),
+    path('evaluate-test', TestEvaluation.as_view(), name='Evaluate test'),
+    path('get-test-result', GetTestResult.as_view(), name='Get test result'),
+    path('get-test-result-by-skill-id', GetTestResultBySkillId.as_view(), name='Get test result by skill id'),
+    path('delete-test-result-by-skill', DeleteTestResultBySkill.as_view(), name='Delete test result by skill')
 ]
