@@ -22,7 +22,7 @@ class GroupCategory(models.Model):
 
 class ExpandedPermission(models.Model):
     permission = models.OneToOneField(Permission, on_delete=models.CASCADE)
-    permission_mark = models.ForeignKey(PermissionMark, on_delete=models.CASCADE)
+    permission_mark = models.ForeignKey(PermissionMark, on_delete=models.CASCADE)   
     group_category = models.ForeignKey(GroupCategory, on_delete=models.CASCADE)
 
 PageChoicese =[
