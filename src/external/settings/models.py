@@ -5,12 +5,6 @@ from django.core.validators import FileExtensionValidator
 from django.conf import settings
 from slugify import slugify
 from django.utils.translation import gettext_lazy as _
-class UploadedFile(models.Model):
-    file = models.FileField(upload_to='uploads/')
-    uploaded_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return self.file.name
 
 class GeneralSettings(models.Model):
     site_name = models.CharField(_("Название сайта"), max_length=255, default="My Site")
