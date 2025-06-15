@@ -1,6 +1,7 @@
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
-from .models import Chart, Dataset
+from .models import Chart
+from src.external.bi_analysis.bi_datasets.models import Dataset
 from .serializers import ChartSerializer
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response

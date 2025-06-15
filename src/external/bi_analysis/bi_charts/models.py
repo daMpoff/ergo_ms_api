@@ -1,33 +1,20 @@
 from django.db import models
-from django.contrib.auth import get_user_model
-from ..bi_datasets.models import Dataset
+from django.conf import settings
 
 class Chart(models.Model):
-    CHART_TYPES = [
-    ('line', 'Линейная диаграмма'),
-    ('area', 'Диаграмма с областями'),
-    ('area_stacked', 'Нормированная диаграмма с областями'),
-    ('bar', 'Столбчатая диаграмма'),
-    ('bar_stacked', 'Нормированная столбчатая диаграмма'),
-    ('line_bar', 'Линейчатая диаграмма'),
-    ('line_bar_stacked', 'Нормированная линейчатая диаграмма'),
-    ('scatter', 'Точечная диаграмма'),
-    ('pie', 'Круговая диаграмма'),
-    ('donut', 'Кольцевая диаграмма'),
-    ('indicator', 'Индикатор'),
-    ('tree', 'Древовидная диаграмма'),
-    ('table', 'Таблица'),
-    ('pivot', 'Сводная таблица'),
-    ('map', 'Карта'),
-    ('combo', 'Комбинированная диаграмма'),
-]
-
-    name = models.CharField(max_length=255)
-    chart_type = models.CharField(max_length=32, choices=CHART_TYPES)
-    config = models.JSONField(default=dict)  # Вся визуализация хранится тут
-    dataset = models.ForeignKey(Dataset, on_delete=models.CASCADE, related_name='charts')
-    owner = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, related_name='charts')
+    name = models.CharField(max_length=256)
+    description = models.TextField(blank=True, default='')
+    dataset = models.ForeignKey('bi_analysis_bi_datasets.Dataset', on_delete=models.CASCADE)
+    chart_type = models.CharField(max_length=32)
+    engine = models.CharField(max_length=32, default='apex')
+    params = models.JSONField(default=dict, blank=True)
+    options = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return self.name
+    updated_at = models.DateTimeField(auto_now=True)
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='charts'
+    )
