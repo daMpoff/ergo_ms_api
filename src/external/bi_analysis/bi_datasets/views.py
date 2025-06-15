@@ -115,9 +115,12 @@ class DatasetListView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            # Для генерации схемы Swagger возвращаем пустой queryset
+            return Dataset.objects.none()
         return (Dataset.objects
-                .filter(owner=self.request.user, is_temporary=False)
-                .order_by('-created_at'))
+            .filter(owner=self.request.user, is_temporary=False)
+            .order_by('-created_at'))
 
 class DatasetDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Dataset.objects.all()
@@ -314,6 +317,15 @@ class TempUploadView(APIView):
             'file_type': suffix.lstrip('.').lower()
         }, status=201)
 
+    def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            # Для генерации схемы Swagger возвращаем пустой queryset
+            return FileUpload.objects.none()
+        return FileUpload.objects.filter(owner=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(owner=self.request.user)
+
 class FileUploadDetailView(generics.RetrieveUpdateDestroyAPIView):
     """
     GET    /upload/{pk}/    — метаданные + предпросмотр содержимого
@@ -325,6 +337,9 @@ class FileUploadDetailView(generics.RetrieveUpdateDestroyAPIView):
     parser_classes = [MultiPartParser, FormParser]
 
     def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            # Для генерации схемы Swagger возвращаем пустой queryset
+            return FileUpload.objects.none()
         return FileUpload.objects.filter(owner=self.request.user)
     
     def perform_create(self, serializer):
