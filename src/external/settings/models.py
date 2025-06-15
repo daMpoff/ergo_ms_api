@@ -2,6 +2,8 @@ from django.db import models
 from django.core.exceptions import ValidationError
 from django.contrib.auth.models import Group, Permission
 from django.core.validators import FileExtensionValidator
+from django.conf import settings
+from slugify import slugify
 from django.utils.translation import gettext_lazy as _
 class UploadedFile(models.Model):
     file = models.FileField(upload_to='uploads/')
@@ -155,6 +157,7 @@ class UploadedFile(models.Model):
         return self.alt_name or self.file.name
 class Category(models.Model):
     name = models.CharField(max_length=255, verbose_name="Название категории")
+    slug = models.SlugField(max_length=255, verbose_name="Slug", blank=True)
     parent = models.ForeignKey(
         'self', null=True, blank=True,
         on_delete=models.CASCADE,
@@ -165,9 +168,50 @@ class Category(models.Model):
     class Meta:
         verbose_name = "Категория"
         verbose_name_plural = "Категории"
+        unique_together = [['parent', 'slug']]
 
     def __str__(self):
         return self.name
 
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            base_slug = slugify(self.name)
+            slug = base_slug
+            n = 1
+            while Category.objects.filter(parent=self.parent, slug=slug).exclude(pk=self.pk).exists():
+                slug = f"{base_slug}-{n}"
+                n += 1
+            self.slug = slug
+        super().save(*args, **kwargs)
+
+class Tag(models.Model):
+    name = models.CharField("Название тега", max_length=255, unique=True)
+    category = models.ForeignKey(
+        Category, on_delete=models.CASCADE, related_name="tags", verbose_name="Категория", null=True, blank=True
+    )
+
+    class Meta:
+        verbose_name = "Тег"
+        verbose_name_plural = "Теги"
+
+    def __str__(self):
+        return self.name
+    
+class UserAvatar(models.Model):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='avatar'
+    )
+    image = models.ImageField(
+        upload_to='avatars/',
+        blank=True,
+        null=True,
+        verbose_name='Аватар'
+    )
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Аватар для {self.user.username}"
 
     

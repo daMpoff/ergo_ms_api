@@ -15,6 +15,9 @@ from django.utils.crypto import get_random_string
 from rest_framework import generics
 from .models import Category
 from .serializers import CategorySerializer
+from .models import UserAvatar
+from .serializers import UserAvatarSerializer
+from rest_framework.permissions import IsAuthenticated
 
 from django.contrib.auth.models import User
 
@@ -79,5 +82,18 @@ class FileViewSet(viewsets.ModelViewSet):
 class CategoryViewSet(viewsets.ModelViewSet):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
+class TagViewSet(viewsets.ModelViewSet):
+    queryset = Tag.objects.all()
+    serializer_class = TagSerializer
+
+class UserAvatarViewSet(viewsets.ModelViewSet):
+    queryset = UserAvatar.objects.all()
+    serializer_class = UserAvatarSerializer
     
+    def get_queryset(self):
+        return UserAvatar.objects.filter(user=self.request.user)
     
+    def perform_create(self, serializer):
+        UserAvatar.objects.filter(user=self.request.user).delete()
+        serializer.save(user=self.request.user)
+        

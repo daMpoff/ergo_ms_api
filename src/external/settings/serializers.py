@@ -1,6 +1,8 @@
 from rest_framework import serializers
 from .models import UploadedFile
 from .models import Category
+from .models import Tag
+from .models import UserAvatar
 from .models import (
     GeneralSettings, AppearanceSettings,
     SecuritySettings, MediaSettings, PermalinkSettings, EmailSettings
@@ -64,5 +66,20 @@ class UploadedFileSerializer(serializers.ModelSerializer):
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
-        fields = ['id', 'name', 'parent']
+        fields = ['id', 'name', 'parent', 'slug']
+        read_only_fields = ['slug']
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        ret['slug'] = instance.slug
+        return ret
+class TagSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Tag
+        fields = ['id', 'name', 'category']
+class UserAvatarSerializer(serializers.ModelSerializer):
+    user = serializers.PrimaryKeyRelatedField(read_only=True)
+    class Meta:
+        model = UserAvatar
+        fields = ['id', 'user', 'image', 'uploaded_at']
+
 
