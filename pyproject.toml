@@ -42,6 +42,8 @@ pymssql = "^2.3.4"
 clickhouse-connect = "^0.8.16"
 openpyxl = "^3.1.5"
 django-filter = "^25.1"
+yfinance = "^0.2.63"
+feedparser = "^6.0.11"
 
 [tool.poetry.scripts]
 cmd = "commands.__main__:main"
