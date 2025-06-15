@@ -32,7 +32,7 @@ from rest_framework.request import Request
 import pandas as pd
 from src.external.expsys_module.models import (Skill, Vacance)
 from django.db import connection
-from src.external.lms.models import Subject,Grade
+from src.external.lms.models import Subject,Grade,Lesson, Theme,Test
 from src.external.expsys_module.models import Competence,Indicator_Subject,Indicator,Indicator_Competence
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
@@ -307,6 +307,7 @@ class IndicatorsView(APIView):
                     'id': ind.id,
                     'name': ind.name,
                     'description':ind.description,
+                    'category':ind.category
                 }
                 indicators_data.append(indicator_data)
 
@@ -455,6 +456,8 @@ class IndicatorCreateView(APIView):
             # Валидация данных
             name = request.data.get('name', '').strip()
             description = request.data.get('description', '').strip()
+            category = request.data.get('category', '').strip()
+
 
             if not name:
                 return Response(
@@ -476,6 +479,7 @@ class IndicatorCreateView(APIView):
             indicator = Indicator.objects.create(
                 name=name,
                 description=description,
+                category=category,
             )
 
             # Формирование успешного ответа
@@ -484,6 +488,9 @@ class IndicatorCreateView(APIView):
                     "id": indicator.id,
                     "name": indicator.name,
                     "description": indicator.description,
+                    "category": indicator.category,
+
+                    
                 },
                 status=status.HTTP_201_CREATED
             )
@@ -980,7 +987,8 @@ class UpdateIndicatorView(APIView):
             # Обновляем поля индикатора из данных запроса
             fields_to_update = {
                 'name': 'name',
-                'description': 'description'
+                'description': 'description',
+                'category':'category'
             }
             
             for field, model_field in fields_to_update.items():
@@ -996,7 +1004,8 @@ class UpdateIndicatorView(APIView):
                     "indicator": {
                         "id": indicator.id,
                         "name": indicator.name,
-                        "description": indicator.description
+                        "description": indicator.description,
+                        "category":indicator.category,
                     }
                 },
                 status=status.HTTP_200_OK
@@ -1008,6 +1017,175 @@ class UpdateIndicatorView(APIView):
                     "success": False,
                     "error": str(e),
                     "message": "Ошибка при обновлении индикатора"
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class SubjectStudentCountView(APIView):
+    def get(self, request):
+        try:
+            subject_id = request.query_params.get('subject_id')
+            
+            if not subject_id:
+                return Response(
+                    {
+                        "success": False,
+                        "message": "Не указан ID предмета"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Получаем количество уникальных студентов по предмету
+            student_count = Grade.objects.filter(subject_id=subject_id)\
+                                      .values('student')\
+                                      .distinct()\
+                                      .count()
+            
+            # Дополнительно получаем информацию о предмете
+            subject = Subject.objects.get(id=subject_id)
+            
+            return Response(
+                {
+                    "success": True,
+                    "message": "Количество студентов по предмету успешно получено",
+                    "data": {
+                        "subject_id": subject.id,
+                        "subject_name": subject.name,
+                        "student_count": student_count,
+                        "teacher_id": subject.teacher.id,
+                        "teacher_name": f"{subject.teacher.last_name} {subject.teacher.first_name}".strip()
+                    }
+                },
+                status=status.HTTP_200_OK
+            )
+            
+        except Subject.DoesNotExist:
+            return Response(
+                {
+                    "success": False,
+                    "message": "Предмет не найден"
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+            
+        except Exception as e:
+            return Response(
+                {
+                    "success": False,
+                    "error": str(e),
+                    "message": "Ошибка при получении количества студентов"
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class SubjectLessonCountView(APIView):
+    def get(self, request):
+        try:
+            subject_id = request.query_params.get('subject_id')
+            
+            if not subject_id:
+                return Response(
+                    {
+                        "success": False,
+                        "message": "Не указан ID предмета"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Получаем количество уникальных уроков по предмету
+            lesson_count = Lesson.objects.filter(theme__subject_id=subject_id)\
+                                      .values('id')\
+                                      .distinct()\
+                                      .count()
+            
+            # Дополнительно получаем информацию о предмете
+            subject = Subject.objects.get(id=subject_id)
+            
+            return Response(
+                {
+                    "success": True,
+                    "message": "Количество уроков по предмету успешно получено",
+                    "data": {
+                        "subject_id": subject.id,
+                        "subject_name": subject.name,
+                        "lesson_count": lesson_count,
+                        "teacher_id": subject.teacher.id,
+                        "teacher_name": f"{subject.teacher.last_name} {subject.teacher.first_name}".strip()
+                    }
+                },
+                status=status.HTTP_200_OK
+            )
+            
+        except Subject.DoesNotExist:
+            return Response(
+                {
+                    "success": False,
+                    "message": "Предмет не найден"
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+            
+        except Exception as e:
+            return Response(
+                {
+                    "success": False,
+                    "error": str(e),
+                    "message": "Ошибка при получении количества уроков"
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+class SubjectTestCountView(APIView):
+    def get(self, request):
+        try:
+            subject_id = request.query_params.get('subject_id')
+            
+            if not subject_id:
+                return Response(
+                    {
+                        "success": False,
+                        "message": "Не указан ID предмета"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Получаем количество уникальных тестов по предмету
+            test_count = Test.objects.filter(
+                lesson__theme__subject_id=subject_id
+            ).values('id').distinct().count()
+            
+            # Дополнительно получаем информацию о предмете
+            subject = Subject.objects.get(id=subject_id)
+            
+            return Response(
+                {
+                    "success": True,
+                    "message": "Количество тестов по предмету успешно получено",
+                    "data": {
+                        "subject_id": subject.id,
+                        "subject_name": subject.name,
+                        "test_count": test_count,
+                        "teacher_id": subject.teacher.id,
+                        "teacher_name": f"{subject.teacher.last_name} {subject.teacher.first_name}".strip()
+                    }
+                },
+                status=status.HTTP_200_OK
+            )
+            
+        except Subject.DoesNotExist:
+            return Response(
+                {
+                    "success": False,
+                    "message": "Предмет не найден"
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+            
+        except Exception as e:
+            return Response(
+                {
+                    "success": False,
+                    "error": str(e),
+                    "message": "Ошибка при получении количества тестов"
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )

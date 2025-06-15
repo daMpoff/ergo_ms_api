@@ -1,7 +1,7 @@
 from django.urls import path
 from src.external.expsys_module.views import PostCompetenciesandVacations
 from src.external.expsys_module.views import  TeacherSubjectsView,SubjectCreateView,SubjectIndicatorsCompetenciesView,CompetenciesView,IndicatorSubjectsCountView,IndicatorsView,CompetenceCreateView,IndicatorCreateView,CompetenceIndicatorsView,DeleteSubject
-from src.external.expsys_module.views import DeleteCompetence,DeleteIndicator,StudentGradesView,CompetenceMasteryAllStudentsView,UpdateSubjectView,UpdateCompetenceView,UpdateIndicatorView
+from src.external.expsys_module.views import DeleteCompetence,DeleteIndicator,StudentGradesView,CompetenceMasteryAllStudentsView,UpdateSubjectView,UpdateCompetenceView,UpdateIndicatorView, SubjectStudentCountView, SubjectLessonCountView,SubjectTestCountView
 
 
 urlpatterns = [
@@ -23,9 +23,9 @@ urlpatterns = [
      path('update-subject/<int:subject_id>/',UpdateSubjectView.as_view(), name='update_subject'),
      path('update-competence/<int:competence_id>/',UpdateCompetenceView.as_view(), name='update_competence'),
      path('update-indicator/<int:indicator_id>/',UpdateIndicatorView.as_view(), name='update_indicator'),
-
-
-
+     path('countstudents-subject/', SubjectStudentCountView.as_view(), name='countstudents_subject'),
+     path('countlessons-subject/',SubjectLessonCountView.as_view(), name='countlessons_subject'),
+     path('counttests-subject/',SubjectTestCountView.as_view(), name='counttests_subject'),
 
 
 ]

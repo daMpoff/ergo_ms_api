@@ -8,9 +8,13 @@ class Competence(models.Model):
     name = models.CharField(max_length=255, default='')
     description = models.TextField(default='')
     category = models.TextField(default='')
+
 class Indicator(models.Model):
     name = models.CharField(max_length=255, default='')
     description = models.TextField(default='')
+    category = models.TextField(default='')
+
+
 class Indicator_Subject(models.Model):
     indicator = models.ForeignKey(Indicator, on_delete=models.CASCADE,default=0)
     subject = models.ForeignKey(Subject, on_delete=models.CASCADE, default=0)
