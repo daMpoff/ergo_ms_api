@@ -32,7 +32,8 @@ class CmsShortcodeTemplate(models.Model):
     
 class CmsPage(models.Model):
     name = models.CharField(max_length=100, unique=True)
-    slug = models.SlugField(max_length=100, unique=True)  # URL страницы
+    slug  = models.SlugField(max_length=100, unique=True,
+                            blank=True, null=True)         
     creator = models.ForeignKey(User, on_delete=models.CASCADE)
     date_of_creation = models.DateTimeField(auto_now_add=True)
     last_update = models.DateTimeField(auto_now=True)
@@ -45,6 +46,10 @@ class CmsPage(models.Model):
         blank=True,
         related_name='pages',
         verbose_name="Категория страницы"
+    )
+    category_index = models.BooleanField(
+        default=False,
+        help_text='Если True — страница открывается по URL самой категории'
     )
 
     # Добавляем теги
@@ -61,13 +66,19 @@ class CmsPage(models.Model):
         help_text="Является ли эта страница главной"
     )
     def get_full_url(self):
-        """Вернуть полный путь до страницы в виде строки '/cat1/cat2/slug'"""
+        """
+        /electronics/           ← страница-индекс категории «electronics»
+        /electronics/tv-samsung ← обычная страница с slug-ом
+        """
         parts = []
         cat = self.category
         while cat:
             parts.insert(0, cat.slug)
             cat = cat.parent
-        parts.append(self.slug)
+
+        if not self.category_index:
+            parts.append(self.slug)
+
         return '/' + '/'.join(parts)
 
     @classmethod
@@ -81,6 +92,16 @@ class CmsPage(models.Model):
 
     def __str__(self):
         return self.name
+    
+    class Meta:
+        # страница-индекс должна быть уникальна в рамках категории
+        constraints = [
+            models.UniqueConstraint(
+                fields=['category'],
+                condition=models.Q(category_index=True),
+                name='unique_category_index'
+            )
+        ]
     
 class CmsShortcodeInstance(models.Model):
     page = models.ForeignKey(CmsPage, on_delete=models.CASCADE, related_name='instances', db_index=True)

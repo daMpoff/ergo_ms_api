@@ -60,35 +60,44 @@ class PageViewSet(viewsets.ModelViewSet):
 
 class PageByFullPathView(APIView):
     permission_classes = [AllowAny]
-    @swagger_auto_schema(
-        operation_description="Получить страницу по полному пути",
-        manual_parameters=[
-            openapi.Parameter(
-                "full_path",
-                openapi.IN_QUERY,
-                description="Полный путь страницы, например: catalog/phones/iphone-15",
-                type=openapi.TYPE_STRING,
-                required=True,
-            ),
-        ],
-        responses={200: PageSerializer()},
-    )
+
+    @swagger_auto_schema( ... )
     def get(self, request):
         path = request.query_params.get('full_path', '').strip('/')
-        parts = path.split('/')
-        slug = parts[-1]
-        cat_slugs = parts[:-1]
-
-        parent = None
-        for cat_slug in cat_slugs:
-            parent = Category.objects.filter(slug=cat_slug, parent=parent).first()
-            if not parent:
-                return Response({'detail': f'Категория не найдена: {cat_slug}'}, status=404)
-
-        page = CmsPage.objects.filter(slug=slug, category=parent).first()
-        if not page:
+        if path == '':
+            # корневая «домашняя» категория
+            page = CmsPage.objects.filter(category=None, category_index=True).first()
+            if page:
+                return Response(PageSerializer(page).data)
             return Response({'detail': 'Страница не найдена'}, status=404)
-        return Response(PageSerializer(page).data)
+
+        parts      = path.split('/')
+        slug_part  = parts[-1]
+        cat_slugs  = parts[:-1]
+
+        # ищем обычную страницу со slug-ом ─ как раньше
+        parent = None
+        for s in cat_slugs:
+            parent = Category.objects.filter(slug=s, parent=parent).first()
+            if not parent:
+                break
+        if parent is not None:
+            page = CmsPage.objects.filter(slug=slug_part, category=parent).first()
+            if page:
+                return Response(PageSerializer(page).data)
+
+        # если не нашли — может это индекс-страница категории
+        parent = None
+        for s in parts:                         # используем ВЕСЬ путь
+            parent = Category.objects.filter(slug=s, parent=parent).first()
+            if not parent:
+                return Response({'detail': f'Категория не найдена: {s}'}, status=404)
+
+        page = CmsPage.objects.filter(category=parent, category_index=True).first()
+        if page:
+            return Response(PageSerializer(page).data)
+
+        return Response({'detail': 'Страница не найдена'}, status=404)
 
 class InstanceViewSet(viewsets.ModelViewSet):
     queryset = CmsShortcodeInstance.objects.all()

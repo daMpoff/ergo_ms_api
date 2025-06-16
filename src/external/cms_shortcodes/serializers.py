@@ -65,6 +65,9 @@ class SiteLayoutSerializer(serializers.ModelSerializer):
         model  = SiteLayout
         fields = ['id', 'header_template', 'footer_template', 'menu_pages']
 class PageSerializer(serializers.ModelSerializer):
+    slug = serializers.SlugField(
+        required=False, allow_null=True, allow_blank=True
+    )
     instances = InstanceSerializer(many=True, read_only=True)
     category = CategorySerializer(read_only=True)
     category_id = serializers.PrimaryKeyRelatedField(
@@ -80,6 +83,15 @@ class PageSerializer(serializers.ModelSerializer):
     class Meta:
         model = CmsPage
         fields = [
-            'id', 'name', 'slug', 'category', 'category_id',
-            'tags', 'tags_ids', 'is_homepage', 'instances', 'full_url'
-        ]
+            'id', 'name', 'slug', 'category', 'category_id','category_index',
+            'tags', 'tags_ids', 'is_homepage', 'instances', 'full_url',
+        ]    
+
+    def validate(self, attrs):
+        is_index = attrs.get('category_index', False)
+        slug     = attrs.get('slug') or ''
+        if not is_index and not slug:
+            raise serializers.ValidationError({'slug': 'Обязательное поле.'})
+        if is_index:
+            attrs['slug'] = ''       # чтобы не хранить None
+        return attrs
