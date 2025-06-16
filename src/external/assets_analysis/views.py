@@ -1,25 +1,40 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, generics, pagination
-from django.core.management import call_command, CommandError
-from django.utils.dateparse import parse_date, parse_datetime
-from django.db.models import Q
+
+import os
 from io import StringIO
-from external.ETL.analyze.models import CryptoPrice, NewsArticle, AssetPrice, StockPrice
-from external.ETL.analyze.scripts import (
+
+import json
+import re
+import logging
+import shutil
+
+from datetime import date
+
+from django.core.exceptions import ValidationError
+from django.core.management import call_command, CommandError
+from django.utils.dateparse import parse_date
+from django.db.models import Q
+from django.conf import settings
+
+from src.external.assets_analysis.models import (
+    CryptoPrice, 
+    NewsArticle, 
+    AssetPrice, 
+    StockPrice
+)
+from src.external.assets_analysis.scripts import (
     delete_all_crypto_prices,
     delete_all_asset_prices,
     delete_all_stock_prices
 )
-from .serializers import CryptoPriceSerializer, NewsArticleSerializer, AssetPriceSerializer, StockPriceSerializer
-from datetime import date, datetime, timedelta
-import json
-import re
-import logging
-from django.core.exceptions import ValidationError
-import os
-import shutil
-from django.conf import settings
+from src.external.assets_analysis.serializers import (
+    CryptoPriceSerializer, 
+    NewsArticleSerializer, 
+    AssetPriceSerializer, 
+    StockPriceSerializer
+)
 
 logger = logging.getLogger(__name__)
 

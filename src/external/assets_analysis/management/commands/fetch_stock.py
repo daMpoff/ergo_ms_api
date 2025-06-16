@@ -1,16 +1,18 @@
 import logging
 from datetime import datetime, timedelta
+
 from django.core.management.base import BaseCommand, CommandError
 from django.utils.dateparse import parse_date
+
 try:
-    from src.external.ETL.analyze.scripts import fetch_historical_stock_prices, SELECTED_STOCKS
+    from src.external.assets_analysis.scripts import fetch_historical_stock_prices, SELECTED_STOCKS
 except ImportError:
     def fetch_historical_stock_prices(*args, **kwargs):
         raise ImportError("Не удалось импортировать 'fetch_historical_stock_prices'.")
 
 logger = logging.getLogger(__name__)
-DEFAULT_DAYS_TO_FETCH = 30
 
+DEFAULT_DAYS_TO_FETCH = 30
 
 class Command(BaseCommand):
     """

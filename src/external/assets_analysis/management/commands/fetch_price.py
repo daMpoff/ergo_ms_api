@@ -1,14 +1,15 @@
 import datetime
+
 from django.core.management.base import BaseCommand
 from django.utils.timezone import make_aware
 
-from src.external.ETL.analyze.scripts import (
-    fetch_historical_crypto_prices,
+from src.external.assets_analysis.scripts import (
     SELECTED_COINS,
-    fetch_historical_asset_prices,
     SELECTED_ASSETS,
+    SELECTED_STOCKS,
+    fetch_historical_crypto_prices,
+    fetch_historical_asset_prices,
     fetch_historical_stock_prices,
-    SELECTED_STOCKS
 )
 
 class Command(BaseCommand):

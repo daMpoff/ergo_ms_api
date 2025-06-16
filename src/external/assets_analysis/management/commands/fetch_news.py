@@ -2,18 +2,23 @@ import feedparser
 import requests
 import logging
 import datetime
+
 from bs4 import BeautifulSoup
+
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone as tz
 from django.utils.dateparse import parse_datetime, parse_date
-from django.db import IntegrityError, transaction
-from external.ETL.analyze.models import NewsArticle
-from external.ETL.analyze.scripts import SELECTED_COINS
+from django.db import transaction
+
+from src.external.assets_analysis.models import NewsArticle
+from src.external.assets_analysis.scripts import SELECTED_COINS
 
 
 try:
     import torch
+
     from transformers import AutoTokenizer, AutoModelForSequenceClassification
+    
     ML_IMPORTED = True
 except ImportError as e:
     ML_IMPORTED = False

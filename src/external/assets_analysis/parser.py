@@ -1,5 +1,6 @@
 import requests
 import datetime
+
 from bs4 import BeautifulSoup
 
 def fetch_from_coinmarketcap(coin, days):

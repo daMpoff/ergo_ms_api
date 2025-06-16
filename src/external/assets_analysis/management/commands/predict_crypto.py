@@ -1,28 +1,35 @@
-import numpy as np
-import pandas as pd
-from django.core.management.base import BaseCommand, CommandError
-from django.utils import timezone
-from django.utils.timezone import now, timedelta
-from django.db.models import Avg
 import datetime
-from external.ETL.analyze.models import CryptoPrice, AssetPrice, StockPrice, NewsArticle
 import os
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-from pathlib import Path
 import logging
 import json
 import traceback
 import threading
 
+from pathlib import Path
+
+import numpy as np
+
+from django.core.management.base import BaseCommand, CommandError
+from django.utils import timezone
+from django.utils.timezone import timedelta
+from django.db.models import Avg
+
+from src.external.assets_analysis.models import CryptoPrice, AssetPrice, StockPrice, NewsArticle
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
 try:
+    import joblib
+    
     import tensorflow as tf
+
     from tensorflow.keras.models import Sequential, load_model
     from tensorflow.keras.layers import LSTM, Dense, Dropout, Bidirectional, Input
     from tensorflow.keras.callbacks import EarlyStopping
     from tensorflow.keras.optimizers import Adam
+
     from sklearn.preprocessing import StandardScaler
-    import joblib
 
     TF_IMPORTED = True
 except ImportError as e:

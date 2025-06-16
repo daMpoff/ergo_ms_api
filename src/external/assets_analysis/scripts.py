@@ -1,14 +1,18 @@
 import requests
 import datetime
 import time
-import xml.etree.ElementTree as ET
-from decimal import Decimal, InvalidOperation, DivisionByZero
+
 import yfinance as yf
+
+import xml.etree.ElementTree as ET
+
+from decimal import Decimal, InvalidOperation, DivisionByZero
+
 from django.utils.timezone import make_aware, timezone, is_aware
 from django.db import transaction
 from django.conf import settings
 
-from external.ETL.analyze.models import CryptoPrice, AssetPrice, StockPrice
+from src.external.assets_analysis.models import CryptoPrice, AssetPrice, StockPrice
 
 # Настройки для Криптовалют
 DEFAULT_CRYPTO_SOURCE = "auto" # auto, binance, coingecko

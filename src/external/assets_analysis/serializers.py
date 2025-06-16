@@ -1,5 +1,6 @@
 from rest_framework import serializers
-from .models import CryptoPrice, NewsArticle, AssetPrice, StockPrice
+
+from src.external.assets_analysis.models import CryptoPrice, NewsArticle, AssetPrice, StockPrice
 
 class CryptoPriceSerializer(serializers.ModelSerializer):
     class Meta:

@@ -1,5 +1,6 @@
 from django.urls import path
-from .views import (
+
+from src.external.assets_analysis.views import (
     CryptoPriceListAPIView,
     AssetPriceListAPIView,
     StockPriceListAPIView,
