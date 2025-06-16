@@ -89,11 +89,21 @@ class TagViewSet(viewsets.ModelViewSet):
 class UserAvatarViewSet(viewsets.ModelViewSet):
     queryset = UserAvatar.objects.all()
     serializer_class = UserAvatarSerializer
+    permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
+        # Обходим проблему с генерацией swagger схемы для анонимных пользователей
+        if getattr(self, 'swagger_fake_view', False):
+            return UserAvatar.objects.none()
+        
+        # Проверяем, что пользователь аутентифицирован
+        if not self.request.user.is_authenticated:
+            return UserAvatar.objects.none()
+            
         return UserAvatar.objects.filter(user=self.request.user)
     
     def perform_create(self, serializer):
-        UserAvatar.objects.filter(user=self.request.user).delete()
-        serializer.save(user=self.request.user)
+        if self.request.user.is_authenticated:
+            UserAvatar.objects.filter(user=self.request.user).delete()
+            serializer.save(user=self.request.user)
         
