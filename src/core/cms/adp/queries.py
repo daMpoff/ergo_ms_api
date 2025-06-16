@@ -71,62 +71,6 @@ def get_tasks_by_priority():
     
     return results
 
-def get_tasks_efficiency():
-    """
-    Возвращает данные для анализа эффективности выполнения задач:
-    - плановую дату завершения (deadline)
-    - фактическую дату завершения (completed_at)
-    - приоритет задачи
-    - продолжительность выполнения в днях
-    """
-    query = """
-    SELECT 
-        text,
-        priority,
-        dateofcreation::date,
-        deadline::date,
-        completed_at::date,
-        COALESCE(
-            DATE_PART('day', completed_at::timestamp - dateofcreation::timestamp)::integer,
-            0
-        ) AS actual_duration,
-        COALESCE(
-            DATE_PART('day', deadline::timestamp - dateofcreation::timestamp)::integer,
-            0
-        ) AS planned_duration,
-        CASE 
-            WHEN completed_at IS NULL OR deadline IS NULL THEN false
-            WHEN completed_at <= deadline THEN true 
-            ELSE false 
-        END as is_on_time
-    FROM crm_task
-    WHERE isdone = true 
-        AND completed_at IS NOT NULL 
-        AND deadline IS NOT NULL
-        AND dateofcreation IS NOT NULL
-    ORDER BY dateofcreation
-    """
-    
-    try:
-        with connection.cursor() as cursor:
-            cursor.execute(query)
-            columns = [col[0] for col in cursor.description]
-            results = [
-                dict(zip(columns, row))
-                for row in cursor.fetchall()
-            ]
-            
-            # Преобразуем даты в строки для JSON сериализации
-            for result in results:
-                result['dateofcreation'] = result['dateofcreation'].isoformat() if result['dateofcreation'] else None
-                result['deadline'] = result['deadline'].isoformat() if result['deadline'] else None
-                result['completed_at'] = result['completed_at'].isoformat() if result['completed_at'] else None
-            
-            return results
-    except Exception as e:
-        print(f"Error in get_tasks_efficiency: {str(e)}")
-        raise
-
 def get_tasks_by_section():
     """
     Возвращает статистику задач, сгруппированных по секциям,

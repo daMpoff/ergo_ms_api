@@ -1,7 +1,6 @@
 from django.urls import path
 from .views import (
-    MonthlyStatsView, PriorityStatsView,
-    TaskEfficiencyView, SectionStatsView,
+    MonthlyStatsView, PriorityStatsView, SectionStatsView,
     ProjectViewSet, SectionViewSet, TaskViewSet,
     CalendarViewSet, UserProjectViewSet, UserViewSet
 )
@@ -45,7 +44,6 @@ user_delete_all = UserViewSet.as_view({'delete': 'delete_all'})
 urlpatterns = [
     path('stats/monthly/', MonthlyStatsView.as_view(), name='monthly-stats'),
     path('stats/priority/', PriorityStatsView.as_view(), name='priority-stats'),
-    path('stats/efficiency/', TaskEfficiencyView.as_view(), name='efficiency-stats'),
     path('stats/sections/', SectionStatsView.as_view(), name='section-stats'),
 
     # Project

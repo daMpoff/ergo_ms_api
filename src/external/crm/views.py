@@ -3,7 +3,7 @@ from rest_framework import status
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from src.core.utils.base.base_views import BaseAPIView
-from src.core.cms.adp.queries import get_tasks_by_month, get_tasks_by_priority, get_tasks_efficiency, get_tasks_by_section
+from src.core.cms.adp.queries import get_tasks_by_month, get_tasks_by_priority, get_tasks_by_section
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from .models import Project, Section, Task, Calendar
@@ -366,37 +366,6 @@ class UserViewSet(viewsets.ModelViewSet):
         except Exception as e:
             return Response(
                 {"message": f"Ошибка при удалении данных: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-class TaskEfficiencyView(BaseAPIView):
-    @swagger_auto_schema(
-        operation_description="Получение данных об эффективности выполнения задач",
-        responses={
-            200: "Данные об эффективности задач",
-            500: "Ошибка сервера при получении данных"
-        }
-    )
-    def get(self, request):
-        try:
-            efficiency_stats = get_tasks_efficiency()
-    
-            if not efficiency_stats:
-                response_data = {
-                    "data": [],
-                    "message": "Данные об эффективности задач не найдены"
-                }
-                return Response(response_data, status=status.HTTP_200_OK)
-    
-            response_data = {
-                "data": efficiency_stats,
-                "message": "Данные об эффективности задач получены успешно"
-            }
-            return Response(response_data, status=status.HTTP_200_OK)
-            
-        except Exception as e:
-            return Response(
-                {"message": f"Произошла ошибка при получении данных: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
