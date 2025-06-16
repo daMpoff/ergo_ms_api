@@ -649,9 +649,11 @@ class DeleteSubject(APIView):
     def delete(self, request, subject_id):  # Изменил task_id на id
         print("dada")
         try:
-            print(id)
-            subject = get_object_or_404(Subject, id=subject_id)  # Используем переданный id
+            print(subject_id)
+            #subject = get_object_or_404(Subject, id=subject_id)  # Используем переданный id
+            subject = Subject.objects.get(id=subject_id)
             subject.delete()
+            #subject.save()
             
             return Response(
                 {"success": True, "message": "Предмет удален"},
@@ -659,6 +661,7 @@ class DeleteSubject(APIView):
             )
             
         except Exception as e:
+            print(e)
             return Response(
                 {
                     "success": False,
