@@ -17,6 +17,5 @@ from src.config.settings.localization import *
 from src.config.settings.server import *
 from src.config.settings.templates import *
 from src.config.settings.smtp import *
-from src.config.settings.auto_api import *
 from src.config.settings.swagger import *
 from src.config.settings.celery import *
