@@ -31,7 +31,7 @@ import requests
 from rest_framework.request import Request
 import pandas as pd
 from src.external.expsys_module.models import (Skill, Vacance)
-from django.db import connection
+from django.db import IntegrityError, connection
 from src.external.lms.models import Subject,Grade,Lesson, Theme,Test
 from src.external.expsys_module.models import Competence,Indicator_Subject,Indicator,Indicator_Competence
 from django.shortcuts import get_object_or_404
