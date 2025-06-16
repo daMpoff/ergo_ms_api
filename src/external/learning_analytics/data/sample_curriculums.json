@@ -1,0 +1,302 @@
+[
+  {
+    "speciality": 1,
+    "education_duration": 4,
+    "year_of_admission": "2020",
+    "is_active": true
+  },
+  {
+    "speciality": 2,
+    "education_duration": 4,
+    "year_of_admission": "2021",
+    "is_active": true
+  },
+  {
+    "speciality": 3,
+    "education_duration": 4,
+    "year_of_admission": "2022",
+    "is_active": false
+  },
+  {
+    "speciality": 4,
+    "education_duration": 5,
+    "year_of_admission": "2019",
+    "is_active": true
+  },
+  {
+    "speciality": 5,
+    "education_duration": 4,
+    "year_of_admission": "2023",
+    "is_active": true
+  },
+  {
+    "speciality": 6,
+    "education_duration": 4,
+    "year_of_admission": "2020",
+    "is_active": false
+  },
+  {
+    "speciality": 7,
+    "education_duration": 4,
+    "year_of_admission": "2021",
+    "is_active": true
+  },
+  {
+    "speciality": 8,
+    "education_duration": 5,
+    "year_of_admission": "2022",
+    "is_active": true
+  },
+  {
+    "speciality": 9,
+    "education_duration": 4,
+    "year_of_admission": "2023",
+    "is_active": false
+  },
+  {
+    "speciality": 10,
+    "education_duration": 4,
+    "year_of_admission": "2020",
+    "is_active": true
+  },
+  {
+    "speciality": 11,
+    "education_duration": 4,
+    "year_of_admission": "2021",
+    "is_active": true
+  },
+  {
+    "speciality": 12,
+    "education_duration": 4,
+    "year_of_admission": "2022",
+    "is_active": false
+  },
+  {
+    "speciality": 13,
+    "education_duration": 5,
+    "year_of_admission": "2019",
+    "is_active": true
+  },
+  {
+    "speciality": 14,
+    "education_duration": 4,
+    "year_of_admission": "2023",
+    "is_active": true
+  },
+  {
+    "speciality": 15,
+    "education_duration": 4,
+    "year_of_admission": "2020",
+    "is_active": false
+  },
+  {
+    "speciality": 16,
+    "education_duration": 4,
+    "year_of_admission": "2021",
+    "is_active": true
+  },
+  {
+    "speciality": 17,
+    "education_duration": 4,
+    "year_of_admission": "2022",
+    "is_active": true
+  },
+  {
+    "speciality": 18,
+    "education_duration": 5,
+    "year_of_admission": "2023",
+    "is_active": false
+  },
+  {
+    "speciality": 19,
+    "education_duration": 4,
+    "year_of_admission": "2020",
+    "is_active": true
+  },
+  {
+    "speciality": 20,
+    "education_duration": 4,
+    "year_of_admission": "2021",
+    "is_active": true
+  },
+  {
+    "speciality": 21,
+    "education_duration": 4,
+    "year_of_admission": "2022",
+    "is_active": false
+  },
+  {
+    "speciality": 22,
+    "education_duration": 5,
+    "year_of_admission": "2019",
+    "is_active": true
+  },
+  {
+    "speciality": 23,
+    "education_duration": 4,
+    "year_of_admission": "2023",
+    "is_active": true
+  },
+  {
+    "speciality": 24,
+    "education_duration": 4,
+    "year_of_admission": "2020",
+    "is_active": false
+  },
+  {
+    "speciality": 25,
+    "education_duration": 4,
+    "year_of_admission": "2021",
+    "is_active": true
+  },
+  {
+    "speciality": 26,
+    "education_duration": 4,
+    "year_of_admission": "2022",
+    "is_active": true
+  },
+  {
+    "speciality": 27,
+    "education_duration": 5,
+    "year_of_admission": "2023",
+    "is_active": false
+  },
+  {
+    "speciality": 28,
+    "education_duration": 4,
+    "year_of_admission": "2020",
+    "is_active": true
+  },
+  {
+    "speciality": 29,
+    "education_duration": 4,
+    "year_of_admission": "2021",
+    "is_active": true
+  },
+  {
+    "speciality": 30,
+    "education_duration": 4,
+    "year_of_admission": "2022",
+    "is_active": false
+  },
+  {
+    "speciality": 31,
+    "education_duration": 5,
+    "year_of_admission": "2019",
+    "is_active": true
+  },
+  {
+    "speciality": 32,
+    "education_duration": 4,
+    "year_of_admission": "2023",
+    "is_active": true
+  },
+  {
+    "speciality": 33,
+    "education_duration": 4,
+    "year_of_admission": "2020",
+    "is_active": false
+  },
+  {
+    "speciality": 34,
+    "education_duration": 4,
+    "year_of_admission": "2021",
+    "is_active": true
+  },
+  {
+    "speciality": 35,
+    "education_duration": 4,
+    "year_of_admission": "2022",
+    "is_active": true
+  },
+  {
+    "speciality": 36,
+    "education_duration": 5,
+    "year_of_admission": "2023",
+    "is_active": false
+  },
+  {
+    "speciality": 37,
+    "education_duration": 4,
+    "year_of_admission": "2020",
+    "is_active": true
+  },
+  {
+    "speciality": 38,
+    "education_duration": 4,
+    "year_of_admission": "2021",
+    "is_active": true
+  },
+  {
+    "speciality": 39,
+    "education_duration": 4,
+    "year_of_admission": "2022",
+    "is_active": false
+  },
+  {
+    "speciality": 40,
+    "education_duration": 5,
+    "year_of_admission": "2019",
+    "is_active": true
+  },
+  {
+    "speciality": 41,
+    "education_duration": 4,
+    "year_of_admission": "2023",
+    "is_active": true
+  },
+  {
+    "speciality": 42,
+    "education_duration": 4,
+    "year_of_admission": "2020",
+    "is_active": false
+  },
+  {
+    "speciality": 43,
+    "education_duration": 4,
+    "year_of_admission": "2021",
+    "is_active": true
+  },
+  {
+    "speciality": 44,
+    "education_duration": 4,
+    "year_of_admission": "2022",
+    "is_active": true
+  },
+  {
+    "speciality": 45,
+    "education_duration": 5,
+    "year_of_admission": "2023",
+    "is_active": false
+  },
+  {
+    "speciality": 46,
+    "education_duration": 4,
+    "year_of_admission": "2020",
+    "is_active": true
+  },
+  {
+    "speciality": 47,
+    "education_duration": 4,
+    "year_of_admission": "2021",
+    "is_active": true
+  },
+  {
+    "speciality": 48,
+    "education_duration": 4,
+    "year_of_admission": "2022",
+    "is_active": false
+  },
+  {
+    "speciality": 49,
+    "education_duration": 5,
+    "year_of_admission": "2019",
+    "is_active": true
+  },
+  {
+    "speciality": 50,
+    "education_duration": 4,
+    "year_of_admission": "2023",
+    "is_active": true
+  }
+] 
