@@ -1,8 +1,12 @@
 from django.db import models
+from src.external.settings.models import Category
 from rest_framework import viewsets, status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.views import APIView
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
 from .models import CmsPage, CmsShortcodeCategory, CmsShortcodeTemplate, CmsShortcodeInstance
 from .serializers import CmsCategorySerializer, PageSerializer, TemplateSerializer, InstanceSerializer
 
@@ -39,6 +43,38 @@ class PageViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(creator=self.request.user)
+
+class PageByFullPathView(APIView):
+    permission_classes = [AllowAny]
+    @swagger_auto_schema(
+        operation_description="Получить страницу по полному пути",
+        manual_parameters=[
+            openapi.Parameter(
+                "full_path",
+                openapi.IN_QUERY,
+                description="Полный путь страницы, например: catalog/phones/iphone-15",
+                type=openapi.TYPE_STRING,
+                required=True,
+            ),
+        ],
+        responses={200: PageSerializer()},
+    )
+    def get(self, request):
+        path = request.query_params.get('full_path', '').strip('/')
+        parts = path.split('/')
+        slug = parts[-1]
+        cat_slugs = parts[:-1]
+
+        parent = None
+        for cat_slug in cat_slugs:
+            parent = Category.objects.filter(slug=cat_slug, parent=parent).first()
+            if not parent:
+                return Response({'detail': f'Категория не найдена: {cat_slug}'}, status=404)
+
+        page = CmsPage.objects.filter(slug=slug, category=parent).first()
+        if not page:
+            return Response({'detail': 'Страница не найдена'}, status=404)
+        return Response(PageSerializer(page).data)
 
 class InstanceViewSet(viewsets.ModelViewSet):
     queryset = CmsShortcodeInstance.objects.all()

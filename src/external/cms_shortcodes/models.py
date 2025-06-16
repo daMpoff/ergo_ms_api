@@ -60,6 +60,15 @@ class CmsPage(models.Model):
         verbose_name="Главная страница",
         help_text="Является ли эта страница главной"
     )
+    def get_full_url(self):
+        """Вернуть полный путь до страницы в виде строки '/cat1/cat2/slug'"""
+        parts = []
+        cat = self.category
+        while cat:
+            parts.insert(0, cat.slug)
+            cat = cat.parent
+        parts.append(self.slug)
+        return '/' + '/'.join(parts)
 
     @classmethod
     def get_homepage(cls):

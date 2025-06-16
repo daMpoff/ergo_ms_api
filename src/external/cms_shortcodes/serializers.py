@@ -64,10 +64,12 @@ class PageSerializer(serializers.ModelSerializer):
     tags_ids = serializers.PrimaryKeyRelatedField(
         queryset=Tag.objects.all(), many=True, source='tags', write_only=True, required=False
     )
-
+    full_url = serializers.SerializerMethodField()
+    def get_full_url(self, obj):
+        return obj.get_full_url()
     class Meta:
         model = CmsPage
         fields = [
             'id', 'name', 'slug', 'category', 'category_id',
-            'tags', 'tags_ids', 'is_homepage', 'instances'
+            'tags', 'tags_ids', 'is_homepage', 'instances', 'full_url'
         ]
