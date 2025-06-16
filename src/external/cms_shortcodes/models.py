@@ -107,4 +107,34 @@ class CmsShortcodeInstance(models.Model):
     def __str__(self):
         return f"{self.template.name} on {self.page.slug if self.page else 'внутри другого блока'}"
 
+class SiteLayout(models.Model):
+    """Синглтон: какие шаблоны брать для шапки и подвала по умолчанию"""
+    header_template = models.ForeignKey(
+        CmsShortcodeTemplate,
+        null=True, blank=True,
+        on_delete=models.SET_NULL,
+        related_name='+'
+    )
+    footer_template = models.ForeignKey(
+        CmsShortcodeTemplate,
+        null=True, blank=True,
+        on_delete=models.SET_NULL,
+        related_name='+'
+    )
+    menu_pages = models.ManyToManyField(
+        CmsPage,
+        blank=True,
+        related_name='+'
+    )
 
+    def save(self, *args, **kwargs):
+        """гарантируем единственную запись"""
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return 'Site-wide layout (singleton)'
+
+    class Meta:
+        verbose_name = 'Глобальный Layout'
+        verbose_name_plural = 'Глобальный Layout'

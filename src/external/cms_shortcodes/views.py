@@ -1,3 +1,4 @@
+from uuid import uuid4
 from django.db import models
 from src.external.settings.models import Category
 from rest_framework import viewsets, status
@@ -7,8 +8,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
-from .models import CmsPage, CmsShortcodeCategory, CmsShortcodeTemplate, CmsShortcodeInstance
-from .serializers import CmsCategorySerializer, PageSerializer, TemplateSerializer, InstanceSerializer
+from rest_framework import generics, permissions
+from .models import CmsPage, CmsShortcodeCategory, CmsShortcodeTemplate, CmsShortcodeInstance, SiteLayout
+from .serializers import CmsCategorySerializer, PageSerializer, SiteLayoutSerializer, TemplateSerializer, InstanceSerializer
 
 class ShortcodeCategoryViewSet(viewsets.ModelViewSet):
     queryset = CmsShortcodeCategory.objects.all()
@@ -42,7 +44,19 @@ class PageViewSet(viewsets.ModelViewSet):
         return [IsAuthenticated()]
 
     def perform_create(self, serializer):
-        serializer.save(creator=self.request.user)
+        page = serializer.save(creator=self.request.user)
+        layout = SiteLayout.objects.first()
+        blocks = []
+        if layout and layout.header_template:
+            blocks.append(CmsShortcodeInstance(
+                page=page, template=layout.header_template, uid=uuid4().hex, position=0
+            ))
+        if layout and layout.footer_template:
+            blocks.append(CmsShortcodeInstance(
+                page=page, template=layout.footer_template, uid=uuid4().hex, position=9999
+            ))
+        if blocks:
+            CmsShortcodeInstance.objects.bulk_create(blocks)
 
 class PageByFullPathView(APIView):
     permission_classes = [AllowAny]
@@ -164,3 +178,24 @@ class InstanceViewSet(viewsets.ModelViewSet):
         instances = CmsShortcodeInstance.objects.filter(page_id=page_id)
         serializer = self.get_serializer(instances, many=True)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+    
+class SiteLayoutViewSet(viewsets.ModelViewSet):
+    queryset = SiteLayout.objects.all()
+    serializer_class = SiteLayoutSerializer
+
+    def get_queryset(self):
+        return SiteLayout.objects.filter(pk=1)
+
+    def get_permissions(self):
+        if self.action in ['list', 'retrieve']:
+            return [AllowAny()]
+        return [IsAuthenticated()]
+    
+class SiteLayoutView(generics.RetrieveUpdateAPIView):
+    permission_classes = [permissions.AllowAny]
+    serializer_class   = SiteLayoutSerializer
+    queryset           = SiteLayout.objects.all()
+
+    def get_object(self):
+        obj, _ = SiteLayout.objects.get_or_create(pk=1)
+        return obj

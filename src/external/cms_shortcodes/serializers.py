@@ -1,3 +1,4 @@
+from .models import SiteLayout
 from src.external.settings.models import Category, Tag
 from src.external.settings.serializers import CategorySerializer, TagSerializer
 from rest_framework import serializers
@@ -53,7 +54,16 @@ class InstanceSerializer(serializers.ModelSerializer):
             'uid',
             'allow_children'
         ]
-
+        
+class SiteLayoutSerializer(serializers.ModelSerializer):
+    menu_pages = serializers.PrimaryKeyRelatedField(
+        queryset=CmsPage.objects.all(),
+        many=True,
+        required=False
+    )
+    class Meta:
+        model  = SiteLayout
+        fields = ['id', 'header_template', 'footer_template', 'menu_pages']
 class PageSerializer(serializers.ModelSerializer):
     instances = InstanceSerializer(many=True, read_only=True)
     category = CategorySerializer(read_only=True)
