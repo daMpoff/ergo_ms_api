@@ -3,7 +3,11 @@ from rest_framework import status
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from src.core.utils.base.base_views import BaseAPIView
-from src.core.cms.adp.queries import get_tasks_by_month, get_tasks_by_priority, get_tasks_by_section
+from src.core.cms.adp.queries import ( get_tasks_by_month, get_tasks_by_priority, get_tasks_by_section,
+    get_project_completion_stats, get_user_productivity_stats, 
+    get_deadline_analysis, get_task_creation_trend,
+    get_project_timeline_stats, get_calendar_activity_stats,
+    get_task_complexity_stats )
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from .models import Project, Section, Task, Calendar
@@ -397,5 +401,222 @@ class SectionStatsView(BaseAPIView):
         except Exception as e:
             return Response(
                 {"message": f"Произошла ошибка при получении статистики: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+class ProjectCompletionStatsView(BaseAPIView):
+    @swagger_auto_schema(
+        operation_description="Получение статистики завершенности проектов с процентами выполнения",
+        responses={
+            200: "Статистика завершенности проектов",
+            500: "Ошибка сервера при получении данных"
+        }
+    )
+    def get(self, request):
+        try:
+            completion_stats = get_project_completion_stats()
+    
+            if not completion_stats:
+                response_data = {
+                    "data": [],
+                    "message": "Статистика по проектам не найдена"
+                }
+                return Response(response_data, status=status.HTTP_200_OK)
+    
+            response_data = {
+                "data": completion_stats,
+                "message": "Статистика завершенности проектов получена успешно"
+            }
+            return Response(response_data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {"message": f"Произошла ошибка при получении статистики: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class UserProductivityStatsView(BaseAPIView):
+    @swagger_auto_schema(
+        operation_description="Получение статистики продуктивности пользователей",
+        responses={
+            200: "Статистика продуктивности пользователей",
+            500: "Ошибка сервера при получении данных"
+        }
+    )
+    def get(self, request):
+        try:
+            productivity_stats = get_user_productivity_stats()
+    
+            if not productivity_stats:
+                response_data = {
+                    "data": [],
+                    "message": "Статистика продуктивности не найдена"
+                }
+                return Response(response_data, status=status.HTTP_200_OK)
+    
+            response_data = {
+                "data": productivity_stats,
+                "message": "Статистика продуктивности получена успешно"
+            }
+            return Response(response_data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {"message": f"Произошла ошибка при получении статистики: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class DeadlineAnalysisView(BaseAPIView):
+    @swagger_auto_schema(
+        operation_description="Получение анализа дедлайнов задач (просроченные, критические, будущие)",
+        responses={
+            200: "Анализ дедлайнов задач",
+            500: "Ошибка сервера при получении данных"
+        }
+    )
+    def get(self, request):
+        try:
+            deadline_stats = get_deadline_analysis()
+    
+            if not deadline_stats:
+                response_data = {
+                    "data": [],
+                    "message": "Данные по дедлайнам не найдены"
+                }
+                return Response(response_data, status=status.HTTP_200_OK)
+    
+            response_data = {
+                "data": deadline_stats,
+                "message": "Анализ дедлайнов получен успешно"
+            }
+            return Response(response_data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {"message": f"Произошла ошибка при получении анализа дедлайнов: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class TaskCreationTrendView(BaseAPIView):
+    @swagger_auto_schema(
+        operation_description="Получение тренда создания задач за последние 30 дней",
+        responses={
+            200: "Тренд создания задач",
+            500: "Ошибка сервера при получении данных"
+        }
+    )
+    def get(self, request):
+        try:
+            trend_stats = get_task_creation_trend()
+    
+            if not trend_stats:
+                response_data = {
+                    "data": [],
+                    "message": "Данные по трендам не найдены"
+                }
+                return Response(response_data, status=status.HTTP_200_OK)
+    
+            response_data = {
+                "data": trend_stats,
+                "message": "Тренд создания задач получен успешно"
+            }
+            return Response(response_data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {"message": f"Произошла ошибка при получении тренда: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class ProjectTimelineStatsView(BaseAPIView):
+    @swagger_auto_schema(
+        operation_description="Получение статистики временных рамок проектов",
+        responses={
+            200: "Статистика временных рамок проектов",
+            500: "Ошибка сервера при получении данных"
+        }
+    )
+    def get(self, request):
+        try:
+            timeline_stats = get_project_timeline_stats()
+    
+            if not timeline_stats:
+                response_data = {
+                    "data": [],
+                    "message": "Статистика временных рамок не найдена"
+                }
+                return Response(response_data, status=status.HTTP_200_OK)
+    
+            response_data = {
+                "data": timeline_stats,
+                "message": "Статистика временных рамок получена успешно"
+            }
+            return Response(response_data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {"message": f"Произошла ошибка при получении статистики: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class CalendarActivityStatsView(BaseAPIView):
+    @swagger_auto_schema(
+        operation_description="Получение статистики активности календаря по дням недели и времени",
+        responses={
+            200: "Статистика активности календаря",
+            500: "Ошибка сервера при получении данных"
+        }
+    )
+    def get(self, request):
+        try:
+            activity_stats = get_calendar_activity_stats()
+    
+            if not activity_stats:
+                response_data = {
+                    "data": [],
+                    "message": "Статистика активности календаря не найдена"
+                }
+                return Response(response_data, status=status.HTTP_200_OK)
+    
+            response_data = {
+                "data": activity_stats,
+                "message": "Статистика активности календаря получена успешно"
+            }
+            return Response(response_data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {"message": f"Произошла ошибка при получении статистики календаря: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class TaskComplexityStatsView(BaseAPIView):
+    @swagger_auto_schema(
+        operation_description="Получение статистики сложности задач (приоритет, подзадачи, время выполнения)",
+        responses={
+            200: "Статистика сложности задач",
+            500: "Ошибка сервера при получении данных"
+        }
+    )
+    def get(self, request):
+        try:
+            complexity_stats = get_task_complexity_stats()
+    
+            if not complexity_stats:
+                response_data = {
+                    "data": [],
+                    "message": "Статистика сложности задач не найдена"
+                }
+                return Response(response_data, status=status.HTTP_200_OK)
+    
+            response_data = {
+                "data": complexity_stats,
+                "message": "Статистика сложности задач получена успешно"
+            }
+            return Response(response_data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {"message": f"Произошла ошибка при получении статистики сложности: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )

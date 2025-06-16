@@ -2,7 +2,11 @@ from django.urls import path
 from .views import (
     MonthlyStatsView, PriorityStatsView, SectionStatsView,
     ProjectViewSet, SectionViewSet, TaskViewSet,
-    CalendarViewSet, UserProjectViewSet, UserViewSet
+    CalendarViewSet, UserProjectViewSet, UserViewSet,
+    ProjectCompletionStatsView, UserProductivityStatsView,
+    DeadlineAnalysisView, TaskCreationTrendView,
+    ProjectTimelineStatsView, CalendarActivityStatsView,
+    TaskComplexityStatsView
 )
 
 # Project
@@ -45,6 +49,13 @@ urlpatterns = [
     path('stats/monthly/', MonthlyStatsView.as_view(), name='monthly-stats'),
     path('stats/priority/', PriorityStatsView.as_view(), name='priority-stats'),
     path('stats/sections/', SectionStatsView.as_view(), name='section-stats'),
+    path('stats/project-completion/', ProjectCompletionStatsView.as_view(), name='project-completion-stats'),
+    path('stats/user-productivity/', UserProductivityStatsView.as_view(), name='user-productivity-stats'),
+    path('stats/deadline-analysis/', DeadlineAnalysisView.as_view(), name='deadline-analysis-stats'),
+    path('stats/task-creation-trend/', TaskCreationTrendView.as_view(), name='task-creation-trend-stats'),
+    path('stats/project-timeline/', ProjectTimelineStatsView.as_view(), name='project-timeline-stats'),
+    path('stats/calendar-activity/', CalendarActivityStatsView.as_view(), name='calendar-activity-stats'),
+    path('stats/task-complexity/', TaskComplexityStatsView.as_view(), name='task-complexity-stats'),
 
     # Project
     path('projects/', project_list, name='project-list'),
