@@ -5,7 +5,7 @@ from rest_framework.exceptions import ValidationError
 import pandas as pd
 from io import StringIO
 
-from ..bi_datasets.models import DataSetField, DataSetTable, FileUpload
+from src.external.bi_analysis.bi_datasets.models import DataSetField, DataSetTable, FileUpload
 
 def populate_initial_fields(dataset, temp_table_name, source_table=None):
     """

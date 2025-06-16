@@ -4,9 +4,9 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from .models import Connection
-from .serializers import ConnectionSerializer
-from .methods import CheckConnection
+from src.external.bi_analysis.bi_connections.models import Connection
+from src.external.bi_analysis.bi_connections.serializers import ConnectionSerializer
+from src.external.bi_analysis.bi_connections.methods import CheckConnection
 from django.shortcuts import get_object_or_404
 from sqlalchemy import create_engine, text
 

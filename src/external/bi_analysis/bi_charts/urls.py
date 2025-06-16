@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import ChartListCreateView, ChartDetailView
+from src.external.bi_analysis.bi_charts.views import ChartListCreateView, ChartDetailView
 
 urlpatterns = [
     path('', ChartListCreateView.as_view(), name='chart-list-create'),

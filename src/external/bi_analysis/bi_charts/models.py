@@ -1,6 +1,6 @@
 from django.db import models
 from django.contrib.auth import get_user_model
-from ..bi_datasets.models import Dataset
+from src.external.bi_analysis.bi_datasets.models import Dataset
 
 class Chart(models.Model):
     CHART_TYPES = [

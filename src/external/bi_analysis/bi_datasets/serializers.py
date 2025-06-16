@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from ..bi_connections.models import Connection
-from .models import FileUpload, Dataset, DataSetTable, DataSetField
+from src.external.bi_analysis.bi_connections.models import Connection
+from src.external.bi_analysis.bi_datasets.models import FileUpload, Dataset, DataSetTable, DataSetField
 
 User = get_user_model()
 

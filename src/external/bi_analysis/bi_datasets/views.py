@@ -19,15 +19,15 @@ import pandas as pd
 import os
 import csv
 
-from .models import Dataset, FileUpload, DataSetTable, DataSetField
-from .serializers import (
+from src.external.bi_analysis.bi_datasets.models import Dataset, FileUpload, DataSetTable, DataSetField
+from src.external.bi_analysis.bi_datasets.serializers import (
     DatasetSerializer,
     FileUploadSerializer,
     DataSetTableSerializer,
     DataSetFieldSerializer
 )
 
-from ..services.services import (
+from src.external.bi_analysis.services.services import (
     create_temp_table_from_source,
     import_file_upload_to_table,
     populate_initial_fields,

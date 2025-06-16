@@ -1,6 +1,6 @@
-from ..bi_connections.connectors.postgres import get_pg_engine
-from ..bi_connections.connectors.mssql import get_mssql_engine
-from ..bi_connections.connectors.clickhouse import get_clickhouse_client
+from src.external.bi_analysis.bi_connections.connectors.postgres import get_pg_engine
+from src.external.bi_analysis.bi_connections.connectors.mssql import get_mssql_engine
+from src.external.bi_analysis.bi_connections.connectors.clickhouse import get_clickhouse_client
 
 def run_pg_query(query: str):
     with get_pg_engine().connect() as conn:

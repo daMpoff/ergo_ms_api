@@ -1,13 +1,17 @@
+import time
+
 from django.shortcuts import render
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+
 from drf_yasg.utils import swagger_auto_schema
 
-from .models import ReportExecutionLog, ReportResult
-from .serializers import ReportRunSerializer
-from .services.query_executor import run_pg_query, run_clickhouse_query, run_mssql_query
-import time
+from src.external.bi_analysis.models import ReportExecutionLog, ReportResult
+from src.external.bi_analysis.serializers import ReportRunSerializer
+
+from src.external.bi_analysis.services.query_executor import run_pg_query, run_clickhouse_query, run_mssql_query
 
 # Создавайте свои представления здесь
 class RunReportAPIView(APIView):

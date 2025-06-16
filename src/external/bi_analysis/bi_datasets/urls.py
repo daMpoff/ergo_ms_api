@@ -1,6 +1,6 @@
 from django.urls import path, include
-from .views import DataSetFieldViewSet
-from .views import (
+from src.external.bi_analysis.bi_datasets.views import DataSetFieldViewSet
+from src.external.bi_analysis.bi_datasets.views import (
     DatasetListCreateView, DatasetDetailView, DatasetPreviewView,
     FileUploadView, FileUploadDetailView,
     FinalizeUploadView, XlsxSheetListView,

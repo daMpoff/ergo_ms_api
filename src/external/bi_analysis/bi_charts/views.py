@@ -1,7 +1,7 @@
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
-from .models import Chart
-from .serializers import ChartSerializer
+from src.external.bi_analysis.bi_charts.models import Chart
+from src.external.bi_analysis.bi_charts.serializers import ChartSerializer
 
 class ChartListCreateView(generics.ListCreateAPIView):
     queryset = Chart.objects.all()

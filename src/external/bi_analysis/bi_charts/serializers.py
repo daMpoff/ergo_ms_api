@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Chart
+from src.external.bi_analysis.bi_charts.models import Chart
 
 class ChartSerializer(serializers.ModelSerializer):
     class Meta:

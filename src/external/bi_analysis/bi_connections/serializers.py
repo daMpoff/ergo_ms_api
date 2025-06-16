@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Connection
+from src.external.bi_analysis.bi_connections.models import Connection
 
 class ConnectionSerializer(serializers.ModelSerializer):
     connector_type_display = serializers.CharField(source='get_connector_type_display', read_only=True)

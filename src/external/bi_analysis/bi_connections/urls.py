@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import ConnectionListCreateView, ConnectionDetailView, CheckConnectionView, ConnectionTablesView
+from src.external.bi_analysis.bi_connections.views import ConnectionListCreateView, ConnectionDetailView, CheckConnectionView, ConnectionTablesView
 
 urlpatterns = [
     path('', ConnectionListCreateView.as_view(), name='connection-list-create'),

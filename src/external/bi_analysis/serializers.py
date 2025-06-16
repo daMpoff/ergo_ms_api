@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import ReportConfig
+from src.external.bi_analysis.models import ReportConfig
 
 # Создавайте свои сериализаторы здесь
 class ReportRunSerializer(serializers.Serializer):

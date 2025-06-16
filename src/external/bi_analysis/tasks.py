@@ -1,5 +1,5 @@
 from celery import shared_task
-from .services.sync import sync_from_sources
+from src.external.bi_analysis.services.sync import sync_from_sources
 
 @shared_task
 def sync_data_from_sources():
