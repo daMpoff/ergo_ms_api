@@ -481,15 +481,21 @@ class UpdateTaskView(APIView):
                 'priority': 'priority',
                 'section': 'section_id',
                 'parenttask': 'parenttask_id',
-                'assignee_id': 'assignee_id',
+                'assignee_id': 'user_id',
                 'title': 'text'  # Если title сохраняется в text
             }
+
+            print(request.data)
+            print(task.user)
+            print(request.data['assignee_id'])
             
             for field, model_field in fields_to_update.items():
                 if field in request.data:
                     setattr(task, model_field, request.data[field])
             
             task.save()
+
+            print(task.user)
             
             return Response(
                 {
@@ -506,7 +512,7 @@ class UpdateTaskView(APIView):
                         "priority": task.priority,
                         "section": task.section_id,
                         "parenttask": task.parenttask_id,
-                        "user": task.assignee_id
+                        "user": task.user_id
                     }
                 },
                 status=status.HTTP_200_OK
