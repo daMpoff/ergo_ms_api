@@ -10,16 +10,26 @@ from .models import (
 class UploadedFileSerializer(serializers.ModelSerializer):
     name = serializers.SerializerMethodField()
     size = serializers.SerializerMethodField()
+    url = serializers.SerializerMethodField()
 
     class Meta:
         model = UploadedFile
-        fields = ['id', 'file', 'name', 'size', 'uploaded_at']
+        fields = ['id', 'file', 'name', 'size', 'url', 'uploaded_at']
 
     def get_name(self, obj):
         return obj.file.name.split('/')[-1]
 
     def get_size(self, obj):
         return obj.file.size
+    
+    def get_url(self, obj):
+        request = self.context.get("request")
+        if obj.file:
+            url = obj.file.url
+            if request is not None:
+                url = request.build_absolute_uri(url)
+            return url
+        return ""
 class GeneralSettingsSerializer(serializers.ModelSerializer):
     class Meta:
         model = GeneralSettings
