@@ -30,6 +30,13 @@ from .serializers import (
     ExpertSystemVacancySkillSerializer, ExpertSystemCandidateApplicationSerializer,
     ExpertSystemOrientationTestResultSerializer, ExpertSystemOrientationUserAnswerSerializer, ExpertSystemCourseSerializer
 )
+from .methods import (
+    get_expert_system_metrics, get_skills_analytics, get_popular_skills,
+    get_students_overview, get_student_groups_stats, get_companies_vacancies_stats,
+    get_popular_vacancy_skills, get_test_results_analytics, get_difficult_tests,
+    get_student_activity_timeline, get_role_popularity_stats, get_expert_system_dashboard_summary
+)
+
 class ExpertSystemStudyGroupViewSet(viewsets.ModelViewSet):
     """
     CRUD для групп студентов
@@ -726,6 +733,295 @@ class GetTestResultBySkillId(BaseAPIView):
         except:
             return Response({'detail': 'Тест не найден'}, status=status.HTTP_404_NOT_FOUND)
 
+class ExpertSystemMetricsView(BaseAPIView):
+    """
+    Основные метрики экспертной системы
+    """
+    permission_classes = [IsAuthenticated]
+    
+    @swagger_auto_schema(
+        operation_description="Получение основных метрик экспертной системы",
+        responses={
+            200: "Метрики получены",
+            401: "Пользователь не авторизован",
+        },
+    )
+    def get(self, request: Request):
+        try:
+            metrics = get_expert_system_metrics()
+            
+            # Преобразуем результат в удобный формат
+            result = {}
+            for metric in metrics:
+                metric_type = metric['metric_type']
+                result[metric_type] = {
+                    'total_count': metric['total_count'],
+                    'additional_info': {}
+                }
+                
+                if metric_type == 'students':
+                    result[metric_type]['additional_info'] = {
+                        'with_experience': metric['with_experience'],
+                        'with_role': metric['with_role']
+                    }
+                elif metric_type == 'companies':
+                    result[metric_type]['additional_info'] = {
+                        'verified': metric['verified']
+                    }
+                elif metric_type == 'user_skills':
+                    result[metric_type]['additional_info'] = {
+                        'confirmed': metric['verified']
+                    }
+                elif metric_type == 'test_results':
+                    result[metric_type]['additional_info'] = {
+                        'passed': metric['verified']
+                    }
+            
+            return Response(result, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class SkillsAnalyticsView(BaseAPIView):
+    """
+    Детальная аналитика навыков
+    """
+    permission_classes = [IsAuthenticated]
+    
+    @swagger_auto_schema(
+        operation_description="Получение детальной аналитики навыков",
+        responses={
+            200: "Аналитика получена",
+            401: "Пользователь не авторизован",
+        },
+    )
+    def get(self, request: Request):
+        try:
+            analytics = get_skills_analytics()
+            return Response(analytics, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class PopularSkillsView(BaseAPIView):
+    """
+    Популярные навыки
+    """
+    permission_classes = [IsAuthenticated]
+    
+    @swagger_auto_schema(
+        operation_description="Получение популярных навыков",
+        responses={
+            200: "Популярные навыки получены",
+            401: "Пользователь не авторизован",
+        },
+        manual_parameters=[
+            openapi.Parameter('limit', openapi.IN_QUERY, type=openapi.TYPE_INTEGER, 
+                            description='Количество навыков (по умолчанию 10)')
+        ]
+    )
+    def get(self, request: Request):
+        try:
+            limit = int(request.query_params.get('limit', 10))
+            popular_skills = get_popular_skills(limit)
+            return Response(popular_skills, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class StudentsOverviewView(BaseAPIView):
+    """
+    Обзор студентов
+    """
+    permission_classes = [IsAuthenticated]
+    
+    @swagger_auto_schema(
+        operation_description="Получение обзора студентов",
+        responses={
+            200: "Обзор получен",
+            401: "Пользователь не авторизован",
+        },
+    )
+    def get(self, request: Request):
+        try:
+            overview = get_students_overview()
+            return Response(overview, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class StudentGroupsStatsView(BaseAPIView):
+    """
+    Статистика по группам студентов
+    """
+    permission_classes = [IsAuthenticated]
+    
+    @swagger_auto_schema(
+        operation_description="Получение статистики по группам студентов",
+        responses={
+            200: "Статистика получена",
+            401: "Пользователь не авторизован",
+        },
+    )
+    def get(self, request: Request):
+        try:
+            stats = get_student_groups_stats()
+            return Response(stats, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class CompaniesVacanciesStatsView(BaseAPIView):
+    """
+    Статистика компаний и вакансий
+    """
+    permission_classes = [IsAuthenticated]
+    
+    @swagger_auto_schema(
+        operation_description="Получение статистики компаний и вакансий",
+        responses={
+            200: "Статистика получена",
+            401: "Пользователь не авторизован",
+        },
+    )
+    def get(self, request: Request):
+        try:
+            stats = get_companies_vacancies_stats()
+            return Response(stats, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class PopularVacancySkillsView(BaseAPIView):
+    """
+    Популярные навыки в вакансиях
+    """
+    permission_classes = [IsAuthenticated]
+    
+    @swagger_auto_schema(
+        operation_description="Получение популярных навыков в вакансиях",
+        responses={
+            200: "Популярные навыки получены",
+            401: "Пользователь не авторизован",
+        },
+    )
+    def get(self, request: Request):
+        try:
+            skills = get_popular_vacancy_skills()
+            return Response(skills, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class TestResultsAnalyticsView(BaseAPIView):
+    """
+    Аналитика результатов тестов
+    """
+    permission_classes = [IsAuthenticated]
+    
+    @swagger_auto_schema(
+        operation_description="Получение аналитики результатов тестов",
+        responses={
+            200: "Аналитика получена",
+            401: "Пользователь не авторизован",
+        },
+    )
+    def get(self, request: Request):
+        try:
+            analytics = get_test_results_analytics()
+            return Response(analytics, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class DifficultTestsView(BaseAPIView):
+    """
+    Сложные тесты с низкой успеваемостью
+    """
+    permission_classes = [IsAuthenticated]
+    
+    @swagger_auto_schema(
+        operation_description="Получение сложных тестов с низкой успеваемостью",
+        responses={
+            200: "Сложные тесты получены",
+            401: "Пользователь не авторизован",
+        },
+    )
+    def get(self, request: Request):
+        try:
+            difficult_tests = get_difficult_tests()
+            return Response(difficult_tests, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class StudentActivityTimelineView(BaseAPIView):
+    """
+    Активность студентов по дням
+    """
+    permission_classes = [IsAuthenticated]
+    
+    @swagger_auto_schema(
+        operation_description="Получение активности студентов по дням",
+        responses={
+            200: "Активность получена",
+            401: "Пользователь не авторизован",
+        },
+        manual_parameters=[
+            openapi.Parameter('days', openapi.IN_QUERY, type=openapi.TYPE_INTEGER, 
+                            description='Количество дней для анализа (по умолчанию 30)')
+        ]
+    )
+    def get(self, request: Request):
+        try:
+            days = int(request.query_params.get('days', 30))
+            timeline = get_student_activity_timeline(days)
+            return Response(timeline, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class RolePopularityStatsView(BaseAPIView):
+    """
+    Популярность профессиональных ролей
+    """
+    permission_classes = [IsAuthenticated]
+    
+    @swagger_auto_schema(
+        operation_description="Получение статистики популярности ролей",
+        responses={
+            200: "Статистика получена",
+            401: "Пользователь не авторизован",
+        },
+    )
+    def get(self, request: Request):
+        try:
+            stats = get_role_popularity_stats()
+            return Response(stats, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class DashboardSummaryView(BaseAPIView):
+    """
+    Сводка всех ключевых метрик дашборда
+    """
+    permission_classes = [IsAuthenticated]
+    
+    @swagger_auto_schema(
+        operation_description="Получение сводки ключевых метрик дашборда",
+        responses={
+            200: "Сводка получена",
+            401: "Пользователь не авторизован",
+        },
+    )
+    def get(self, request: Request):
+        try:
+            summary = get_expert_system_dashboard_summary()
+            return Response(summary, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
 class DeleteTestResultBySkill(BaseAPIView):
     permission_classes=[IsAuthenticated]
     @swagger_auto_schema(

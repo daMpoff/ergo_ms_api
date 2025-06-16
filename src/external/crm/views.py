@@ -3,7 +3,7 @@ from rest_framework import status
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from src.core.utils.base.base_views import BaseAPIView
-from src.core.cms.adp.queries import ( get_tasks_by_month, get_tasks_by_priority, get_tasks_by_section,
+from src.external.crm.methods import ( get_tasks_by_month, get_tasks_by_priority, get_tasks_by_section,
     get_project_completion_stats, get_user_productivity_stats, 
     get_deadline_analysis, get_task_creation_trend,
     get_project_timeline_stats, get_calendar_activity_stats,
