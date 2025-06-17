@@ -11,10 +11,8 @@ from .views import (
     SetUserSkills, GetUserSkills, GetUserSkills, CreateTest, GetAllTests, DeleteTest,
     GetTestForRedact, ChangeTest, GetSkillsForCreateTest, GetSkillsForRedactTest,GetTestidBySkill, GetTest,
     TestEvaluation, ExpertSystemCourseViewSet, GetTestResult, GetTestResultBySkillId, DeleteTestResultBySkill,
-    ExpertSystemMetricsView, SkillsAnalyticsView, PopularSkillsView,
-    StudentsOverviewView, StudentGroupsStatsView, CompaniesVacanciesStatsView,
-    PopularVacancySkillsView, TestResultsAnalyticsView, DifficultTestsView,
-    StudentActivityTimelineView, RolePopularityStatsView, DashboardSummaryView
+    ExpertSystemAnalyticsMetricsView, ExpertSystemSkillsDataView, ExpertSystemTopSkillsView,
+    ExpertSystemStudentsStatsView, ExpertSystemTestingDataView
 )
 
 router = DefaultRouter()
@@ -56,17 +54,9 @@ urlpatterns = [
     path('evaluate-test', TestEvaluation.as_view(), name='Evaluate test'),
     path('get-test-result', GetTestResult.as_view(), name='Get test result'),
     path('get-test-result-by-skill-id', GetTestResultBySkillId.as_view(), name='Get test result by skill id'),
-    path('delete-test-result-by-skill', DeleteTestResultBySkill.as_view(), name='Delete test result by skill'),
-    path('dashboard/metrics/', ExpertSystemMetricsView.as_view(), name='dashboard-metrics'),
-    path('dashboard/skills-analytics/', SkillsAnalyticsView.as_view(), name='dashboard-skills-analytics'),
-    path('dashboard/popular-skills/', PopularSkillsView.as_view(), name='dashboard-popular-skills'),
-    path('dashboard/students-overview/', StudentsOverviewView.as_view(), name='dashboard-students-overview'),
-    path('dashboard/student-groups-stats/', StudentGroupsStatsView.as_view(), name='dashboard-student-groups-stats'),
-    path('dashboard/companies-vacancies-stats/', CompaniesVacanciesStatsView.as_view(), name='dashboard-companies-vacancies-stats'),
-    path('dashboard/popular-vacancy-skills/', PopularVacancySkillsView.as_view(), name='dashboard-popular-vacancy-skills'),
-    path('dashboard/test-results-analytics/', TestResultsAnalyticsView.as_view(), name='dashboard-test-results-analytics'),
-    path('dashboard/difficult-tests/', DifficultTestsView.as_view(), name='dashboard-difficult-tests'),
-    path('dashboard/student-activity-timeline/', StudentActivityTimelineView.as_view(), name='dashboard-student-activity-timeline'),
-    path('dashboard/role-popularity-stats/', RolePopularityStatsView.as_view(), name='dashboard-role-popularity-stats'),
-    path('dashboard/summary/', DashboardSummaryView.as_view(), name='dashboard-summary'),
+    path('analytics/system-metrics/', ExpertSystemAnalyticsMetricsView.as_view(), name='expert-system-metrics'),
+    path('analytics/skills-data/', ExpertSystemSkillsDataView.as_view(), name='expert-skills-data'),
+    path('analytics/top-skills/', ExpertSystemTopSkillsView.as_view(), name='expert-top-skills'),
+    path('analytics/students-stats/', ExpertSystemStudentsStatsView.as_view(), name='analytics-students-stats'),
+    path('analytics/testing-data/', ExpertSystemTestingDataView.as_view(), name='expert-testing-data'),
 ]

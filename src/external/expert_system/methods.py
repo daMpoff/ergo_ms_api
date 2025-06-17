@@ -3,7 +3,6 @@ from django.db import connection
 def get_expert_system_metrics():
     """
     Основные метрики экспертной системы для SystemMetricsCard
-    Адаптировано под существующие модели
     """
     query = """
     SELECT 
@@ -83,27 +82,26 @@ def get_expert_system_metrics():
 
 def get_skills_analytics():
     """
-    Детальная аналитика навыков для SkillsAnalyticsCard
-    Адаптировано под существующие модели
+    Детальная аналитика навыков - исправленная версия для PostgreSQL
     """
     query = """
     SELECT 
         s.id as skill_id,
         s.name as skill_name,
-        COUNT(DISTINCT us.id) as total_users,
-        SUM(CASE WHEN us.status = 'confirmed' THEN 1 ELSE 0 END) as confirmed_users,
-        SUM(CASE WHEN us.status = 'unconfirmed' THEN 1 ELSE 0 END) as unconfirmed_users,
-        COUNT(DISTINCT t.id) as test_count,
-        COUNT(DISTINCT tr.id) as test_attempts,
-        SUM(CASE WHEN tr.passed = TRUE THEN 1 ELSE 0 END) as test_passes,
+        COALESCE(COUNT(DISTINCT us.id), 0) as total_users,
+        COALESCE(SUM(CASE WHEN us.status = 'confirmed' THEN 1 ELSE 0 END), 0) as confirmed_users,
+        COALESCE(SUM(CASE WHEN us.status = 'unconfirmed' THEN 1 ELSE 0 END), 0) as unconfirmed_users,
+        COALESCE(COUNT(DISTINCT t.id), 0) as test_count,
+        COALESCE(COUNT(DISTINCT tr.id), 0) as test_attempts,
+        COALESCE(SUM(CASE WHEN tr.passed = TRUE THEN 1 ELSE 0 END), 0) as test_passes,
         CASE 
             WHEN COUNT(DISTINCT tr.id) > 0 THEN 
-                ROUND(AVG(tr.score), 2)
+                ROUND(CAST(COALESCE(AVG(tr.score), 0) AS NUMERIC), 2)
             ELSE 0 
         END as avg_test_score,
         CASE 
             WHEN COUNT(DISTINCT tr.id) > 0 THEN 
-                ROUND((SUM(CASE WHEN tr.passed = TRUE THEN 1 ELSE 0 END) * 100.0 / COUNT(DISTINCT tr.id)), 2)
+                ROUND(CAST((COALESCE(SUM(CASE WHEN tr.passed = TRUE THEN 1 ELSE 0 END), 0) * 100.0 / COUNT(DISTINCT tr.id)) AS NUMERIC), 2)
             ELSE 0 
         END as success_rate
     FROM expert_system_expertsystemskill s
@@ -118,47 +116,59 @@ def get_skills_analytics():
         with connection.cursor() as cursor:
             cursor.execute(query)
             columns = [col[0] for col in cursor.description]
-            results = [
-                dict(zip(columns, row))
-                for row in cursor.fetchall()
-            ]
+            results = []
+            
+            for row in cursor.fetchall():
+                # Обрабатываем каждую строку и заменяем None на 0
+                processed_row = []
+                for value in row:
+                    if value is None:
+                        processed_row.append(0)
+                    else:
+                        processed_row.append(value)
+                
+                results.append(dict(zip(columns, processed_row)))
+            
+            print(f"Skills analytics: found {len(results)} skills")  # Отладка
             return results
+            
     except Exception as e:
         print(f"Error in get_skills_analytics: {str(e)}")
-        raise
+        import traceback
+        traceback.print_exc()
+        # Возвращаем пустой список вместо исключения
+        return []
 
 def get_popular_skills(limit=10):
     """
-    Популярные навыки для PopularSkillsCard
-    Адаптировано под существующие модели
+    Популярные навыки - исправленная версия для PostgreSQL
     """
     query = """
     SELECT 
         s.id as skill_id,
         s.name as skill_name,
-        COUNT(DISTINCT us.id) as total_users,
-        SUM(CASE WHEN us.status = 'confirmed' THEN 1 ELSE 0 END) as confirmed_users,
-        SUM(CASE WHEN us.status = 'unconfirmed' THEN 1 ELSE 0 END) as unconfirmed_users,
+        COALESCE(COUNT(DISTINCT us.id), 0) as total_users,
+        COALESCE(SUM(CASE WHEN us.status = 'confirmed' THEN 1 ELSE 0 END), 0) as confirmed_users,
+        COALESCE(SUM(CASE WHEN us.status = 'unconfirmed' THEN 1 ELSE 0 END), 0) as unconfirmed_users,
         CASE WHEN COUNT(DISTINCT t.id) > 0 THEN TRUE ELSE FALSE END as has_test,
-        COUNT(DISTINCT tr.id) as test_attempts,
+        COALESCE(COUNT(DISTINCT tr.id), 0) as test_attempts,
         CASE 
             WHEN COUNT(DISTINCT tr.id) > 0 THEN 
-                ROUND((SUM(CASE WHEN tr.passed = TRUE THEN 1 ELSE 0 END) * 100.0 / COUNT(DISTINCT tr.id)), 1)
+                ROUND(CAST((COALESCE(SUM(CASE WHEN tr.passed = TRUE THEN 1 ELSE 0 END), 0) * 100.0 / COUNT(DISTINCT tr.id)) AS NUMERIC), 1)
             ELSE 0 
         END as success_rate,
         CASE 
             WHEN COUNT(DISTINCT tr.id) > 0 THEN 
-                ROUND(AVG(tr.score), 1)
+                ROUND(CAST(COALESCE(AVG(tr.score), 0) AS NUMERIC), 1)
             ELSE 0 
         END as avg_score,
-        (SUM(CASE WHEN us.status = 'confirmed' THEN 1 ELSE 0 END) * 2 + COUNT(DISTINCT us.id)) as popularity_score
+        (COALESCE(SUM(CASE WHEN us.status = 'confirmed' THEN 1 ELSE 0 END), 0) * 2 + COALESCE(COUNT(DISTINCT us.id), 0)) as popularity_score
     FROM expert_system_expertsystemskill s
     LEFT JOIN expert_system_expertsystemuserskill us ON us.skill_id = s.id
     LEFT JOIN expert_system_expertsystemtest t ON t.skill_id = s.id
     LEFT JOIN expert_system_expertsystemtestresult tr ON tr.test_id = t.id
     GROUP BY s.id, s.name
-    HAVING COUNT(DISTINCT us.id) > 0
-    ORDER BY popularity_score DESC, confirmed_users DESC
+    ORDER BY popularity_score DESC, confirmed_users DESC, s.name ASC
     LIMIT %s
     """
     
@@ -166,363 +176,326 @@ def get_popular_skills(limit=10):
         with connection.cursor() as cursor:
             cursor.execute(query, [limit])
             columns = [col[0] for col in cursor.description]
-            results = [
-                dict(zip(columns, row))
-                for row in cursor.fetchall()
-            ]
+            results = []
+            
+            for row in cursor.fetchall():
+                # Обрабатываем каждую строку и заменяем None на 0
+                processed_row = []
+                for value in row:
+                    if value is None:
+                        processed_row.append(0)
+                    else:
+                        processed_row.append(value)
+                
+                results.append(dict(zip(columns, processed_row)))
+            
+            print(f"Popular skills: found {len(results)} skills")  # Отладка
+            for skill in results[:3]:  # Показываем первые 3 для отладки
+                print(f"  - {skill['skill_name']}: {skill['total_users']} users")
+            
             return results
+            
     except Exception as e:
         print(f"Error in get_popular_skills: {str(e)}")
-        raise
-
-def get_students_overview():
-    """
-    Обзор студентов для StudentsOverviewCard
-    Адаптировано под существующие модели (без created_at)
-    """
-    query = """
-    WITH student_stats AS (
-        SELECT 
-            sp.id as student_id,
-            sp.first_name,
-            sp.last_name,
-            sp.has_experience,
-            sp.role_id,
-            sg.name as group_name,
-            sg.id as group_id,
-            COUNT(DISTINCT us.id) as skills_count,
-            COUNT(DISTINCT CASE WHEN us.status = 'confirmed' THEN us.id END) as confirmed_skills,
-            COUNT(DISTINCT tr.id) as tests_taken,
-            COUNT(DISTINCT CASE WHEN tr.passed = TRUE THEN tr.id END) as tests_passed
-        FROM expert_system_expertsystemstudentprofile sp
-        LEFT JOIN expert_system_expertsystemstudygroup sg ON sg.id = sp.study_group_id
-        LEFT JOIN expert_system_expertsystemuserskill us ON us.user_id = sp.id
-        LEFT JOIN expert_system_expertsystemtestresult tr ON tr.user_id = sp.id
-        GROUP BY sp.id, sp.first_name, sp.last_name, sp.has_experience, sp.role_id, sg.name, sg.id
-    )
-    SELECT 
-        COUNT(*) as total_students,
-        SUM(CASE WHEN has_experience = TRUE THEN 1 ELSE 0 END) as students_with_experience,
-        SUM(CASE WHEN role_id IS NOT NULL THEN 1 ELSE 0 END) as students_with_role,
-        SUM(CASE WHEN tests_taken > 0 THEN 1 ELSE 0 END) as active_in_tests,
-        ROUND(AVG(skills_count), 1) as avg_skills_per_student,
-        ROUND(AVG(confirmed_skills), 1) as avg_confirmed_skills,
-        ROUND(AVG(tests_taken), 1) as avg_tests_per_student,
-        ROUND((SUM(CASE WHEN has_experience = TRUE THEN 1 ELSE 0 END) * 100.0 / COUNT(*)), 1) as experience_percentage,
-        ROUND((SUM(CASE WHEN role_id IS NOT NULL THEN 1 ELSE 0 END) * 100.0 / COUNT(*)), 1) as role_selection_percentage,
-        ROUND((SUM(CASE WHEN tests_taken > 0 THEN 1 ELSE 0 END) * 100.0 / COUNT(*)), 1) as test_activity_percentage
-    FROM student_stats
-    """
-    
-    try:
-        with connection.cursor() as cursor:
-            cursor.execute(query)
-            columns = [col[0] for col in cursor.description]
-            result = dict(zip(columns, cursor.fetchone()))
-            return result
-    except Exception as e:
-        print(f"Error in get_students_overview: {str(e)}")
-        raise
-
-def get_student_groups_stats():
-    """
-    Статистика по группам студентов
-    """
-    query = """
-    SELECT 
-        sg.id as group_id,
-        sg.name as group_name,
-        COUNT(sp.id) as total_students,
-        SUM(CASE WHEN sp.has_experience = TRUE THEN 1 ELSE 0 END) as with_experience,
-        SUM(CASE WHEN sp.has_experience = FALSE THEN 1 ELSE 0 END) as without_experience,
-        SUM(CASE WHEN sp.role_id IS NOT NULL THEN 1 ELSE 0 END) as with_role,
-        COUNT(DISTINCT tr.user_id) as active_in_tests,
-        ROUND(AVG(CASE WHEN skill_stats.total_skills > 0 
-                       THEN (skill_stats.confirmed_skills * 100.0 / skill_stats.total_skills) 
-                       ELSE 0 END), 1) as avg_progress
-    FROM expert_system_expertsystemstudygroup sg
-    LEFT JOIN expert_system_expertsystemstudentprofile sp ON sp.study_group_id = sg.id
-    LEFT JOIN expert_system_expertsystemtestresult tr ON tr.user_id = sp.id
-    LEFT JOIN (
-        SELECT 
-            us.user_id,
-            COUNT(*) as total_skills,
-            SUM(CASE WHEN us.status = 'confirmed' THEN 1 ELSE 0 END) as confirmed_skills
-        FROM expert_system_expertsystemuserskill us
-        GROUP BY us.user_id
-    ) skill_stats ON skill_stats.user_id = sp.id
-    GROUP BY sg.id, sg.name
-    HAVING COUNT(sp.id) > 0
-    ORDER BY total_students DESC
-    """
-    
-    try:
-        with connection.cursor() as cursor:
-            cursor.execute(query)
-            columns = [col[0] for col in cursor.description]
-            results = [
-                dict(zip(columns, row))
-                for row in cursor.fetchall()
-            ]
-            return results
-    except Exception as e:
-        print(f"Error in get_student_groups_stats: {str(e)}")
-        raise
-
-def get_companies_vacancies_stats():
-    """
-    Статистика компаний и вакансий для CompaniesVacanciesCard
-    """
-    query = """
-    SELECT 
-        cp.id as company_id,
-        cp.company_name,
-        cp.description,
-        cp.contact_person,
-        cp.is_verified,
-        COUNT(DISTINCT v.id) as vacancy_count,
-        COUNT(DISTINCT ca.id) as application_count,
-        STRING_AGG(DISTINCT s.name, ', ' ORDER BY s.name) as required_skills,
-        COUNT(DISTINCT vs.skill_id) as unique_skills_required
-    FROM expert_system_expertsystemcompanyprofile cp
-    LEFT JOIN expert_system_expertsystemvacancy v ON v.employer_id = cp.id
-    LEFT JOIN expert_system_expertsystemcandidateapplication ca ON ca.vacancy_id = v.id
-    LEFT JOIN expert_system_expertsystemvacancyskill vs ON vs.vacancy_id = v.id
-    LEFT JOIN expert_system_expertsystemskill s ON s.id = vs.skill_id
-    GROUP BY cp.id, cp.company_name, cp.description, cp.contact_person, cp.is_verified
-    ORDER BY vacancy_count DESC, application_count DESC
-    """
-    
-    try:
-        with connection.cursor() as cursor:
-            cursor.execute(query)
-            columns = [col[0] for col in cursor.description]
-            results = [
-                dict(zip(columns, row))
-                for row in cursor.fetchall()
-            ]
-            return results
-    except Exception as e:
-        print(f"Error in get_companies_vacancies_stats: {str(e)}")
-        raise
-
-def get_popular_vacancy_skills():
-    """
-    Популярные навыки в вакансиях
-    """
-    query = """
-    SELECT 
-        s.id as skill_id,
-        s.name as skill_name,
-        COUNT(DISTINCT vs.vacancy_id) as vacancy_count,
-        COUNT(DISTINCT v.employer_id) as company_count,
-        SUM(CASE WHEN vs.is_mandatory = TRUE THEN 1 ELSE 0 END) as mandatory_count,
-        ROUND((COUNT(DISTINCT vs.vacancy_id) * 100.0 / (
-            SELECT COUNT(*) FROM expert_system_expertsystemvacancy
-        )), 1) as percentage_of_vacancies
-    FROM expert_system_expertsystemskill s
-    JOIN expert_system_expertsystemvacancyskill vs ON vs.skill_id = s.id
-    JOIN expert_system_expertsystemvacancy v ON v.id = vs.vacancy_id
-    GROUP BY s.id, s.name
-    ORDER BY vacancy_count DESC, company_count DESC
-    LIMIT 10
-    """
-    
-    try:
-        with connection.cursor() as cursor:
-            cursor.execute(query)
-            columns = [col[0] for col in cursor.description]
-            results = [
-                dict(zip(columns, row))
-                for row in cursor.fetchall()
-            ]
-            return results
-    except Exception as e:
-        print(f"Error in get_popular_vacancy_skills: {str(e)}")
-        raise
+        import traceback
+        traceback.print_exc()
+        # Возвращаем пустой список вместо исключения
+        return []
 
 def get_test_results_analytics():
     """
-    Аналитика результатов тестов для TestResultsCard
+    Аналитика результатов тестов - исправленная версия для PostgreSQL
     """
-    query = """
-    SELECT 
-        COUNT(*) as total_attempts,
-        SUM(CASE WHEN passed = TRUE THEN 1 ELSE 0 END) as passed_attempts,
-        SUM(CASE WHEN passed = FALSE THEN 1 ELSE 0 END) as failed_attempts,
-        ROUND(AVG(score), 2) as average_score,
-        ROUND((SUM(CASE WHEN passed = TRUE THEN 1 ELSE 0 END) * 100.0 / COUNT(*)), 2) as success_rate,
-        SUM(CASE WHEN score >= 90 THEN 1 ELSE 0 END) as score_90_100,
-        SUM(CASE WHEN score >= 80 AND score < 90 THEN 1 ELSE 0 END) as score_80_89,
-        SUM(CASE WHEN score >= 70 AND score < 80 THEN 1 ELSE 0 END) as score_70_79,
-        SUM(CASE WHEN score >= 60 AND score < 70 THEN 1 ELSE 0 END) as score_60_69,
-        SUM(CASE WHEN score < 60 THEN 1 ELSE 0 END) as score_below_60,
-        COUNT(DISTINCT test_id) as unique_tests,
-        COUNT(DISTINCT user_id) as unique_users
-    FROM expert_system_expertsystemtestresult
-    """
+    check_query = "SELECT COUNT(*) FROM expert_system_expertsystemtestresult"
     
     try:
         with connection.cursor() as cursor:
-            cursor.execute(query)
+            cursor.execute(check_query)
+            count = cursor.fetchone()[0]
+            print(f"Test results count: {count}")
+            
+            if count == 0:
+                # Если нет данных, возвращаем структуру с нулями
+                return {
+                    'total_attempts': 0,
+                    'passed_attempts': 0,
+                    'failed_attempts': 0,
+                    'average_score': 0.0,
+                    'success_rate': 0.0,
+                    'score_90_100': 0,
+                    'score_80_89': 0,
+                    'score_70_79': 0,
+                    'score_60_69': 0,
+                    'score_below_60': 0,
+                    'unique_tests': 0,
+                    'unique_users': 0
+                }
+            
+            # Если данные есть, выполняем основной запрос с исправленным ROUND
+            main_query = """
+            SELECT 
+                COALESCE(COUNT(*), 0) as total_attempts,
+                COALESCE(SUM(CASE WHEN passed = TRUE THEN 1 ELSE 0 END), 0) as passed_attempts,
+                COALESCE(SUM(CASE WHEN passed = FALSE THEN 1 ELSE 0 END), 0) as failed_attempts,
+                ROUND(CAST(COALESCE(AVG(score), 0) AS NUMERIC), 2) as average_score,
+                CASE 
+                    WHEN COUNT(*) > 0 THEN 
+                        ROUND(CAST((COALESCE(SUM(CASE WHEN passed = TRUE THEN 1 ELSE 0 END), 0) * 100.0 / COUNT(*)) AS NUMERIC), 2)
+                    ELSE 0.0 
+                END as success_rate,
+                COALESCE(SUM(CASE WHEN score >= 90 THEN 1 ELSE 0 END), 0) as score_90_100,
+                COALESCE(SUM(CASE WHEN score >= 80 AND score < 90 THEN 1 ELSE 0 END), 0) as score_80_89,
+                COALESCE(SUM(CASE WHEN score >= 70 AND score < 80 THEN 1 ELSE 0 END), 0) as score_70_79,
+                COALESCE(SUM(CASE WHEN score >= 60 AND score < 70 THEN 1 ELSE 0 END), 0) as score_60_69,
+                COALESCE(SUM(CASE WHEN score < 60 THEN 1 ELSE 0 END), 0) as score_below_60,
+                COALESCE(COUNT(DISTINCT test_id), 0) as unique_tests,
+                COALESCE(COUNT(DISTINCT user_id), 0) as unique_users
+            FROM expert_system_expertsystemtestresult
+            """
+            
+            cursor.execute(main_query)
             columns = [col[0] for col in cursor.description]
-            result = dict(zip(columns, cursor.fetchone()))
-            return result
+            row = cursor.fetchone()
+            
+            if row:
+                # Обрабатываем результат и заменяем None на 0
+                processed_row = []
+                for value in row:
+                    if value is None:
+                        processed_row.append(0)
+                    else:
+                        processed_row.append(value)
+                
+                result = dict(zip(columns, processed_row))
+                print(f"Test analytics result: {result}")  # Отладка
+                return result
+            else:
+                # Если по какой-то причине нет результата
+                return {
+                    'total_attempts': 0,
+                    'passed_attempts': 0,
+                    'failed_attempts': 0,
+                    'average_score': 0.0,
+                    'success_rate': 0.0,
+                    'score_90_100': 0,
+                    'score_80_89': 0,
+                    'score_70_79': 0,
+                    'score_60_69': 0,
+                    'score_below_60': 0,
+                    'unique_tests': 0,
+                    'unique_users': 0
+                }
+                
     except Exception as e:
         print(f"Error in get_test_results_analytics: {str(e)}")
-        raise
+        import traceback
+        traceback.print_exc()
+        # Возвращаем структуру с нулями вместо исключения
+        return {
+            'total_attempts': 0,
+            'passed_attempts': 0,
+            'failed_attempts': 0,
+            'average_score': 0.0,
+            'success_rate': 0.0,
+            'score_90_100': 0,
+            'score_80_89': 0,
+            'score_70_79': 0,
+            'score_60_69': 0,
+            'score_below_60': 0,
+            'unique_tests': 0,
+            'unique_users': 0
+        }
 
-def get_difficult_tests():
+def get_students_stats():
     """
-    Сложные тесты с низкой успеваемостью
+    Статистика студентов для StudentsStatsCard - исправленная версия для PostgreSQL
     """
     query = """
     SELECT 
-        t.id as test_id,
+        -- Общая статистика студентов
+        COUNT(*) as total_students,
+        SUM(CASE WHEN has_experience = TRUE THEN 1 ELSE 0 END) as students_with_experience,
+        SUM(CASE WHEN role_id IS NOT NULL THEN 1 ELSE 0 END) as students_with_role,
+        
+        -- Статистика по навыкам студентов
+        (SELECT COUNT(DISTINCT us.user_id) 
+         FROM expert_system_expertsystemuserskill us 
+         WHERE us.user_id IN (SELECT id FROM expert_system_expertsystemstudentprofile)
+        ) as students_with_skills,
+        
+        (SELECT COUNT(*) 
+         FROM expert_system_expertsystemuserskill us 
+         WHERE us.user_id IN (SELECT id FROM expert_system_expertsystemstudentprofile)
+           AND us.status = 'confirmed'
+        ) as confirmed_skills_count,
+        
+        (SELECT COUNT(*) 
+         FROM expert_system_expertsystemuserskill us 
+         WHERE us.user_id IN (SELECT id FROM expert_system_expertsystemstudentprofile)
+           AND us.status = 'unconfirmed'
+        ) as unconfirmed_skills_count,
+        
+        -- Статистика по тестированию
+        (SELECT COUNT(DISTINCT tr.user_id) 
+         FROM expert_system_expertsystemtestresult tr 
+         WHERE tr.user_id IN (SELECT id FROM expert_system_expertsystemstudentprofile)
+        ) as students_tested,
+        
+        (SELECT COUNT(*) 
+         FROM expert_system_expertsystemtestresult tr 
+         WHERE tr.user_id IN (SELECT id FROM expert_system_expertsystemstudentprofile)
+        ) as total_test_attempts,
+        
+        (SELECT COUNT(*) 
+         FROM expert_system_expertsystemtestresult tr 
+         WHERE tr.user_id IN (SELECT id FROM expert_system_expertsystemstudentprofile)
+           AND tr.passed = TRUE
+        ) as passed_tests,
+        
+        -- Средний балл студентов с CAST для PostgreSQL
+        (SELECT ROUND(CAST(COALESCE(AVG(tr.score), 0) AS NUMERIC), 2)
+         FROM expert_system_expertsystemtestresult tr 
+         WHERE tr.user_id IN (SELECT id FROM expert_system_expertsystemstudentprofile)
+        ) as average_score
+        
+    FROM expert_system_expertsystemstudentprofile
+    """
+    
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(query)
+            columns = [col[0] for col in cursor.description]
+            row = cursor.fetchone()
+            
+            if row:
+                # Обрабатываем результат и заменяем None на 0
+                processed_row = []
+                for value in row:
+                    if value is None:
+                        processed_row.append(0)
+                    else:
+                        processed_row.append(value)
+                
+                result = dict(zip(columns, processed_row))
+                
+                # Вычисляем дополнительные метрики
+                total_students = result['total_students']
+                if total_students > 0:
+                    result['experience_percentage'] = round((result['students_with_experience'] * 100.0 / total_students), 1)
+                    result['role_selection_percentage'] = round((result['students_with_role'] * 100.0 / total_students), 1)
+                    result['test_activity_percentage'] = round((result['students_tested'] * 100.0 / total_students), 1)
+                    
+                    # Дополнительные поля для компонента
+                    result['active_in_tests'] = result['students_tested']
+                    result['avg_skills_per_student'] = round((result['confirmed_skills_count'] + result['unconfirmed_skills_count']) / total_students, 1) if total_students > 0 else 0
+                    result['avg_confirmed_skills'] = round(result['confirmed_skills_count'] / total_students, 1) if total_students > 0 else 0
+                    result['avg_tests_per_student'] = round(result['total_test_attempts'] / total_students, 1) if total_students > 0 else 0
+                else:
+                    result['experience_percentage'] = 0
+                    result['role_selection_percentage'] = 0
+                    result['test_activity_percentage'] = 0
+                    result['active_in_tests'] = 0
+                    result['avg_skills_per_student'] = 0
+                    result['avg_confirmed_skills'] = 0
+                    result['avg_tests_per_student'] = 0
+                
+                # Вычисляем процент успешности тестов
+                total_attempts = result['total_test_attempts']
+                if total_attempts > 0:
+                    result['test_success_rate'] = round((result['passed_tests'] * 100.0 / total_attempts), 1)
+                else:
+                    result['test_success_rate'] = 0
+                
+                print(f"Students stats result: {result}")  # Отладка
+                return result
+            else:
+                # Если по какой-то причине нет результата
+                return create_empty_students_stats()
+                
+    except Exception as e:
+        print(f"Error in get_students_stats: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return create_empty_students_stats()
+
+def create_empty_students_stats():
+    """
+    Создает пустую структуру данных для статистики студентов
+    """
+    return {
+        'total_students': 0,
+        'students_with_experience': 0,
+        'students_with_role': 0,
+        'students_with_skills': 0,
+        'confirmed_skills_count': 0,
+        'unconfirmed_skills_count': 0,
+        'students_tested': 0,
+        'total_test_attempts': 0,
+        'passed_tests': 0,
+        'average_score': 0.0,
+        'experience_percentage': 0,
+        'role_selection_percentage': 0,
+        'test_activity_percentage': 0,
+        'test_success_rate': 0,
+        'active_in_tests': 0,
+        'avg_skills_per_student': 0,
+        'avg_confirmed_skills': 0,
+        'avg_tests_per_student': 0
+    }
+
+def get_testing_data():
+    """
+    Данные для аналитики тестирования - новая функция
+    """
+    query = """
+    SELECT 
+        tr.id as result_id,
+        tr.score,
+        tr.passed,
+        sp.first_name,
+        sp.last_name,
+        sp.study_group_id,
+        sg.name as group_name,
         t.name as test_name,
         s.name as skill_name,
-        COUNT(tr.id) as total_attempts,
-        SUM(CASE WHEN tr.passed = TRUE THEN 1 ELSE 0 END) as passed_attempts,
-        ROUND(AVG(tr.score), 1) as avg_score,
-        ROUND((SUM(CASE WHEN tr.passed = TRUE THEN 1 ELSE 0 END) * 100.0 / COUNT(tr.id)), 1) as pass_rate
-    FROM expert_system_expertsystemtest t
-    JOIN expert_system_expertsystemskill s ON s.id = t.skill_id
-    JOIN expert_system_expertsystemtestresult tr ON tr.test_id = t.id
-    GROUP BY t.id, t.name, s.name
-    HAVING COUNT(tr.id) >= 3
-    ORDER BY pass_rate ASC, avg_score ASC
-    LIMIT 5
+        s.id as skill_id,
+        t.id as test_id
+    FROM expert_system_expertsystemtestresult tr
+    JOIN expert_system_expertsystemstudentprofile sp ON tr.user_id = sp.id
+    LEFT JOIN expert_system_expertsystemstudygroup sg ON sp.study_group_id = sg.id
+    JOIN expert_system_expertsystemtest t ON tr.test_id = t.id
+    JOIN expert_system_expertsystemskill s ON t.skill_id = s.id
+    ORDER BY tr.id DESC
     """
     
     try:
         with connection.cursor() as cursor:
             cursor.execute(query)
             columns = [col[0] for col in cursor.description]
-            results = [
-                dict(zip(columns, row))
-                for row in cursor.fetchall()
-            ]
+            results = []
+            
+            for row in cursor.fetchall():
+                # Обрабатываем каждую строку
+                processed_row = []
+                for value in row:
+                    if value is None:
+                        processed_row.append('')
+                    else:
+                        processed_row.append(value)
+                
+                result_dict = dict(zip(columns, processed_row))
+                
+                # Форматируем данные для фронтенда
+                result_dict['student_name'] = f"{result_dict['first_name']} {result_dict['last_name']}"
+                result_dict['group_display'] = result_dict['group_name'] or 'Без группы'
+                
+                results.append(result_dict)
+            
+            print(f"Testing data: found {len(results)} records")
             return results
+            
     except Exception as e:
-        print(f"Error in get_difficult_tests: {str(e)}")
-        raise
-
-def get_student_activity_timeline(days=30):
-    """
-    Активность студентов по дням (используем applied_at из заявок вместо created_at)
-    """
-    query = """
-    WITH date_series AS (
-        SELECT generate_series(
-            CURRENT_DATE - INTERVAL '%s days',
-            CURRENT_DATE,
-            '1 day'::interval
-        )::date AS activity_date
-    ),
-    application_activity AS (
-        SELECT 
-            DATE(applied_at) as activity_date,
-            COUNT(*) as applications_count
-        FROM expert_system_expertsystemcandidateapplication
-        WHERE applied_at >= CURRENT_DATE - INTERVAL '%s days'
-        GROUP BY DATE(applied_at)
-    ),
-    orientation_activity AS (
-        SELECT 
-            DATE(taken_at) as activity_date,
-            COUNT(*) as orientation_tests_count
-        FROM expert_system_expertsystemorientationtestresult
-        WHERE taken_at >= CURRENT_DATE - INTERVAL '%s days'
-        GROUP BY DATE(taken_at)
-    )
-    SELECT 
-        ds.activity_date,
-        COALESCE(aa.applications_count, 0) as applications_count,
-        COALESCE(oa.orientation_tests_count, 0) as orientation_tests_count,
-        COALESCE(aa.applications_count, 0) + COALESCE(oa.orientation_tests_count, 0) as total_activity
-    FROM date_series ds
-    LEFT JOIN application_activity aa ON aa.activity_date = ds.activity_date
-    LEFT JOIN orientation_activity oa ON oa.activity_date = ds.activity_date
-    ORDER BY ds.activity_date
-    """
-    
-    try:
-        with connection.cursor() as cursor:
-            cursor.execute(query, [days, days, days])
-            columns = [col[0] for col in cursor.description]
-            results = [
-                dict(zip(columns, row))
-                for row in cursor.fetchall()
-            ]
-            return results
-    except Exception as e:
-        print(f"Error in get_student_activity_timeline: {str(e)}")
-        raise
-
-def get_role_popularity_stats():
-    """
-    Популярность профессиональных ролей среди студентов
-    """
-    query = """
-    SELECT 
-        r.id as role_id,
-        r.name as role_name,
-        r.description,
-        COUNT(sp.id) as students_count,
-        ROUND((COUNT(sp.id) * 100.0 / (
-            SELECT COUNT(*) FROM expert_system_expertsystemstudentprofile WHERE role_id IS NOT NULL
-        )), 1) as percentage,
-        SUM(CASE WHEN sp.has_experience = TRUE THEN 1 ELSE 0 END) as experienced_students,
-        COUNT(DISTINCT c.id) as courses_available
-    FROM expert_system_expertsystemrole r
-    LEFT JOIN expert_system_expertsystemstudentprofile sp ON sp.role_id = r.id
-    LEFT JOIN expert_system_expertsystemcourse c ON c.role_id = r.id
-    GROUP BY r.id, r.name, r.description
-    HAVING COUNT(sp.id) > 0
-    ORDER BY students_count DESC
-    """
-    
-    try:
-        with connection.cursor() as cursor:
-            cursor.execute(query)
-            columns = [col[0] for col in cursor.description]
-            results = [
-                dict(zip(columns, row))
-                for row in cursor.fetchall()
-            ]
-            return results
-    except Exception as e:
-        print(f"Error in get_role_popularity_stats: {str(e)}")
-        raise
-
-def get_expert_system_dashboard_summary():
-    """
-    Сводка всех ключевых метрик для главного дашборда
-    """
-    query = """
-    SELECT 
-        'expert_system_summary' as report_type,
-        (SELECT COUNT(*) FROM expert_system_expertsystemstudentprofile) as total_students,
-        (SELECT COUNT(*) FROM expert_system_expertsystemcompanyprofile) as total_companies,
-        (SELECT COUNT(*) FROM expert_system_expertsystemvacancy) as total_vacancies,
-        (SELECT COUNT(*) FROM expert_system_expertsystemskill) as total_skills,
-        (SELECT COUNT(*) FROM expert_system_expertsystemtest) as total_tests,
-        (SELECT COUNT(*) FROM expert_system_expertsystemtestresult) as total_test_results,
-        (SELECT COUNT(*) FROM expert_system_expertsystemuserskill WHERE status = 'confirmed') as confirmed_skills,
-        (SELECT COUNT(*) FROM expert_system_expertsystemcandidateapplication) as total_applications,
-        (SELECT ROUND(AVG(score), 1) FROM expert_system_expertsystemtestresult) as avg_test_score,
-        (SELECT ROUND((COUNT(CASE WHEN passed = TRUE THEN 1 END) * 100.0 / COUNT(*)), 1) 
-         FROM expert_system_expertsystemtestresult) as test_success_rate,
-        (SELECT ROUND((COUNT(CASE WHEN is_verified = TRUE THEN 1 END) * 100.0 / COUNT(*)), 1) 
-         FROM expert_system_expertsystemcompanyprofile) as company_verification_rate
-    """
-    
-    try:
-        with connection.cursor() as cursor:
-            cursor.execute(query)
-            columns = [col[0] for col in cursor.description]
-            result = dict(zip(columns, cursor.fetchone()))
-            return result
-    except Exception as e:
-        print(f"Error in get_expert_system_dashboard_summary: {str(e)}")
-        raise
+        print(f"Error in get_testing_data: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return []
