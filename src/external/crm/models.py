@@ -4,8 +4,10 @@ from django.utils import timezone
 
 class Project(models.Model):
     name = models.CharField(max_length=100, default='')
-    dateofcreation = models.DateField(default= timezone.now)
+    dateofcreation = models.DateField(default=timezone.now)
     creator = models.ForeignKey(User, on_delete= models.CASCADE)
+    deadline = models.DateField(default=timezone.now)
+    description = models.TextField(default='')
 
 class User_Project(models.Model):
     project = models.ForeignKey(Project, on_delete= models.CASCADE)
@@ -25,7 +27,7 @@ class Task(models.Model):
     priority = models.IntegerField(default=0)
     section = models.ForeignKey(Section, on_delete=models.CASCADE)
     parenttask = models.ForeignKey('self', on_delete= models.CASCADE)
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='crm_tasks')
 
 class Calendar (models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)

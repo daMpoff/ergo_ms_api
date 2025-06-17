@@ -80,6 +80,9 @@ class DatasetDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            # Для генерации схемы Swagger возвращаем пустой queryset
+            return Dataset.objects.none()
         return Dataset.objects.filter(owner=self.request.user)
 
 
@@ -201,6 +204,9 @@ class FileUploadView(generics.ListCreateAPIView):
     parser_classes = [MultiPartParser, FormParser]
 
     def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            # Для генерации схемы Swagger возвращаем пустой queryset
+            return FileUpload.objects.none()
         return FileUpload.objects.filter(owner=self.request.user)
 
     def perform_create(self, serializer):
@@ -217,6 +223,9 @@ class FileUploadDetailView(generics.RetrieveUpdateDestroyAPIView):
     parser_classes = [MultiPartParser, FormParser]
 
     def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            # Для генерации схемы Swagger возвращаем пустой queryset
+            return FileUpload.objects.none()
         return FileUpload.objects.filter(owner=self.request.user)
 
     def retrieve(self, request, *args, **kwargs):
