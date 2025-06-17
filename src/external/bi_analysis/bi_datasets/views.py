@@ -468,14 +468,12 @@ def detect_column_type(values):
     filtered = [v for v in values if v not in (None, '')]
     if not filtered:
         return "string"
-    # int/float (без bool)
     if all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in filtered):
         if all(isinstance(v, int) for v in filtered):
             return "integer"
         return "float"
     try:
         import dateutil.parser
-        # Если всё можно пропарсить как дату
         if all(isinstance(dateutil.parser.parse(str(v)), object) for v in filtered):
             return "date"
     except Exception:
@@ -518,6 +516,8 @@ def extract_columns_info(instance):
             return {'columns': [], 'types': []}
     return {'columns': [], 'types': []}
 
+from openpyxl import load_workbook
+
 class FinalizeUploadView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -527,6 +527,7 @@ class FinalizeUploadView(APIView):
         original_filename = request.data.get('original_filename')
         file_type         = request.data.get('file_type')
         connection_id     = request.data.get('connection')
+        sheet             = request.data.get('sheet')
 
         if not all([temp_path, name, original_filename, file_type]):
             return Response(
@@ -552,14 +553,28 @@ class FinalizeUploadView(APIView):
             connection=connection_obj
         )
 
-        with open(temp_path, 'rb') as f:
-            upload.file.save(original_filename, File(f), save=False)
+        if file_type == "xlsx" and sheet:
+            wb = load_workbook(temp_path, read_only=False)
+            for ws_name in wb.sheetnames:
+                if ws_name != sheet:
+                    ws = wb[ws_name]
+                    wb.remove(ws)
+            single_sheet_path = temp_path + "_single.xlsx"
+            wb.save(single_sheet_path)
+            with open(single_sheet_path, 'rb') as f:
+                upload.file.save(original_filename, File(f), save=False)
+            try:
+                os.remove(single_sheet_path)
+            except Exception:
+                pass
+        else:
+            with open(temp_path, 'rb') as f:
+                upload.file.save(original_filename, File(f), save=False)
+
         upload.save()
 
-        # ----------- Вот этот блок -----------
         upload.columns_info = extract_columns_info(upload)
         upload.save(update_fields=['columns_info'])
-        # --------------------------------------
 
         try:
             os.remove(temp_path)
