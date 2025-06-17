@@ -1,19 +1,27 @@
+import re
+import os
+
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
+
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
+
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.auth.models import (Group, Permission, User)
-from src.core.utils.base.base_views import BaseAPIView
-from src.core.cms.models import (ExpandedPermission,Accession, GroupCategory, ExpandedGroup, PermissionMark, Accession,CMSPage, CMSPageComponent)
-from rest_framework.request import Request
+
+from src.core.utils.base.base_views import BaseAPIViewAuthMixin
+from src.core.cms.models import (
+    ExpandedPermission, Accession, 
+    GroupCategory, ExpandedGroup, PermissionMark, 
+    Accession,CMSPage, CMSPageComponent
+)
 from src.core.cms.commands import GetUserExpandedPermissions
-import re
-import os
+
 #Управление категорями групп
-class AddGroupCategory(BaseAPIView):
-    permission_classes = [IsAuthenticated]
+class AddGroupCategory(BaseAPIViewAuthMixin):
     @swagger_auto_schema(
         operation_description="Добавление категории группы",
         responses={
@@ -63,8 +71,7 @@ class AddGroupCategory(BaseAPIView):
                 status= status.HTTP_403_FORBIDDEN
             )
         
-class GetGroupCategories(BaseAPIView):
-    permission_classes = [IsAuthenticated]
+class GetGroupCategories(BaseAPIViewAuthMixin):
     @swagger_auto_schema(
         operation_description="получение категорий групп",
         responses={
@@ -98,10 +105,9 @@ class GetGroupCategories(BaseAPIView):
         else:
             return Response(
                 status= status.HTTP_403_FORBIDDEN
-            )
-        
-class ChangeGroupCategory(BaseAPIView):
-    permission_classes = [IsAuthenticated]
+            )  
+
+class ChangeGroupCategory(BaseAPIViewAuthMixin):
     @swagger_auto_schema(
         operation_description="Изменение категории группы",
         responses={
@@ -147,8 +153,8 @@ class ChangeGroupCategory(BaseAPIView):
             return Response(
                 status=status.HTTP_403_FORBIDDEN
             )
-class DeleteGroupCategory(BaseAPIView):
-    permission_classes = [IsAuthenticated]
+
+class DeleteGroupCategory(BaseAPIViewAuthMixin):
     @swagger_auto_schema(
         operation_description="Удаление категории группы",
         responses={
@@ -176,9 +182,9 @@ class DeleteGroupCategory(BaseAPIView):
             return Response(status=status.HTTP_200_OK)
         else:
             return Response(status=status.HTTP_403_FORBIDDEN)
+
 #Управление группами
-class AddGroup(BaseAPIView):
-    permission_classes = [IsAuthenticated]
+class AddGroup(BaseAPIViewAuthMixin):
     @swagger_auto_schema(
         operation_description="Добавление группы",
         responses={
@@ -222,8 +228,8 @@ class AddGroup(BaseAPIView):
             return Response(
                 status=status.HTTP_403_FORBIDDEN
             )
-class ChangeGroup(BaseAPIView):
-    permission_classes = [IsAuthenticated]
+
+class ChangeGroup(BaseAPIViewAuthMixin):
     @swagger_auto_schema(
         operation_description="обновление группы",
         responses={
@@ -282,8 +288,8 @@ class ChangeGroup(BaseAPIView):
             return Response(
                 status=status.HTTP_403_FORBIDDEN
             )
-class DeleteGroup(BaseAPIView):
-    permission_classes = [IsAuthenticated]
+
+class DeleteGroup(BaseAPIViewAuthMixin):
     @swagger_auto_schema(
         operation_description="удаление группы",
         responses={
@@ -310,8 +316,8 @@ class DeleteGroup(BaseAPIView):
             return Response(
                 status=status.HTTP_403_FORBIDDEN
             )
-class GetGroupsByCategory(BaseAPIView):    
-    permission_classes = [IsAuthenticated]
+
+class GetGroupsByCategory(BaseAPIViewAuthMixin):
     @swagger_auto_schema(
         operation_description="Получение групп пользователя.",
         responses={
@@ -331,8 +337,8 @@ class GetGroupsByCategory(BaseAPIView):
                 result,
                 status=status.HTTP_200_OK
             )
-class GetGroups(BaseAPIView):
-    permission_classes = [IsAuthenticated]
+
+class GetGroups(BaseAPIViewAuthMixin):
     @swagger_auto_schema(
         operation_description="Получение групп.",
         responses = {
@@ -385,8 +391,7 @@ class GetGroups(BaseAPIView):
                 status=status.HTTP_403_FORBIDDEN
             )
         
-class AddGroupPermissions(BaseAPIView):
-    permission_classes = [IsAuthenticated]
+class AddGroupPermissions(BaseAPIViewAuthMixin):
     @swagger_auto_schema(
         operation_description="Добавление прав группе",
         responses={
@@ -429,8 +434,7 @@ class AddGroupPermissions(BaseAPIView):
             group.save()
             return Response(status=status.HTTP_200_OK) 
         
-class RemoveGroupPermissions(BaseAPIView):
-    permission_classes = [IsAuthenticated]
+class RemoveGroupPermissions(BaseAPIViewAuthMixin):
     @swagger_auto_schema(
         operation_description="Удаление прав группе",
         responses={
@@ -472,8 +476,7 @@ class RemoveGroupPermissions(BaseAPIView):
             return Response(status=status.HTTP_200_OK)
         
 #Управление правами
-class GetPermissions(BaseAPIView):
-    permission_classes = [IsAuthenticated]
+class GetPermissions(BaseAPIViewAuthMixin):
     @swagger_auto_schema(
         operation_description="Получение прав.",
         responses={
@@ -537,8 +540,8 @@ class GetPermissions(BaseAPIView):
             return Response(
                 status=status.HTTP_403_FORBIDDEN
             )
-class AddPermission(BaseAPIView):
-     permission_classes = [IsAuthenticated]
+
+class AddPermission(BaseAPIViewAuthMixin):
      @swagger_auto_schema(
         operation_description="Добавление права",
         responses={
@@ -570,8 +573,7 @@ class AddPermission(BaseAPIView):
                 )
             }
         )
-    )
-     
+    ) 
      def post(self, request: Request):
         access = False
         perms =[]
@@ -603,8 +605,8 @@ class AddPermission(BaseAPIView):
             return Response(
                 status=status.HTTP_400_BAD_REQUEST
             )
-class DeletePermission(BaseAPIView):
-    permission_classes = [IsAuthenticated]
+
+class DeletePermission(BaseAPIViewAuthMixin):
     @swagger_auto_schema(
         operation_description="удаление права",
         responses={
@@ -648,8 +650,8 @@ class DeletePermission(BaseAPIView):
             return Response(
                 status=status.HTTP_403_FORBIDDEN
             )
-class ChangePermission(BaseAPIView):
-    permission_classes = [IsAuthenticated]
+
+class ChangePermission(BaseAPIViewAuthMixin):
     @swagger_auto_schema(
         operation_description="обновление кода права",
         responses={
@@ -732,8 +734,7 @@ class ChangePermission(BaseAPIView):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-class GetPermissionsByCategory(BaseAPIView):
-    permission_classes = [IsAuthenticated]
+class GetPermissionsByCategory(BaseAPIViewAuthMixin):
     @swagger_auto_schema(
         operation_description="Получение прав по категории",
         responses={
@@ -767,9 +768,9 @@ class GetPermissionsByCategory(BaseAPIView):
             )
         else:
             return Response(status=status.HTTP_403_FORBIDDEN)
+
 #Проверка на доступ к компонентам и странице
-class CheckAccesstoPage(BaseAPIView):
-    permission_classes = [IsAuthenticated]
+class CheckAccesstoPage(BaseAPIViewAuthMixin):
     @swagger_auto_schema(
         operation_description="Получение прав пользователя.",
         responses={
@@ -812,8 +813,8 @@ class CheckAccesstoPage(BaseAPIView):
             result,
             status=status.HTTP_200_OK
         )
-class CheckAccessToComponent(BaseAPIView):
-    permission_classes = [IsAuthenticated]
+
+class CheckAccessToComponent(BaseAPIViewAuthMixin):
     @swagger_auto_schema(
         operation_description="Получение прав доступа к компоненту",
         responses={
@@ -872,8 +873,7 @@ class CheckAccessToComponent(BaseAPIView):
             status=status.HTTP_200_OK
         )
 
-class CheckAccessToAdminPanel(BaseAPIView):
-    permission_classes = [IsAuthenticated]
+class CheckAccessToAdminPanel(BaseAPIViewAuthMixin):
     @swagger_auto_schema(
         operation_description="Получение прав доступа к панели администратора",
         responses={
@@ -909,9 +909,9 @@ class CheckAccessToAdminPanel(BaseAPIView):
             result,
             status=status.HTTP_200_OK
         )
+
 #Работа с пользователями
-class GetUserGroupsAndPermissions(BaseAPIView):
-    permission_classes = [IsAuthenticated]
+class GetUserGroupsAndPermissions(BaseAPIViewAuthMixin):
     @swagger_auto_schema(
         operation_description="Получение групп и прав пользователя",
         responses={
@@ -978,8 +978,8 @@ class GetUserGroupsAndPermissions(BaseAPIView):
             return Response(
                 status=status.HTTP_403_FORBIDDEN
             )
-class AddUserGroup(BaseAPIView):
-    permission_classes = [IsAuthenticated]
+
+class AddUserGroup(BaseAPIViewAuthMixin):
     @swagger_auto_schema(
         operation_description="Добавление пользователя в группу",
         responses={
@@ -1028,8 +1028,8 @@ class AddUserGroup(BaseAPIView):
                         return Response(status=status.HTTP_403_FORBIDDEN)
                 user.save()
         return Response(status=status.HTTP_200_OK)  
-class RemoveUserGroup(BaseAPIView):
-    permission_classes = [IsAuthenticated]
+
+class RemoveUserGroup(BaseAPIViewAuthMixin):
     @swagger_auto_schema(
         operation_description="Удаление пользователя из группы",
         responses={
@@ -1078,8 +1078,7 @@ class RemoveUserGroup(BaseAPIView):
                 user.save()
         return Response(status=status.HTTP_200_OK)   
     
-class RemoveUserPermission(BaseAPIView):
-    permission_classes = [IsAuthenticated]
+class RemoveUserPermission(BaseAPIViewAuthMixin):
     @swagger_auto_schema(
         operation_description="Удаление права пользователя",
         responses={
@@ -1129,8 +1128,7 @@ class RemoveUserPermission(BaseAPIView):
         else:
             return Response(status=status.HTTP_403_FORBIDDEN)
         
-class AddUserPermission(BaseAPIView):
-    permission_classes = [IsAuthenticated]
+class AddUserPermission(BaseAPIViewAuthMixin):
     @swagger_auto_schema(
         operation_description="Добавление права пользователю",
         responses={
@@ -1180,9 +1178,9 @@ class AddUserPermission(BaseAPIView):
             return Response(status=status.HTTP_200_OK)
         else:
             return Response(status=status.HTTP_403_FORBIDDEN)
+
 #Работа с текущим пользователем    
-class GetUserName(BaseAPIView):
-    permission_classes = [IsAuthenticated]
+class GetUserName(BaseAPIViewAuthMixin):
     @swagger_auto_schema(
         operation_description="Получение имен пользователей",
         responses={
@@ -1196,8 +1194,8 @@ class GetUserName(BaseAPIView):
             user.username,
             status=status.HTTP_200_OK
         )
-class GetGroupsByCategory(BaseAPIView):
-    permission_classes = [IsAuthenticated]
+
+class GetGroupsByCategory(BaseAPIViewAuthMixin):
     @swagger_auto_schema(
         operation_description="Получение групп пользователя",
         responses={
@@ -1237,8 +1235,7 @@ class GetGroupsByCategory(BaseAPIView):
         else:
             return Response(status= status.HTTP_403_FORBIDDEN)
         
-class GetUserPermissions(BaseAPIView):
-    permission_classes = [IsAuthenticated]
+class GetUserPermissions(BaseAPIViewAuthMixin):
     @swagger_auto_schema(
         operation_description="Получение прав пользователя",
         responses={
@@ -1279,8 +1276,7 @@ class GetUserPermissions(BaseAPIView):
             return Response(status=status.HTTP_403_FORBIDDEN)
     
 #Работа со страницами и компонентами
-class PatchAllProgectPages(BaseAPIView):
-    permission_classes = [IsAuthenticated]
+class PatchAllProgectPages(BaseAPIViewAuthMixin):
     @swagger_auto_schema(
         operation_description='Получение и обновление всех путей проекта из файла маршрутов, исключая mainRoutes',
         responses={
@@ -1343,8 +1339,7 @@ class PatchAllProgectPages(BaseAPIView):
                 status=status.HTTP_403_FORBIDDEN
             )
         
-class GetCMSPages(BaseAPIView):
-    permission_classes = [IsAuthenticated]
+class GetCMSPages(BaseAPIViewAuthMixin):
     @swagger_auto_schema(
         operation_description="Получение всех страниц CMS",
         responses={
@@ -1378,8 +1373,7 @@ class GetCMSPages(BaseAPIView):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-class UpdateCMSPage(BaseAPIView):
-    permission_classes = [IsAuthenticated]
+class UpdateCMSPage(BaseAPIViewAuthMixin):
     @swagger_auto_schema(
         operation_description="Обновление типа доступа страницы CMS",
         responses={
@@ -1426,8 +1420,7 @@ class UpdateCMSPage(BaseAPIView):
                 status=status.HTTP_403_FORBIDDEN
             )
         
-class AddPageComponent(BaseAPIView):
-    permission_classes = [IsAuthenticated]
+class AddPageComponent(BaseAPIViewAuthMixin):
     @swagger_auto_schema(
         operation_description="Добавление компонента к странице",
         responses={
@@ -1501,8 +1494,7 @@ class AddPageComponent(BaseAPIView):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-class RemovePageComponent(BaseAPIView):
-    permission_classes = [IsAuthenticated]
+class RemovePageComponent(BaseAPIViewAuthMixin):
     @swagger_auto_schema(
         operation_description="Удаление компонента со страницы",
         responses={
@@ -1557,8 +1549,7 @@ class RemovePageComponent(BaseAPIView):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-class UpdatePageComponent(BaseAPIView):
-    permission_classes = [IsAuthenticated]
+class UpdatePageComponent(BaseAPIViewAuthMixin):
     @swagger_auto_schema(
         operation_description="Изменение ID компонента на странице",
         responses={
@@ -1629,8 +1620,7 @@ class UpdatePageComponent(BaseAPIView):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-class GetPageComponents(BaseAPIView):
-    permission_classes = [IsAuthenticated]
+class GetPageComponents(BaseAPIViewAuthMixin):
     @swagger_auto_schema(
         operation_description="Получение всех компонентов страниц",
         responses={
@@ -1663,8 +1653,7 @@ class GetPageComponents(BaseAPIView):
                 status=status.HTTP_403_FORBIDDEN
             )
         
-class GetClosedPagesForUser(BaseAPIView):
-    permission_classes = [IsAuthenticated]
+class GetClosedPagesForUser(BaseAPIViewAuthMixin):
     @swagger_auto_schema(
         operation_description="Получение закрытых страниц CMS, к которым у пользователя нет доступа",
         responses={

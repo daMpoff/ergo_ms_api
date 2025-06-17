@@ -19,7 +19,7 @@ from src.core.cms.adp.serializers import (
     UserRegistrationSerializer,
     UserRegistrationValidationSerializer,
 )
-from src.core.utils.base.base_views import BaseAPIView
+from src.core.utils.base.base_views import BaseAPIView, BaseAPIViewAuthMixin
 
 from django.contrib.auth.models import User
 
@@ -87,9 +87,7 @@ class UserRegistrationValidationView(BaseAPIView):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-class SendConfirmationCodeView(BaseAPIView):
-    permission_classes = [IsAuthenticated]
-
+class SendConfirmationCodeView(BaseAPIViewAuthMixin):
     @swagger_auto_schema(
         operation_description="Отправка кода подтверждения.",
     )   
@@ -112,9 +110,7 @@ class SendConfirmationCodeView(BaseAPIView):
 
         return Response({"message": "Код подтверждения отправлен"}, status=status.HTTP_200_OK)
 
-class VerifyConfirmationCodeView(BaseAPIView):
-    permission_classes = [IsAuthenticated]
-
+class VerifyConfirmationCodeView(BaseAPIViewAuthMixin):
     @swagger_auto_schema(
         operation_description="Проверка кода подтверждения.",
     )
@@ -268,9 +264,7 @@ class UserAuthorizationView(BaseAPIView):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-class ProtectedView(BaseAPIView):
-    permission_classes = [IsAuthenticated]
-
+class ProtectedView(BaseAPIViewAuthMixin):
     @swagger_auto_schema(
         operation_description="Защищенное представление.",
         responses={
