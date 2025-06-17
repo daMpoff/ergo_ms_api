@@ -1,3 +1,4 @@
+import os
 from rest_framework import serializers
 from .models import UploadedFile
 from .models import Category
@@ -8,28 +9,31 @@ from .models import (
     SecuritySettings, MediaSettings, PermalinkSettings, EmailSettings
 )
 class UploadedFileSerializer(serializers.ModelSerializer):
-    name = serializers.SerializerMethodField()
-    size = serializers.SerializerMethodField()
-    url = serializers.SerializerMethodField()
+    name   = serializers.SerializerMethodField()
+    size   = serializers.SerializerMethodField()
+    url    = serializers.SerializerMethodField()
+    dl_url = serializers.SerializerMethodField()
 
     class Meta:
-        model = UploadedFile
-        fields = ['id', 'file', 'name', 'size', 'url', 'uploaded_at']
+        model  = UploadedFile
+        fields = ['id', 'file', 'name', 'size',
+                  'alt_name', 'url', 'dl_url', 'uploaded_at']
 
     def get_name(self, obj):
-        return obj.file.name.split('/')[-1]
+        return os.path.basename(obj.file.name)
 
     def get_size(self, obj):
         return obj.file.size
-    
+
     def get_url(self, obj):
-        request = self.context.get("request")
-        if obj.file:
-            url = obj.file.url
-            if request is not None:
-                url = request.build_absolute_uri(url)
-            return url
-        return ""
+        req = self.context.get('request')
+        return req.build_absolute_uri(obj.file.url) if req else obj.file.url
+
+    def get_dl_url(self, obj):
+        req = self.context.get('request')
+        filename = obj.alt_name or os.path.basename(obj.file.name)
+        rel = f"settings/files/{filename}"
+        return req.build_absolute_uri(f"/api/{rel}") if req else f"/api/{rel}"
 class GeneralSettingsSerializer(serializers.ModelSerializer):
     class Meta:
         model = GeneralSettings
@@ -59,20 +63,6 @@ class EmailSettingsSerializer(serializers.ModelSerializer):
     class Meta:
         model = EmailSettings
         fields = '__all__'
-class UploadedFileSerializer(serializers.ModelSerializer):
-    name = serializers.SerializerMethodField()
-    size = serializers.SerializerMethodField()
-    alt_name = serializers.CharField(required=False, allow_blank=True)
-
-    class Meta:
-        model = UploadedFile
-        fields = ['id', 'file', 'name', 'size', 'alt_name', 'uploaded_at']
-
-    def get_name(self, obj):
-        return obj.file.name.split('/')[-1]
-
-    def get_size(self, obj):
-        return obj.file.size
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category

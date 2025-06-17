@@ -6,6 +6,7 @@ from rest_framework.routers import DefaultRouter
 from .views import CategoryViewSet
 from .views import TagViewSet
 from .views import UserAvatarViewSet
+from .views import FileDownloadByNameView
 from .views import *
 router = DefaultRouter()
 router.register(r'general-settings', GeneralSettingsViewSet)
@@ -20,5 +21,6 @@ router.register(r'tags', TagViewSet)
 router.register(r'user-avatars', UserAvatarViewSet, basename='user-avatars')
 
 urlpatterns = [
-     path('', include(router.urls)),
+    path('files/<str:filename>', FileDownloadByNameView.as_view(), name='file-download-by-name'),
+    path('', include(router.urls)),
 ]

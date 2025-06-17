@@ -1,3 +1,5 @@
+import mimetypes
+import os
 from rest_framework.response import Response
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -18,11 +20,14 @@ from .serializers import CategorySerializer
 from .models import UserAvatar
 from .serializers import UserAvatarSerializer
 from rest_framework.permissions import IsAuthenticated
+from django.http import FileResponse
+from rest_framework.views import APIView
+from django.conf import settings
 
 from django.contrib.auth.models import User
 
 from rest_framework.request import Request
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 
 from .models import *
 from .serializers import *
@@ -61,7 +66,7 @@ class EmailSettingsViewSet(viewsets.ModelViewSet):
 class FileViewSet(viewsets.ModelViewSet):
     queryset = UploadedFile.objects.all()
     serializer_class = UploadedFileSerializer
-    parser_classes = [MultiPartParser, FormParser]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def create(self, request, *args, **kwargs):
         file = request.FILES.get('file')
@@ -78,6 +83,33 @@ class FileViewSet(viewsets.ModelViewSet):
         instance.file.delete(save=False)
         self.perform_destroy(instance)
         return Response(status=status.HTTP_204_NO_CONTENT)
+    def download(self, request, pk=None):
+        """Позволяет скачать файл по id всем, кто знает ссылку."""
+        file_obj = self.get_object()
+        file_handle = file_obj.file.open('rb')
+        filename = file_obj.alt_name or file_obj.file.name.split('/')[-1]
+        response = FileResponse(file_handle, as_attachment=True, filename=filename)
+        return response
+class FileDownloadByNameView(APIView):
+    def get(self, request, filename, *args, **kwargs):
+        if '..' in filename or filename.startswith('/'):
+            return Response({'error': 'Invalid filename'}, status=status.HTTP_400_BAD_REQUEST)
+
+        upload_root = os.path.abspath(os.path.join(settings.MEDIA_ROOT, 'uploads'))
+        file_path   = os.path.abspath(os.path.join(upload_root, filename))
+
+        if not file_path.startswith(upload_root):
+            return Response({'error': 'Invalid path'}, status=status.HTTP_400_BAD_REQUEST)
+        if not os.path.exists(file_path):
+            return Response({'error': 'File not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        mime, _ = mimetypes.guess_type(file_path)
+        resp = FileResponse(open(file_path, 'rb'),
+                            as_attachment=False,
+                            filename=filename,
+                            content_type=mime or 'application/octet-stream')
+        resp['Content-Disposition'] = f'inline; filename="{filename}"'
+        return resp
 
 class CategoryViewSet(viewsets.ModelViewSet):
     queryset = Category.objects.all()
