@@ -4,14 +4,15 @@ from .models import UploadedFile
 from .models import Category
 from .models import Tag
 from .models import UserAvatar
+from django.contrib.contenttypes.models import ContentType
 from .models import (
     GeneralSettings, AppearanceSettings,
-    SecuritySettings, MediaSettings, PermalinkSettings, EmailSettings
+    SecuritySettings, MediaSettings, PermalinkSettings, EmailSettings, AuditLog
 )
 class UploadedFileSerializer(serializers.ModelSerializer):
-    name   = serializers.SerializerMethodField()
-    size   = serializers.SerializerMethodField()
-    url    = serializers.SerializerMethodField()
+    name = serializers.SerializerMethodField()
+    size = serializers.SerializerMethodField()
+    url = serializers.SerializerMethodField()
     dl_url = serializers.SerializerMethodField()
 
     class Meta:
@@ -34,6 +35,7 @@ class UploadedFileSerializer(serializers.ModelSerializer):
         filename = obj.alt_name or os.path.basename(obj.file.name)
         rel = f"settings/files/{filename}"
         return req.build_absolute_uri(f"/api/{rel}") if req else f"/api/{rel}"
+    
 class GeneralSettingsSerializer(serializers.ModelSerializer):
     class Meta:
         model = GeneralSettings
@@ -82,4 +84,26 @@ class UserAvatarSerializer(serializers.ModelSerializer):
         model = UserAvatar
         fields = ['id', 'user', 'image', 'uploaded_at']
 
+class AuditLogSerializer(serializers.ModelSerializer):
+    content_type = serializers.SlugRelatedField(
+        read_only=True,
+        slug_field='model'
+    )
+    user = serializers.CharField(
+        source='user.username',
+        default=None,
+        read_only=True
+    )
 
+    class Meta:
+        model = AuditLog
+        fields = [
+            'id',
+            'content_type',
+            'object_id',
+            'action',
+            'changes',
+            'user',
+            'timestamp',
+        ]
+        read_only_fields = fields
