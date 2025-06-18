@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from django.contrib.auth.models import User
 from ..models import Teacher, Student, StudentGroup
 from ..serializers import (
-    UserSerializer, TeacherSerializer, StudentSerializer,
+    LMSUserSerializer, TeacherSerializer, StudentSerializer,
     StudentGroupSerializer
 )
 from django.db.models import Q
@@ -14,7 +14,7 @@ from django.db.models import Q
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = User.objects.all()
-    serializer_class = UserSerializer
+    serializer_class = LMSUserSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):

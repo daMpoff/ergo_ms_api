@@ -28,7 +28,7 @@ class CalendarSerializer(serializers.ModelSerializer):
         model = Calendar
         fields = '__all__'
 
-class UserSerializer(serializers.ModelSerializer):
+class CRMUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = '__all__'

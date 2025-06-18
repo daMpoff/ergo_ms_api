@@ -7,20 +7,20 @@ from .models import (
     SubmittedAssignment
 )
 
-class UserSerializer(serializers.ModelSerializer):
+class LMSUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['id', 'username', 'email', 'first_name', 'last_name']
 
 class TeacherSerializer(serializers.ModelSerializer):
-    user = UserSerializer(read_only=True)
+    user = LMSUserSerializer(read_only=True)
     
     class Meta:
         model = Teacher
         fields = '__all__'
 
 class StudentSerializer(serializers.ModelSerializer):
-    user = UserSerializer(read_only=True)
+    user = LMSUserSerializer(read_only=True)
     
     class Meta:
         model = Student
@@ -34,7 +34,7 @@ class StudentGroupSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class SubjectSerializer(serializers.ModelSerializer):
-    teacher = UserSerializer(read_only=True)
+    teacher = LMSUserSerializer(read_only=True)
     
     class Meta:
         model = Subject
@@ -42,7 +42,7 @@ class SubjectSerializer(serializers.ModelSerializer):
 
 class GradeSerializer(serializers.ModelSerializer):
     subject = SubjectSerializer(read_only=True)
-    student = UserSerializer(read_only=True)
+    student = LMSUserSerializer(read_only=True)
     
     class Meta:
         model = Grade
@@ -63,7 +63,7 @@ class LessonSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class TestBankSerializer(serializers.ModelSerializer):
-    created_by = UserSerializer(read_only=True)
+    created_by = LMSUserSerializer(read_only=True)
     subject = SubjectSerializer(read_only=True)
     
     class Meta:
@@ -107,7 +107,7 @@ class StudentAnswerSerializer(serializers.ModelSerializer):
 
 class TestAttemptSerializer(serializers.ModelSerializer):
     test = TestSerializer(read_only=True)
-    student = UserSerializer(read_only=True)
+    student = LMSUserSerializer(read_only=True)
     answers = StudentAnswerSerializer(many=True, read_only=True)
     
     class Meta:
@@ -122,7 +122,7 @@ class AssignmentSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class SubmittedAssignmentSerializer(serializers.ModelSerializer):
-    Student = UserSerializer(read_only=True)
+    Student = LMSUserSerializer(read_only=True)
     Assignment = AssignmentSerializer(read_only=True)
     
     class Meta:

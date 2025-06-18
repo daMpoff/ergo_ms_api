@@ -12,7 +12,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from .models import Project, Section, Task, Calendar
 from django.contrib.auth import get_user_model
-from .serializers import ProjectSerializer, SectionSerializer, TaskSerializer, CalendarSerializer, UserSerializer, UserProjectSerializer
+from .serializers import ProjectSerializer, SectionSerializer, TaskSerializer, CalendarSerializer, CRMUserSerializer, UserProjectSerializer
 from django.apps import apps
 from django.db import connection, transaction
 from rest_framework.generics import get_object_or_404
@@ -331,7 +331,7 @@ class UserProjectViewSet(viewsets.ModelViewSet):
 
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
-    serializer_class = UserSerializer
+    serializer_class = CRMUserSerializer
 
     @action(detail=False, methods=['post'])
     def bulk_create(self, request):
