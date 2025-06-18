@@ -10,7 +10,9 @@ from .views import (
     ExpertSystemOrientationTestResultViewSet, ExpertSystemOrientationUserAnswerViewSet,
     SetUserSkills, GetUserSkills, GetUserSkills, CreateTest, GetAllTests, DeleteTest,
     GetTestForRedact, ChangeTest, GetSkillsForCreateTest, GetSkillsForRedactTest,GetTestidBySkill, GetTest,
-    TestEvaluation, ExpertSystemCourseViewSet, GetTestResult, GetTestResultBySkillId, DeleteTestResultBySkill
+    TestEvaluation, ExpertSystemCourseViewSet, GetTestResult, GetTestResultBySkillId, DeleteTestResultBySkill,
+    ExpertSystemAnalyticsMetricsView, ExpertSystemSkillsDataView, ExpertSystemTopSkillsView,
+    ExpertSystemStudentsStatsView, ExpertSystemTestingDataView
 )
 
 router = DefaultRouter()
@@ -52,5 +54,9 @@ urlpatterns = [
     path('evaluate-test', TestEvaluation.as_view(), name='Evaluate test'),
     path('get-test-result', GetTestResult.as_view(), name='Get test result'),
     path('get-test-result-by-skill-id', GetTestResultBySkillId.as_view(), name='Get test result by skill id'),
-    path('delete-test-result-by-skill', DeleteTestResultBySkill.as_view(), name='Delete test result by skill')
+    path('analytics/system-metrics/', ExpertSystemAnalyticsMetricsView.as_view(), name='expert-system-metrics'),
+    path('analytics/skills-data/', ExpertSystemSkillsDataView.as_view(), name='expert-skills-data'),
+    path('analytics/top-skills/', ExpertSystemTopSkillsView.as_view(), name='expert-top-skills'),
+    path('analytics/students-stats/', ExpertSystemStudentsStatsView.as_view(), name='analytics-students-stats'),
+    path('analytics/testing-data/', ExpertSystemTestingDataView.as_view(), name='expert-testing-data'),
 ]
