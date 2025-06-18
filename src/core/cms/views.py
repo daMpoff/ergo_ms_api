@@ -61,8 +61,7 @@ class AddGroupCategory(BaseAPIView):
         else:
             return Response(
                 status= status.HTTP_403_FORBIDDEN
-            )
-        
+            )       
 class GetGroupCategories(BaseAPIView):
     permission_classes = [IsAuthenticated]
     @swagger_auto_schema(
@@ -99,7 +98,6 @@ class GetGroupCategories(BaseAPIView):
             return Response(
                 status= status.HTTP_403_FORBIDDEN
             )
-        
 class ChangeGroupCategory(BaseAPIView):
     permission_classes = [IsAuthenticated]
     @swagger_auto_schema(
@@ -257,7 +255,6 @@ class ChangeGroup(BaseAPIView):
         g = Group.objects.get(name = request.data['group_name'])
         eg = ExpandedGroup.objects.get(group = g)
         access = False
-        groups = request.user.groups.all()
         exps = GetUserExpandedPermissions(request.user)
         for exp in exps:
             if exp.permission_mark.id == 4 and (exp.group_category.name == eg.category.name):
@@ -309,27 +306,6 @@ class DeleteGroup(BaseAPIView):
         else:
             return Response(
                 status=status.HTTP_403_FORBIDDEN
-            )
-class GetGroupsByCategory(BaseAPIView):    
-    permission_classes = [IsAuthenticated]
-    @swagger_auto_schema(
-        operation_description="Получение групп пользователя.",
-        responses={
-            200: "группы пользователя получены",
-            401: "Пользователь не авторизован",
-            403: "Нет доступа"
-        }
-    )
-    def get(self, request: Request):
-            user = request.user
-            groups = user.groups.all()
-            groups_names =[]
-            for group in groups:
-                groups_names.append(group.name)
-            result = {"groups":groups_names}
-            return Response(
-                result,
-                status=status.HTTP_200_OK
             )
 class GetGroups(BaseAPIView):
     permission_classes = [IsAuthenticated]
@@ -812,7 +788,7 @@ class CheckAccesstoPage(BaseAPIView):
             result,
             status=status.HTTP_200_OK
         )
-class CheckAccessToComponent(BaseAPIView):
+class CheckAccessToComponents(BaseAPIView):
     permission_classes = [IsAuthenticated]
     @swagger_auto_schema(
         operation_description="Получение прав доступа к компоненту",
@@ -978,7 +954,7 @@ class GetUserGroupsAndPermissions(BaseAPIView):
             return Response(
                 status=status.HTTP_403_FORBIDDEN
             )
-class AddUserGroup(BaseAPIView):
+class AddUserGroups(BaseAPIView):
     permission_classes = [IsAuthenticated]
     @swagger_auto_schema(
         operation_description="Добавление пользователя в группу",
@@ -1028,7 +1004,7 @@ class AddUserGroup(BaseAPIView):
                         return Response(status=status.HTTP_403_FORBIDDEN)
                 user.save()
         return Response(status=status.HTTP_200_OK)  
-class RemoveUserGroup(BaseAPIView):
+class RemoveUserGroups(BaseAPIView):
     permission_classes = [IsAuthenticated]
     @swagger_auto_schema(
         operation_description="Удаление пользователя из группы",
@@ -1078,7 +1054,7 @@ class RemoveUserGroup(BaseAPIView):
                 user.save()
         return Response(status=status.HTTP_200_OK)   
     
-class RemoveUserPermission(BaseAPIView):
+class RemoveUserPermissions(BaseAPIView):
     permission_classes = [IsAuthenticated]
     @swagger_auto_schema(
         operation_description="Удаление права пользователя",
@@ -1129,7 +1105,7 @@ class RemoveUserPermission(BaseAPIView):
         else:
             return Response(status=status.HTTP_403_FORBIDDEN)
         
-class AddUserPermission(BaseAPIView):
+class AddUserPermissions(BaseAPIView):
     permission_classes = [IsAuthenticated]
     @swagger_auto_schema(
         operation_description="Добавление права пользователю",
@@ -1378,7 +1354,7 @@ class GetCMSPages(BaseAPIView):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-class UpdateCMSPage(BaseAPIView):
+class UpdateCMSPageLiminationType(BaseAPIView):
     permission_classes = [IsAuthenticated]
     @swagger_auto_schema(
         operation_description="Обновление типа доступа страницы CMS",
@@ -1426,7 +1402,7 @@ class UpdateCMSPage(BaseAPIView):
                 status=status.HTTP_403_FORBIDDEN
             )
         
-class AddPageComponent(BaseAPIView):
+class AddCMSPageComponent(BaseAPIView):
     permission_classes = [IsAuthenticated]
     @swagger_auto_schema(
         operation_description="Добавление компонента к странице",
@@ -1501,7 +1477,7 @@ class AddPageComponent(BaseAPIView):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-class RemovePageComponent(BaseAPIView):
+class RemoveCMSPageComponent(BaseAPIView):
     permission_classes = [IsAuthenticated]
     @swagger_auto_schema(
         operation_description="Удаление компонента со страницы",
@@ -1557,7 +1533,7 @@ class RemovePageComponent(BaseAPIView):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-class UpdatePageComponent(BaseAPIView):
+class UpdateCMSPageComponent(BaseAPIView):
     permission_classes = [IsAuthenticated]
     @swagger_auto_schema(
         operation_description="Изменение ID компонента на странице",
@@ -1629,7 +1605,7 @@ class UpdatePageComponent(BaseAPIView):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-class GetPageComponents(BaseAPIView):
+class GetCMSPageComponents(BaseAPIView):
     permission_classes = [IsAuthenticated]
     @swagger_auto_schema(
         operation_description="Получение всех компонентов страниц",
@@ -1663,7 +1639,7 @@ class GetPageComponents(BaseAPIView):
                 status=status.HTTP_403_FORBIDDEN
             )
         
-class GetClosedPagesForUser(BaseAPIView):
+class GetClosedCMSPagesForUser(BaseAPIView):
     permission_classes = [IsAuthenticated]
     @swagger_auto_schema(
         operation_description="Получение закрытых страниц CMS, к которым у пользователя нет доступа",
@@ -1674,7 +1650,6 @@ class GetClosedPagesForUser(BaseAPIView):
         }
     )
     def get(self, request: Request):
-        # Если пользователь суперпользователь, возвращаем пустой список
         if request.user.is_superuser:
             return Response(
                 {'pages': []},
