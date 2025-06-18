@@ -41,14 +41,12 @@ urlpatterns = [
     path('remove_groups_permissions/', RemoveGroupPermissions.as_view(), name='remove groups permissions'),
     path('get_permissions_by_category/', GetPermissionsByCategory.as_view(), name='get permissions by category'),
     path('get_user_name/', GetUserName.as_view(), name='get user name'),
-
     path('patch-all-project-pages', PatchAllProgectPages.as_view(), name='set all pages'),
     path('get-cms-pages', GetCMSPages.as_view(), name='get all pages'),
     path('put-cms-pages', UpdateCMSPageLiminationType.as_view(), name='put all pages'),
     path('get-closed-pages/', GetClosedCMSPagesForUser.as_view(), name='get closed pages'),
     path('get-closed-pages-for-user/', GetClosedCMSPagesForUser.as_view(), name='get closed pages for user'),
     
-    # Новые пути для управления компонентами страниц
     path('add-page-component/', AddCMSPageComponent.as_view(), name='add page component'),
     path('remove-page-component/', RemoveCMSPageComponent.as_view(), name='remove page component'),
     path('update-page-component/', UpdateCMSPageComponent.as_view(), name='update page component'),

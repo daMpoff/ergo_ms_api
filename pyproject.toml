@@ -44,6 +44,7 @@ openpyxl = "^3.1.5"
 django-filter = "^25.1"
 yfinance = "^0.2.63"
 feedparser = "^6.0.11"
+python-slugify = "^8.0.4"
 
 [tool.poetry.scripts]
 cmd = "commands.__main__:main"
