@@ -263,7 +263,6 @@ class ChangeGroup(BaseAPIViewAuthMixin):
         g = Group.objects.get(name = request.data['group_name'])
         eg = ExpandedGroup.objects.get(group = g)
         access = False
-        groups = request.user.groups.all()
         exps = GetUserExpandedPermissions(request.user)
         for exp in exps:
             if exp.permission_mark.id == 4 and (exp.group_category.name == eg.category.name):
@@ -1663,7 +1662,6 @@ class GetClosedPagesForUser(BaseAPIViewAuthMixin):
         }
     )
     def get(self, request: Request):
-        # Если пользователь суперпользователь, возвращаем пустой список
         if request.user.is_superuser:
             return Response(
                 {'pages': []},
