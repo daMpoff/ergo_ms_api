@@ -3,6 +3,7 @@ from django.core.exceptions import ValidationError
 from django.contrib.auth.models import Group, Permission
 from django.core.validators import FileExtensionValidator
 from django.conf import settings
+from django.contrib.contenttypes.models import ContentType
 from slugify import slugify
 from django.utils.translation import gettext_lazy as _
 
@@ -55,8 +56,6 @@ class AppearanceSettings(models.Model):
 
     def __str__(self):
         return f"{self.theme_name}"
-
-
 
 class SecuritySettings(models.Model):
     enable_backup = models.BooleanField(
@@ -208,4 +207,26 @@ class UserAvatar(models.Model):
     def __str__(self):
         return f"Аватар для {self.user.username}"
 
-    
+class AuditLog(models.Model):
+    ACTIONS = (
+        ('UPDATE', 'Обновление'),
+        ('DELETE', 'Удаление'),
+    )
+
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id    = models.PositiveIntegerField()
+    action       = models.CharField(max_length=6, choices=ACTIONS)
+    changes      = models.JSONField(null=True, blank=True)
+    user         = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
+    timestamp    = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Запись аудита"
+        verbose_name_plural = "Аудит-журналы"
+        indexes = [
+            models.Index(fields=['content_type', 'object_id']),
+            models.Index(fields=['timestamp']),
+        ]
+
+    def __str__(self):
+        return f"{self.get_action_display()} #{self.object_id} by {self.user}"
