@@ -9,7 +9,7 @@ from drf_yasg import openapi
 from django.core.exceptions import ObjectDoesNotExist  # ✅ Импортируем исключение
 from src.external.crm.calendar.serializers import CalendarTaskSerializer  
 from django.db import connection
-from src.external.crm.calendar.serializers import ProjectSerializer, SectionSerializer
+from src.external.crm.serializers import ProjectSerializer, SectionSerializer
 
 
 

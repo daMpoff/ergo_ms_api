@@ -1,8 +1,8 @@
 # crm/calendar/serializers.py
 
 from rest_framework import serializers
-from src.external.crm.models import Task, User,Project,Section
-
+from src.external.crm.models import Task, User, Project, Section
+from .models import Holidays
 
 class CalendarTaskSerializer(serializers.ModelSerializer):
     user = serializers.PrimaryKeyRelatedField(queryset=User.objects.all())
@@ -24,18 +24,6 @@ class CalendarTaskSerializer(serializers.ModelSerializer):
             'section': {'required': True},
             'user': {'required': True},
         }
-class SectionSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Section
-        fields = ['id', 'name', 'project']
-class ProjectSerializer(serializers.ModelSerializer):
-    sections = SectionSerializer(many=True, read_only=True)
-
-    class Meta:
-        model = Project
-        fields = ['id', 'name', 'dateofcreation', 'creator', 'deadline', 'description', 'sections']
-
-from .models import Holidays
 
 class HolidaysSerializer(serializers.ModelSerializer):
     class Meta:
