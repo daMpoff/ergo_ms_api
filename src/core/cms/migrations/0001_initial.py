@@ -4,6 +4,7 @@ import django.db.models.deletion
 from django.conf import settings
 from django.db import migrations, models
 
+from src.core.cms.scripts import create_default_data
 
 class Migration(migrations.Migration):
 
@@ -108,4 +109,6 @@ class Migration(migrations.Migration):
                 ('author_id', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL)),
             ],
         ),
+        
+        migrations.RunPython(create_default_data),
     ]

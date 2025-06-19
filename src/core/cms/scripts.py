@@ -1,7 +1,7 @@
 from src.core.cms.models import CMSPage
 
 import os
-import re
+import json
 
 def create_default_data(apps, schema_editor):
     PermissionMark = apps.get_model('cms', 'PermissionMark')
@@ -20,33 +20,61 @@ def create_default_data(apps, schema_editor):
         )
 
     paths = []
-    path =(os.getcwd().replace('\\','/')).replace('/api','/client/src/js/routers.js')
+    base_path = (os.getcwd().replace('\\','/')).replace('/api','/client/src/config')
+    
+    # Обрабатываем core-routes-config.json
+    core_routes_path = os.path.join(base_path, 'core-routes-config.json')
+    try:
+        with open(core_routes_path, 'r', encoding='utf-8') as file:
+            core_config = json.load(file)
+            
+            # Извлекаем пути из coreRoutes
+            if 'coreRoutes' in core_config:
+                for route in core_config['coreRoutes']:
+                    if 'path' in route and route['path'] != '/:pathMatch(.*)*':
+                        paths.append(route['path'])
+            
+            # Извлекаем пути из authRoutes
+            if 'authRoutes' in core_config:
+                for route in core_config['authRoutes']:
+                    if 'path' in route:
+                        paths.append(route['path'])
+                        
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        print(f"Ошибка при чтении core-routes-config.json: {e}")
 
-    with open(path, 'r', encoding='utf-8') as file:
-        content = file.read()
-        const_pattern = r'const\s+(\w+Routes?)\s*='
-        route_constants = re.findall(const_pattern, content)
-        route_constants = [const for const in route_constants if (const != 'mainRoutes')& (const!= 'adminpanelRoutes')
-            & (const!= 'userRoutes') & (const!='settingsRoutes') &(const!= 'startRoutes')]
-        for const_name in route_constants:
-            const_pattern = f"const {const_name} = \[(.*?)\]"
-            const_match = re.search(const_pattern, content, re.DOTALL)
-            content_const = const_match.group(1)
-            const_pattern = f"path: '(.*?)'"
-            mainpath = re.search(const_pattern,content_const).group(1)
-            const_pattern = r'children:(.*)'
-            children = re.search(const_pattern, content_const, re.DOTALL)
-            if children:
-                const_pattern = f"path: '(.*?)'"
-                paths1 = re.findall(const_pattern,children.group(1))
-                for p in paths1:
-                    paths.append(mainpath+'/'+p)
-                
-            else:
-                const_pattern =f"path: '(.*?)'"
-                mainpathes = re.findall(const_pattern,content_const)
-                for mainp in mainpathes:
-                    paths.append(mainp)
-                    
-    for p in paths:
-        CMSPage.objects.get_or_create(path = p)
+    # Обрабатываем menu-config.json
+    menu_config_path = os.path.join(base_path, 'menu-config.json')
+    try:
+        with open(menu_config_path, 'r', encoding='utf-8') as file:
+            menu_config = json.load(file)
+            
+            if 'menuSections' in menu_config:
+                for section in menu_config['menuSections']:
+                    # Добавляем основной путь секции
+                    if 'route' in section and 'path' in section['route']:
+                        main_path = section['route']['path']
+                        paths.append(main_path)
+                        
+                        # Добавляем пути подразделов
+                        if 'list' in section and section['list']:
+                            for item in section['list']:
+                                if 'route' in item and 'path' in item['route']:
+                                    # Формируем полный путь: основной_путь + подпуть
+                                    sub_path = item['route']['path']
+                                    if sub_path.startswith('/'):
+                                        # Если подпуть начинается с /, используем его как есть
+                                        paths.append(sub_path)
+                                    else:
+                                        # Иначе комбинируем с основным путем
+                                        full_path = f"{main_path.rstrip('/')}/{sub_path}"
+                                        paths.append(full_path)
+                                        
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        print(f"Ошибка при чтении menu-config.json: {e}")
+
+    # Удаляем дубликаты и создаем записи в БД
+    unique_paths = list(set(paths))
+    for path in unique_paths:
+        if path:  # Проверяем что путь не пустой
+            CMSPage.objects.get_or_create(path=path)
