@@ -27,17 +27,16 @@ class Object(models.Model):
 class GroupCategory(models.Model):
     name = models.CharField(max_length=255, default='')
 
-
 class ExpandedPermission(models.Model):
     permission = models.OneToOneField(Permission, on_delete=models.CASCADE)
     permission_mark = models.ForeignKey(PermissionMark, on_delete=models.CASCADE)   
     group_category = models.ForeignKey(GroupCategory, on_delete=models.CASCADE)
 
-PageChoicese =[
-    ('withliminations','Страница с ограничениями'),
-    ('withoutliminations','Страница без ограничений'),
-    ('closepage', 'Закрытая страница')
-]
+    PageChoicese =[
+        ('withliminations','Страница с ограничениями'),
+        ('withoutliminations','Страница без ограничений'),
+        ('closepage', 'Закрытая страница')
+    ]
 
 class CMSPage(models.Model):
     path = models.CharField(max_length=255, default='')

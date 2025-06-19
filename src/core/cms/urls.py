@@ -1,15 +1,8 @@
 from django.urls import (
     path
 )
-from src.core.cms.views import (CheckAccesstoPage, CheckAccessToAdminPanel, CheckAccessToComponents,
-AddGroupCategory, ChangeGroupCategory, DeleteGroupCategory, GetGroupCategories, AddGroup,
-DeleteGroup, GetGroups, ChangeGroup, GetPermissions,
-AddPermission, DeletePermission, 
-ChangePermission, GetUserGroupsAndPermissions, 
-GetGroupsByCategory, GetUserPermissions,
- AddUserPermissions, RemoveUserPermissions, AddUserGroups, RemoveUserGroups, AddGroupPermissions, RemoveGroupPermissions, GetPermissionsByCategory, GetUserName,
- PatchAllProgectPages,
- UpdateCMSPageLiminationType, GetCMSPages, AddCMSPageComponent, RemoveCMSPageComponent, UpdateCMSPageComponent, GetCMSPageComponents, GetClosedCMSPagesForUser)
+from src.core.cms.views import *
+
 urlpatterns = [
     path('check_access_to_page/', CheckAccesstoPage.as_view(), name='check access to page'),
     path('check_access_to_admin_panel/', CheckAccessToAdminPanel.as_view(), name='check access to admin panel'),
@@ -33,22 +26,22 @@ urlpatterns = [
     path('get_user_groups_and_permissions/', GetUserGroupsAndPermissions.as_view(), name='get user groups and permissions'),
     path('get_user_groups/', GetGroupsByCategory.as_view(), name='get user groups'),
     path('get_user_permissions/', GetUserPermissions.as_view(), name='get user permissions'),
-    path('add_user_permission/', AddUserPermissions.as_view(), name='add user permission'),
-    path('remove_user_permission/', RemoveUserPermissions.as_view(), name='remove user permission'),
-    path('add_user_group/', AddUserGroups.as_view(), name='add user group'),
-    path('remove_user_group/', RemoveUserGroups.as_view(), name='remove user group'),
-    path('add_groups_permissions/', AddGroupPermissions.as_view(), name='add groups permissions'),
-    path('remove_groups_permissions/', RemoveGroupPermissions.as_view(), name='remove groups permissions'),
+    path('add_user_permission/', AddUserPermission.as_view(), name='add user permission'),
+    path('remove_user_permission/', RemoveUserPermission.as_view(), name='remove user permission'),
+    path('add_user_group/', AddUserGroup.as_view(), name='add user group'),
+    path('remove_user_group/', RemoveUserGroup.as_view(), name='remove user group'),
+    path('add_groups_permissions/', AddGroupPermission.as_view(), name='add groups permissions'),
+    path('remove_groups_permissions/', RemoveGroupPermission.as_view(), name='remove groups permissions'),
     path('get_permissions_by_category/', GetPermissionsByCategory.as_view(), name='get permissions by category'),
     path('get_user_name/', GetUserName.as_view(), name='get user name'),
     path('patch-all-project-pages', PatchAllProgectPages.as_view(), name='set all pages'),
     path('get-cms-pages', GetCMSPages.as_view(), name='get all pages'),
-    path('put-cms-pages', UpdateCMSPageLiminationType.as_view(), name='put all pages'),
-    path('get-closed-pages/', GetClosedCMSPagesForUser.as_view(), name='get closed pages'),
-    path('get-closed-pages-for-user/', GetClosedCMSPagesForUser.as_view(), name='get closed pages for user'),
+    path('put-cms-pages', UpdatePageLiminationType.as_view(), name='put all pages'),
+    path('get-closed-pages/', GetClosedPagesForUser.as_view(), name='get closed pages'),
+    path('get-closed-pages-for-user/', GetClosedPagesForUser.as_view(), name='get closed pages for user'),
     
-    path('add-page-component/', AddCMSPageComponent.as_view(), name='add page component'),
-    path('remove-page-component/', RemoveCMSPageComponent.as_view(), name='remove page component'),
-    path('update-page-component/', UpdateCMSPageComponent.as_view(), name='update page component'),
-    path('get-page-components/', GetCMSPageComponents.as_view(), name='get page components')
+    path('add-page-component/', AddPageComponent.as_view(), name='add page component'),
+    path('remove-page-component/', RemovePageComponent.as_view(), name='remove page component'),
+    path('update-page-component/', UpdatePageComponent.as_view(), name='update page component'),
+    path('get-page-components/', GetPageComponents.as_view(), name='get page components')
 ]

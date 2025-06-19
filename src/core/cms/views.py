@@ -14,9 +14,14 @@ from django.contrib.auth.models import (Group, Permission, User)
 
 from src.core.utils.base.base_views import BaseAPIViewAuthMixin
 from src.core.cms.models import (
-    ExpandedPermission, Accession, 
-    GroupCategory, ExpandedGroup, PermissionMark, 
-    Accession,CMSPage, CMSPageComponent
+    ExpandedPermission, 
+    Accession, 
+    GroupCategory, 
+    ExpandedGroup, 
+    PermissionMark, 
+    Accession,
+    CMSPage, 
+    CMSPageComponent
 )
 from src.core.cms.commands import GetUserExpandedPermissions
 
@@ -390,7 +395,7 @@ class GetGroups(BaseAPIViewAuthMixin):
                 status=status.HTTP_403_FORBIDDEN
             )
         
-class AddGroupPermissions(BaseAPIViewAuthMixin):
+class AddGroupPermission(BaseAPIViewAuthMixin):
     @swagger_auto_schema(
         operation_description="Добавление прав группе",
         responses={
@@ -433,7 +438,7 @@ class AddGroupPermissions(BaseAPIViewAuthMixin):
             group.save()
             return Response(status=status.HTTP_200_OK) 
         
-class RemoveGroupPermissions(BaseAPIViewAuthMixin):
+class RemoveGroupPermission(BaseAPIViewAuthMixin):
     @swagger_auto_schema(
         operation_description="Удаление прав группе",
         responses={
@@ -813,7 +818,7 @@ class CheckAccesstoPage(BaseAPIViewAuthMixin):
             status=status.HTTP_200_OK
         )
 
-class CheckAccessToComponent(BaseAPIViewAuthMixin):
+class CheckAccessToComponents(BaseAPIViewAuthMixin):
     @swagger_auto_schema(
         operation_description="Получение прав доступа к компоненту",
         responses={
@@ -1372,7 +1377,7 @@ class GetCMSPages(BaseAPIViewAuthMixin):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-class UpdateCMSPage(BaseAPIViewAuthMixin):
+class UpdatePageLiminationType(BaseAPIViewAuthMixin):
     @swagger_auto_schema(
         operation_description="Обновление типа доступа страницы CMS",
         responses={
