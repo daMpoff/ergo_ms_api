@@ -2,6 +2,12 @@ from django.db import models
 from django.contrib.auth.models import (User, Group, Permission)
 from django.utils import timezone
 
+PageChoicese =[
+    ('withliminations','Страница с ограничениями'),
+    ('withoutliminations','Страница без ограничений'),
+    ('closepage', 'Закрытая страница')
+]
+
 class Review(models.Model):
     author_id = models.ForeignKey(User, on_delete=models.CASCADE)
     text = models.TextField(default='')
@@ -31,12 +37,6 @@ class ExpandedPermission(models.Model):
     permission = models.OneToOneField(Permission, on_delete=models.CASCADE)
     permission_mark = models.ForeignKey(PermissionMark, on_delete=models.CASCADE)   
     group_category = models.ForeignKey(GroupCategory, on_delete=models.CASCADE)
-
-    PageChoicese =[
-        ('withliminations','Страница с ограничениями'),
-        ('withoutliminations','Страница без ограничений'),
-        ('closepage', 'Закрытая страница')
-    ]
 
 class CMSPage(models.Model):
     path = models.CharField(max_length=255, default='')
