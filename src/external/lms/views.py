@@ -2,6 +2,7 @@ from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.filters import SearchFilter, OrderingFilter
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Avg, Count, Q
 from django.utils import timezone
@@ -23,10 +24,11 @@ from .serializers import (
     CourseFileSerializer, ForumSerializer, ForumDiscussionSerializer,
     ForumPostSerializer, CalendarEventSerializer, BadgeSerializer,
     UserBadgeSerializer, NotificationSerializer, PrivateMessageSerializer,
-    CreateSubjectSerializer, CreateForumSerializer, CreateAssignmentSerializer,
+    CreateSubjectSerializer, UpdateSubjectSerializer, CreateForumSerializer, CreateAssignmentSerializer,
     StudentStatsSerializer, TeacherStatsSerializer, TestBankSerializer,
     QuestionSerializer, AnswerSerializer, AssignmentSerializer,
-    UserRoleSerializer
+    UserRoleSerializer, CreateLessonSerializer, UpdateLessonSerializer,
+    CreateThemeSerializer, UpdateThemeSerializer
 )
 
 class UserProfileViewSet(viewsets.ModelViewSet):
@@ -174,16 +176,53 @@ class SubjectViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         user = self.request.user
-        if hasattr(user, 'teacher'):
-            return Subject.objects.filter(teacher=user)
+        
+        # Проверяем роль пользователя
+        user_roles = user.roles.values_list('role', flat=True)
+        
+        if 'admin' in user_roles:
+            # Админы видят все курсы
+            return Subject.objects.all()
+        elif 'teacher' in user_roles or hasattr(user, 'teacher'):
+            # Преподаватели видят свои курсы (включая черновики) + опубликованные курсы других
+            return Subject.objects.filter(
+                Q(teacher=user) | Q(is_published=True)
+            ).distinct()
         else:
             # Студенты видят только опубликованные курсы
             return Subject.objects.filter(is_published=True)
     
     def get_serializer_class(self):
-        if self.action in ['create', 'update', 'partial_update']:
+        if self.action == 'create':
             return CreateSubjectSerializer
+        elif self.action in ['update', 'partial_update']:
+            return UpdateSubjectSerializer
         return SubjectSerializer
+    
+    def perform_update(self, serializer):
+        """Обновление курса с проверкой прав"""
+        subject = self.get_object()
+        user = self.request.user
+        user_roles = user.roles.values_list('role', flat=True)
+        
+        # Проверяем права на редактирование
+        if 'admin' not in user_roles and subject.teacher != user:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("У вас нет прав на редактирование этого курса")
+        
+        serializer.save()
+    
+    def perform_destroy(self, instance):
+        """Удаление курса с проверкой прав"""
+        user = self.request.user
+        user_roles = user.roles.values_list('role', flat=True)
+        
+        # Проверяем права на удаление
+        if 'admin' not in user_roles and instance.teacher != user:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("У вас нет прав на удаление этого курса")
+        
+        instance.delete()
     
     @action(detail=True, methods=['post'])
     def enroll(self, request, pk=None):
@@ -221,8 +260,135 @@ class SubjectViewSet(viewsets.ModelViewSet):
         subject = self.get_object()
         enrollments = Enrollment.objects.filter(subject=subject, status='active')
         students = [enrollment.student for enrollment in enrollments]
-        serializer = StudentSerializer(students, many=True)
+        serializer = LMSUserSerializer(students, many=True)
         return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'])
+    def duplicate(self, request, pk=None):
+        """Дублирование курса со всем содержимым"""
+        course = self.get_object()
+        
+        # Проверяем права
+        user = request.user
+        user_roles = user.roles.values_list('role', flat=True)
+        if 'admin' not in user_roles and course.teacher != user:
+            return Response({'error': 'У вас нет прав для дублирования этого курса'}, 
+                          status=status.HTTP_403_FORBIDDEN)
+        
+        # Создаем копию курса
+        new_course_data = {
+            'name': f"{course.name} (копия)",
+            'description': course.description,
+            'summary': course.summary,
+            'category': course.category.id if course.category else None,
+            'course_format': course.course_format.id if course.course_format else None,
+            'is_published': False,  # Копии создаются как черновики
+            'is_self_enrollment': course.is_self_enrollment,
+            'completion_tracking': course.completion_tracking,
+            'guest_access': course.guest_access,
+        }
+        
+        serializer = CreateSubjectSerializer(data=new_course_data)
+        if serializer.is_valid():
+            new_course = serializer.save(teacher=user)
+            
+            # Копируем темы и уроки
+            themes = Theme.objects.filter(subject=course).order_by('sort_order')
+            for theme in themes:
+                new_theme = Theme.objects.create(
+                    name=theme.name,
+                    description=theme.description,
+                    subject=new_course,
+                    sort_order=theme.sort_order,
+                    is_visible=theme.is_visible,
+                    completion_required=theme.completion_required
+                )
+                
+                # Копируем уроки темы
+                lessons = Lesson.objects.filter(theme=theme).order_by('sort_order')
+                for lesson in lessons:
+                    Lesson.objects.create(
+                        name=lesson.name,
+                        description=lesson.description,
+                        lessontype=lesson.lessontype,
+                        content=lesson.content,
+                        theme=new_theme,
+                        availability_start=lesson.availability_start,
+                        availability_end=lesson.availability_end,
+                        completion_required=lesson.completion_required,
+                        sort_order=lesson.sort_order,
+                        is_visible=lesson.is_visible
+                    )
+            
+            return Response(SubjectSerializer(new_course).data, status=status.HTTP_201_CREATED)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['patch'])
+    def toggle_published(self, request, pk=None):
+        """Переключение статуса публикации курса"""
+        course = self.get_object()
+        
+        # Проверяем права
+        user = request.user
+        user_roles = user.roles.values_list('role', flat=True)
+        if 'admin' not in user_roles and course.teacher != user:
+            return Response({'error': 'У вас нет прав для изменения статуса публикации этого курса'}, 
+                          status=status.HTTP_403_FORBIDDEN)
+        
+        course.is_published = not course.is_published
+        course.save()
+        
+        return Response({
+            'message': f'Курс {"опубликован" if course.is_published else "снят с публикации"}',
+            'is_published': course.is_published
+        })
+    
+    @action(detail=True, methods=['get'])
+    def structure(self, request, pk=None):
+        """Получение полной структуры курса с темами и уроками"""
+        course = self.get_object()
+        
+        # Проверяем доступ к курсу
+        user = request.user
+        user_roles = user.roles.values_list('role', flat=True)
+        
+        if 'admin' not in user_roles:
+            if hasattr(user, 'teacher') and course.teacher == user:
+                # Преподаватель может видеть полную структуру своего курса
+                pass
+            elif course.is_published:
+                # Для опубликованных курсов проверяем запись
+                if not Enrollment.objects.filter(student=user, subject=course, status='active').exists():
+                    return Response({'error': 'У вас нет доступа к этому курсу'}, 
+                                  status=status.HTTP_403_FORBIDDEN)
+            else:
+                return Response({'error': 'У вас нет доступа к этому курсу'}, 
+                              status=status.HTTP_403_FORBIDDEN)
+        
+        # Получаем темы курса
+        themes = Theme.objects.filter(subject=course).order_by('sort_order')
+        
+        # Фильтруем по видимости для студентов
+        if 'admin' not in user_roles and (not hasattr(user, 'teacher') or course.teacher != user):
+            themes = themes.filter(is_visible=True)
+        
+        structure = []
+        for theme in themes:
+            lessons = Lesson.objects.filter(theme=theme).order_by('sort_order')
+            
+            # Фильтруем уроки по видимости для студентов
+            if 'admin' not in user_roles and (not hasattr(user, 'teacher') or course.teacher != user):
+                lessons = lessons.filter(is_visible=True)
+            
+            theme_data = ThemeSerializer(theme).data
+            theme_data['lessons'] = LessonSerializer(lessons, many=True).data
+            structure.append(theme_data)
+        
+        return Response({
+            'course': SubjectSerializer(course).data,
+            'structure': structure
+        })
 
 class EnrollmentViewSet(viewsets.ModelViewSet):
     """ViewSet для записей на курсы"""
@@ -245,14 +411,57 @@ class ThemeViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         user = self.request.user
-        if hasattr(user, 'teacher'):
-            return Theme.objects.filter(subject__teacher=user)
+        user_roles = user.roles.values_list('role', flat=True)
+        
+        if 'admin' in user_roles:
+            return Theme.objects.all()
+        elif 'teacher' in user_roles or hasattr(user, 'teacher'):
+            # Преподаватели видят темы своих курсов + темы опубликованных курсов
+            return Theme.objects.filter(
+                Q(subject__teacher=user) | Q(subject__is_published=True)
+            ).distinct()
         else:
-            # Студенты видят только темы курсов, на которые они записаны
+            # Студенты видят только видимые темы опубликованных курсов
             enrolled_subjects = Enrollment.objects.filter(
                 student=user, status='active'
             ).values_list('subject', flat=True)
             return Theme.objects.filter(subject__in=enrolled_subjects, is_visible=True)
+    
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return CreateThemeSerializer
+        elif self.action in ['update', 'partial_update']:
+            return UpdateThemeSerializer
+        return ThemeSerializer
+    
+    @action(detail=True, methods=['post'])
+    def reorder_lessons(self, request, pk=None):
+        """Изменение порядка уроков в теме"""
+        theme = self.get_object()
+        lesson_ids = request.data.get('lesson_ids', [])
+        
+        if not lesson_ids:
+            return Response({'error': 'Список ID уроков не может быть пустым'}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        # Проверяем права
+        user = request.user
+        user_roles = user.roles.values_list('role', flat=True)
+        if 'admin' not in user_roles and theme.subject.teacher != user:
+            return Response({'error': 'У вас нет прав для изменения порядка уроков'}, 
+                          status=status.HTTP_403_FORBIDDEN)
+        
+        # Обновляем порядок
+        for index, lesson_id in enumerate(lesson_ids):
+            try:
+                lesson = Lesson.objects.get(id=lesson_id, theme=theme)
+                lesson.sort_order = index + 1
+                lesson.save()
+            except Lesson.DoesNotExist:
+                return Response({'error': f'Урок с ID {lesson_id} не найден в этой теме'}, 
+                              status=status.HTTP_400_BAD_REQUEST)
+        
+        return Response({'message': 'Порядок уроков обновлен'}, status=status.HTTP_200_OK)
 
 class LessonViewSet(viewsets.ModelViewSet):
     """ViewSet для уроков"""
@@ -265,9 +474,17 @@ class LessonViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         user = self.request.user
-        if hasattr(user, 'teacher'):
-            return Lesson.objects.filter(theme__subject__teacher=user)
+        user_roles = user.roles.values_list('role', flat=True)
+        
+        if 'admin' in user_roles:
+            return Lesson.objects.all()
+        elif 'teacher' in user_roles or hasattr(user, 'teacher'):
+            # Преподаватели видят уроки своих курсов + уроки опубликованных курсов
+            return Lesson.objects.filter(
+                Q(theme__subject__teacher=user) | Q(theme__subject__is_published=True)
+            ).distinct()
         else:
+            # Студенты видят только видимые уроки курсов, на которые они записаны
             enrolled_subjects = Enrollment.objects.filter(
                 student=user, status='active'
             ).values_list('subject', flat=True)
@@ -275,6 +492,107 @@ class LessonViewSet(viewsets.ModelViewSet):
                 theme__subject__in=enrolled_subjects,
                 is_visible=True
             )
+    
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return CreateLessonSerializer
+        elif self.action in ['update', 'partial_update']:
+            return UpdateLessonSerializer
+        return LessonSerializer
+    
+    @action(detail=True, methods=['post'])
+    def duplicate(self, request, pk=None):
+        """Дублирование урока"""
+        lesson = self.get_object()
+        
+        # Проверяем права
+        user = request.user
+        user_roles = user.roles.values_list('role', flat=True)
+        if 'admin' not in user_roles and lesson.theme.subject.teacher != user:
+            return Response({'error': 'У вас нет прав для дублирования этого урока'}, 
+                          status=status.HTTP_403_FORBIDDEN)
+        
+        # Создаем копию урока
+        new_lesson_data = {
+            'name': f"{lesson.name} (копия)",
+            'description': lesson.description,
+            'lessontype': lesson.lessontype,
+            'content': lesson.content,
+            'theme': lesson.theme.id,
+            'availability_start': lesson.availability_start,
+            'availability_end': lesson.availability_end,
+            'completion_required': lesson.completion_required,
+            'is_visible': lesson.is_visible,
+        }
+        
+        serializer = CreateLessonSerializer(data=new_lesson_data)
+        if serializer.is_valid():
+            new_lesson = serializer.save()
+            return Response(LessonSerializer(new_lesson).data, status=status.HTTP_201_CREATED)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['patch'])
+    def toggle_visibility(self, request, pk=None):
+        """Переключение видимости урока"""
+        lesson = self.get_object()
+        
+        # Проверяем права
+        user = request.user
+        user_roles = user.roles.values_list('role', flat=True)
+        if 'admin' not in user_roles and lesson.theme.subject.teacher != user:
+            return Response({'error': 'У вас нет прав для изменения видимости этого урока'}, 
+                          status=status.HTTP_403_FORBIDDEN)
+        
+        lesson.is_visible = not lesson.is_visible
+        lesson.save()
+        
+        return Response({
+            'message': f'Урок {"показан" if lesson.is_visible else "скрыт"}',
+            'is_visible': lesson.is_visible
+        })
+    
+    @action(detail=False, methods=['get'])
+    def by_course(self, request):
+        """Получение уроков по курсу"""
+        course_id = request.query_params.get('course_id')
+        if not course_id:
+            return Response({'error': 'course_id параметр обязателен'}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            course = Subject.objects.get(id=course_id)
+        except Subject.DoesNotExist:
+            return Response({'error': 'Курс не найден'}, 
+                          status=status.HTTP_404_NOT_FOUND)
+        
+        # Проверяем доступ к курсу
+        user = request.user
+        user_roles = user.roles.values_list('role', flat=True)
+        
+        if 'admin' not in user_roles:
+            if hasattr(user, 'teacher') and course.teacher == user:
+                # Преподаватель может видеть все уроки своего курса
+                pass
+            elif course.is_published:
+                # Для опубликованных курсов проверяем запись
+                if not Enrollment.objects.filter(student=user, subject=course, status='active').exists():
+                    return Response({'error': 'У вас нет доступа к этому курсу'}, 
+                                  status=status.HTTP_403_FORBIDDEN)
+            else:
+                return Response({'error': 'У вас нет доступа к этому курсу'}, 
+                              status=status.HTTP_403_FORBIDDEN)
+        
+        # Получаем уроки курса
+        themes = Theme.objects.filter(subject=course).order_by('sort_order')
+        lessons = Lesson.objects.filter(theme__in=themes).order_by('theme__sort_order', 'sort_order')
+        
+        # Фильтруем по видимости для студентов
+        if 'admin' not in user_roles and (not hasattr(user, 'teacher') or course.teacher != user):
+            lessons = lessons.filter(is_visible=True)
+        
+        serializer = LessonSerializer(lessons, many=True)
+        return Response(serializer.data)
 
 class ForumViewSet(viewsets.ModelViewSet):
     """ViewSet для форумов"""

@@ -1,5 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
+from django.utils import timezone
+from django.db import models
 from .models import (
     Teacher, Student, StudentGroup, Subject, Grade, Theme,
     Lesson, TestBank, Test, Question, Answer, TestAttempt,
@@ -336,9 +338,136 @@ class CreateSubjectSerializer(serializers.ModelSerializer):
         model = Subject
         exclude = ['teacher', 'creationdate', 'lastupdate']
     
+    def validate_name(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError("Название курса обязательно для заполнения.")
+        
+        value = value.strip()
+        if len(value) < 3:
+            raise serializers.ValidationError("Название курса должно содержать минимум 3 символа.")
+        if len(value) > 100:
+            raise serializers.ValidationError("Название курса не должно превышать 100 символов.")
+        
+        return value
+    
+    def validate_description(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError("Описание курса обязательно для заполнения.")
+        
+        value = value.strip()
+        if len(value) < 10:
+            raise serializers.ValidationError("Описание курса должно содержать минимум 10 символов.")
+        
+        return value
+    
+    def validate_summary(self, value):
+        if value and len(value) > 500:
+            raise serializers.ValidationError("Краткое описание не должно превышать 500 символов.")
+        return value
+    
+    def validate_enrollment_key(self, value):
+        if value and len(value) > 50:
+            raise serializers.ValidationError("Ключ записи не должен превышать 50 символов.")
+        return value
+    
+    def validate_max_enrollment(self, value):
+        if value is not None and value < 1:
+            raise serializers.ValidationError("Максимум студентов должен быть больше 0.")
+        return value
+    
+    def validate(self, attrs):
+        # Валидация дат
+        start_date = attrs.get('start_date')
+        end_date = attrs.get('end_date')
+        
+        errors = {}
+        
+        if start_date and end_date:
+            if start_date >= end_date:
+                errors['start_date'] = 'Дата начала должна быть раньше даты окончания.'
+                errors['end_date'] = 'Дата окончания должна быть позже даты начала.'
+        elif start_date and not end_date:
+            errors['end_date'] = 'Укажите дату окончания курса.'
+        elif end_date and not start_date:
+            errors['start_date'] = 'Укажите дату начала курса.'
+        
+        if errors:
+            raise serializers.ValidationError(errors)
+        
+        return attrs
+    
     def create(self, validated_data):
         validated_data['teacher'] = self.context['request'].user
         return super().create(validated_data)
+
+class UpdateSubjectSerializer(serializers.ModelSerializer):
+    """Сериализатор для обновления курса"""
+    class Meta:
+        model = Subject
+        exclude = ['teacher', 'creationdate']  # Не позволяем менять автора и дату создания
+    
+    def validate_name(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError("Название курса обязательно для заполнения.")
+        
+        value = value.strip()
+        if len(value) < 3:
+            raise serializers.ValidationError("Название курса должно содержать минимум 3 символа.")
+        if len(value) > 100:
+            raise serializers.ValidationError("Название курса не должно превышать 100 символов.")
+        
+        return value
+    
+    def validate_description(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError("Описание курса обязательно для заполнения.")
+        
+        value = value.strip()
+        if len(value) < 10:
+            raise serializers.ValidationError("Описание курса должно содержать минимум 10 символов.")
+        
+        return value
+    
+    def validate_summary(self, value):
+        if value and len(value) > 500:
+            raise serializers.ValidationError("Краткое описание не должно превышать 500 символов.")
+        return value
+    
+    def validate_enrollment_key(self, value):
+        if value and len(value) > 50:
+            raise serializers.ValidationError("Ключ записи не должен превышать 50 символов.")
+        return value
+    
+    def validate_max_enrollment(self, value):
+        if value is not None and value < 1:
+            raise serializers.ValidationError("Максимум студентов должен быть больше 0.")
+        return value
+    
+    def validate(self, attrs):
+        # Валидация дат
+        start_date = attrs.get('start_date')
+        end_date = attrs.get('end_date')
+        
+        errors = {}
+        
+        if start_date and end_date:
+            if start_date >= end_date:
+                errors['start_date'] = 'Дата начала должна быть раньше даты окончания.'
+                errors['end_date'] = 'Дата окончания должна быть позже даты начала.'
+        elif start_date and not end_date:
+            errors['end_date'] = 'Укажите дату окончания курса.'
+        elif end_date and not start_date:
+            errors['start_date'] = 'Укажите дату начала курса.'
+        
+        if errors:
+            raise serializers.ValidationError(errors)
+        
+        return attrs
+    
+    def update(self, instance, validated_data):
+        # Обновляем lastupdate автоматически
+        validated_data['lastupdate'] = timezone.now()
+        return super().update(instance, validated_data)
 
 class CreateForumSerializer(serializers.ModelSerializer):
     class Meta:
@@ -353,6 +482,286 @@ class CreateAssignmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Assignment
         exclude = ['creationdate', 'lastupdate']
+
+    def create(self, validated_data):
+        return Assignment.objects.create(**validated_data)
+
+# Новые сериализаторы для управления уроками
+class CreateLessonSerializer(serializers.ModelSerializer):
+    """Сериализатор для создания урока"""
+    
+    class Meta:
+        model = Lesson
+        exclude = ['creationdate', 'lastupdate']
+        
+    def validate_name(self, value):
+        """Валидация названия урока"""
+        if not value or len(value.strip()) < 3:
+            raise serializers.ValidationError("Название урока должно содержать минимум 3 символа")
+        
+        if len(value) > 100:
+            raise serializers.ValidationError("Название урока не должно превышать 100 символов")
+            
+        return value.strip()
+    
+    def validate_description(self, value):
+        """Валидация описания урока"""
+        if value and len(value) > 1000:
+            raise serializers.ValidationError("Описание урока не должно превышать 1000 символов")
+        return value
+    
+    def validate_sort_order(self, value):
+        """Валидация порядка сортировки"""
+        if value is not None and value < 0:
+            raise serializers.ValidationError("Порядок сортировки не может быть отрицательным")
+        return value
+    
+    def validate(self, attrs):
+        """Комплексная валидация"""
+        theme = attrs.get('theme')
+        name = attrs.get('name', '')
+        
+        # Проверяем уникальность названия урока в рамках темы
+        if theme and name:
+            existing_lesson = Lesson.objects.filter(
+                theme=theme, 
+                name__iexact=name.strip()
+            ).first()
+            
+            if existing_lesson:
+                raise serializers.ValidationError({
+                    'name': f'Урок с названием "{name}" уже существует в этой теме'
+                })
+        
+        # Валидация дат доступности
+        availability_start = attrs.get('availability_start')
+        availability_end = attrs.get('availability_end')
+        
+        if availability_start and availability_end:
+            if availability_start >= availability_end:
+                raise serializers.ValidationError({
+                    'availability_end': 'Дата окончания должна быть позже даты начала'
+                })
+        
+        return attrs
+    
+    def create(self, validated_data):
+        """Создание урока"""
+        # Устанавливаем порядок сортировки автоматически если не указан
+        if 'sort_order' not in validated_data or validated_data['sort_order'] is None:
+            theme = validated_data['theme']
+            max_order = Lesson.objects.filter(theme=theme).aggregate(
+                max_order=models.Max('sort_order')
+            )['max_order']
+            validated_data['sort_order'] = (max_order or 0) + 1
+        
+        return Lesson.objects.create(**validated_data)
+
+class UpdateLessonSerializer(serializers.ModelSerializer):
+    """Сериализатор для обновления урока"""
+    
+    class Meta:
+        model = Lesson
+        exclude = ['creationdate']  # Не позволяем менять дату создания
+        
+    def validate_name(self, value):
+        """Валидация названия урока"""
+        if not value or len(value.strip()) < 3:
+            raise serializers.ValidationError("Название урока должно содержать минимум 3 символа")
+        
+        if len(value) > 100:
+            raise serializers.ValidationError("Название урока не должно превышать 100 символов")
+            
+        return value.strip()
+    
+    def validate_description(self, value):
+        """Валидация описания урока"""
+        if value and len(value) > 1000:
+            raise serializers.ValidationError("Описание урока не должно превышать 1000 символов")
+        return value
+    
+    def validate_sort_order(self, value):
+        """Валидация порядка сортировки"""
+        if value is not None and value < 0:
+            raise serializers.ValidationError("Порядок сортировки не может быть отрицательным")
+        return value
+    
+    def validate(self, attrs):
+        """Комплексная валидация"""
+        theme = attrs.get('theme')
+        name = attrs.get('name', '')
+        instance = self.instance
+        
+        # Проверяем уникальность названия урока в рамках темы (исключая текущий урок)
+        if theme and name:
+            existing_lesson = Lesson.objects.filter(
+                theme=theme, 
+                name__iexact=name.strip()
+            ).exclude(id=instance.id if instance else None).first()
+            
+            if existing_lesson:
+                raise serializers.ValidationError({
+                    'name': f'Урок с названием "{name}" уже существует в этой теме'
+                })
+        
+        # Валидация дат доступности
+        availability_start = attrs.get('availability_start')
+        availability_end = attrs.get('availability_end')
+        
+        if availability_start and availability_end:
+            if availability_start >= availability_end:
+                raise serializers.ValidationError({
+                    'availability_end': 'Дата окончания должна быть позже даты начала'
+                })
+        
+        return attrs
+    
+    def update(self, instance, validated_data):
+        """Обновление урока"""
+        # Обновляем lastupdate автоматически
+        validated_data['lastupdate'] = timezone.now()
+        
+        # Обновляем поля
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        
+        instance.save()
+        return instance
+
+class CreateThemeSerializer(serializers.ModelSerializer):
+    """Сериализатор для создания темы курса"""
+    
+    class Meta:
+        model = Theme
+        exclude = ['creationdate', 'lastupdate']
+        
+    def validate_name(self, value):
+        """Валидация названия темы"""
+        if not value or len(value.strip()) < 3:
+            raise serializers.ValidationError("Название темы должно содержать минимум 3 символа")
+        
+        if len(value) > 100:
+            raise serializers.ValidationError("Название темы не должно превышать 100 символов")
+            
+        return value.strip()
+    
+    def validate_description(self, value):
+        """Валидация описания темы"""
+        # Обрабатываем None и пустые строки
+        if value is None:
+            return ''
+        
+        # Приводим к строке и убираем лишние пробелы
+        value = str(value).strip()
+        
+        if len(value) > 1000:
+            raise serializers.ValidationError("Описание темы не должно превышать 1000 символов")
+        return value
+    
+    def validate_sort_order(self, value):
+        """Валидация порядка сортировки"""
+        if value is not None and value < 0:
+            raise serializers.ValidationError("Порядок сортировки не может быть отрицательным")
+        return value
+    
+    def validate(self, attrs):
+        """Комплексная валидация"""
+        subject = attrs.get('subject')
+        name = attrs.get('name', '')
+        
+        # Проверяем уникальность названия темы в рамках курса
+        if subject and name:
+            existing_theme = Theme.objects.filter(
+                subject=subject, 
+                name__iexact=name.strip()
+            ).first()
+            
+            if existing_theme:
+                raise serializers.ValidationError({
+                    'name': f'Тема с названием "{name}" уже существует в этом курсе'
+                })
+        
+        return attrs
+    
+    def create(self, validated_data):
+        """Создание темы"""
+        # Устанавливаем порядок сортировки автоматически если не указан
+        if 'sort_order' not in validated_data or validated_data['sort_order'] is None:
+            subject = validated_data['subject']
+            max_order = Theme.objects.filter(subject=subject).aggregate(
+                max_order=models.Max('sort_order')
+            )['max_order']
+            validated_data['sort_order'] = (max_order or 0) + 1
+        
+        return Theme.objects.create(**validated_data)
+
+class UpdateThemeSerializer(serializers.ModelSerializer):
+    """Сериализатор для обновления темы курса"""
+    
+    class Meta:
+        model = Theme
+        exclude = ['creationdate']  # Не позволяем менять дату создания
+        
+    def validate_name(self, value):
+        """Валидация названия темы"""
+        if not value or len(value.strip()) < 3:
+            raise serializers.ValidationError("Название темы должно содержать минимум 3 символа")
+        
+        if len(value) > 100:
+            raise serializers.ValidationError("Название темы не должно превышать 100 символов")
+            
+        return value.strip()
+    
+    def validate_description(self, value):
+        """Валидация описания темы"""
+        # Обрабатываем None и пустые строки
+        if value is None:
+            return ''
+        
+        # Приводим к строке и убираем лишние пробелы
+        value = str(value).strip()
+        
+        if len(value) > 1000:
+            raise serializers.ValidationError("Описание темы не должно превышать 1000 символов")
+        return value
+    
+    def validate_sort_order(self, value):
+        """Валидация порядка сортировки"""
+        if value is not None and value < 0:
+            raise serializers.ValidationError("Порядок сортировки не может быть отрицательным")
+        return value
+    
+    def validate(self, attrs):
+        """Комплексная валидация"""
+        subject = attrs.get('subject')
+        name = attrs.get('name', '')
+        instance = self.instance
+        
+        # Проверяем уникальность названия темы в рамках курса (исключая текущую тему)
+        if subject and name:
+            existing_theme = Theme.objects.filter(
+                subject=subject, 
+                name__iexact=name.strip()
+            ).exclude(id=instance.id if instance else None).first()
+            
+            if existing_theme:
+                raise serializers.ValidationError({
+                    'name': f'Тема с названием "{name}" уже существует в этом курсе'
+                })
+        
+        return attrs
+    
+    def update(self, instance, validated_data):
+        """Обновление темы"""
+        # Обновляем lastupdate автоматически
+        validated_data['lastupdate'] = timezone.now()
+        
+        # Обновляем поля
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        
+        instance.save()
+        return instance
 
 class StudentStatsSerializer(serializers.Serializer):
     """Сериализатор для статистики студента"""

@@ -59,6 +59,17 @@ urlpatterns = [
     path('subjects/<int:pk>/enroll/', SubjectViewSet.as_view({'post': 'enroll'}), name='subject-enroll'),
     path('subjects/<int:pk>/unenroll/', SubjectViewSet.as_view({'delete': 'unenroll'}), name='subject-unenroll'),
     path('subjects/<int:pk>/students/', SubjectViewSet.as_view({'get': 'enrolled_students'}), name='subject-students'),
+    path('subjects/<int:pk>/duplicate/', SubjectViewSet.as_view({'post': 'duplicate'}), name='subject-duplicate'),
+    path('subjects/<int:pk>/toggle-published/', SubjectViewSet.as_view({'patch': 'toggle_published'}), name='subject-toggle-published'),
+    path('subjects/<int:pk>/structure/', SubjectViewSet.as_view({'get': 'structure'}), name='subject-structure'),
+    
+    # Endpoints для тем
+    path('themes/<int:pk>/reorder-lessons/', ThemeViewSet.as_view({'post': 'reorder_lessons'}), name='theme-reorder-lessons'),
+    
+    # Endpoints для уроков
+    path('lessons/<int:pk>/duplicate/', LessonViewSet.as_view({'post': 'duplicate'}), name='lesson-duplicate'),
+    path('lessons/<int:pk>/toggle-visibility/', LessonViewSet.as_view({'patch': 'toggle_visibility'}), name='lesson-toggle-visibility'),
+    path('lessons/by-course/', LessonViewSet.as_view({'get': 'by_course'}), name='lessons-by-course'),
     
     # Endpoints для тестов
     path('tests/<int:pk>/start/', TestViewSet.as_view({'post': 'start_attempt'}), name='test-start-attempt'),
