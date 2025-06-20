@@ -1,62 +1,302 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
+from django.core.validators import MinValueValidator, MaxValueValidator
 
+
+# Роли пользователей в системе
+class UserRole(models.Model):
+    ROLE_CHOICES = [
+        ('student', 'Студент'),
+        ('teacher', 'Преподаватель'),
+        ('admin', 'Администратор'),
+        ('moderator', 'Модератор'),
+        ('guest', 'Гость'),
+    ]
+    
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='roles')
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES)
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_active = models.BooleanField(default=True)
+    
+    class Meta:
+        unique_together = ['user', 'role']
+
+# Профиль пользователя с расширенной информацией
+class UserProfile(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+    avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)
+    bio = models.TextField(blank=True)
+    timezone = models.CharField(max_length=50, default='UTC')
+    language = models.CharField(max_length=10, default='ru')
+    email_notifications = models.BooleanField(default=True)
+    phone = models.CharField(max_length=20, blank=True)
+    city = models.CharField(max_length=100, blank=True)
+    country = models.CharField(max_length=100, blank=True)
+    date_of_birth = models.DateField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
 class Teacher(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, primary_key=True)
+    department = models.CharField(max_length=200, blank=True)
+    academic_degree = models.CharField(max_length=100, blank=True)
+    office_hours = models.TextField(blank=True)
     
 class StudentGroup(models.Model):
     name = models.CharField(max_length=255, default='')
     curator = models.ForeignKey(Teacher, on_delete=models.CASCADE)
+    specialization = models.CharField(max_length=200, blank=True)
+    year_of_study = models.IntegerField(default=1)
+    created_at = models.DateTimeField(auto_now_add=True)
 
 class Student(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, primary_key=True)
     group = models.ForeignKey(StudentGroup, on_delete=models.CASCADE)
+    student_id = models.CharField(max_length=20, unique=True)
+    enrollment_date = models.DateField(default=timezone.now)
 
+# Категории курсов
+class CourseCategory(models.Model):
+    name = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    parent = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='subcategories')
+    sort_order = models.IntegerField(default=0)
+    is_visible = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return self.name
+    
+    class Meta:
+        verbose_name_plural = "Course Categories"
+        ordering = ['sort_order', 'name']
 
+# Расширенная модель курса (предмета)
 class Subject(models.Model):
+    COURSE_FORMAT_CHOICES = [
+        ('topics', 'Темы'),
+        ('weeks', 'Недели'),
+        ('social', 'Социальный формат'),
+        ('single', 'Одна активность'),
+    ]
+    
     name = models.CharField(max_length=100, default='')
     description = models.TextField(default='')
     creationdate = models.DateField(default=timezone.now)
     lastupdate = models.DateTimeField(default=timezone.now)
     teacher = models.ForeignKey(User, on_delete=models.CASCADE)
     is_published = models.BooleanField(default=False)
-
+    
+    # Новые поля в стиле Moodle
+    category = models.ForeignKey(CourseCategory, on_delete=models.SET_NULL, null=True, blank=True)
+    course_format = models.CharField(max_length=20, choices=COURSE_FORMAT_CHOICES, default='topics')
+    start_date = models.DateField(null=True, blank=True)
+    end_date = models.DateField(null=True, blank=True)
+    enrollment_key = models.CharField(max_length=50, blank=True)
+    max_enrollment = models.IntegerField(null=True, blank=True)
+    summary = models.TextField(blank=True)
+    course_image = models.ImageField(upload_to='course_images/', null=True, blank=True)
+    is_self_enrollment = models.BooleanField(default=False)
+    completion_tracking = models.BooleanField(default=False)
+    guest_access = models.BooleanField(default=False)
+    
     def __str__(self):
         return self.name
 
     class Meta:
         ordering = ['-creationdate']
 
+# Записи на курс
+class Enrollment(models.Model):
+    ENROLLMENT_STATUS = [
+        ('active', 'Активен'),
+        ('suspended', 'Приостановлен'),
+        ('completed', 'Завершен'),
+        ('cancelled', 'Отменен'),
+    ]
+    
+    student = models.ForeignKey(User, on_delete=models.CASCADE)
+    subject = models.ForeignKey(Subject, on_delete=models.CASCADE)
+    enrollment_date = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=20, choices=ENROLLMENT_STATUS, default='active')
+    completion_date = models.DateTimeField(null=True, blank=True)
+    progress_percentage = models.IntegerField(default=0, validators=[MinValueValidator(0), MaxValueValidator(100)])
+    
+    class Meta:
+        unique_together = ['student', 'subject']
 
 class Grade(models.Model):
-    subject = models.ForeignKey(Subject, on_delete= models.CASCADE, default=0)
+    subject = models.ForeignKey(Subject, on_delete=models.CASCADE, default=0)
     related = models.DateField(default=timezone.now)
     lastupdate = models.DateTimeField(default=timezone.now)
-    student = models.ForeignKey(User, on_delete= models.CASCADE)
-    grade = models.IntegerField( default=0)
+    student = models.ForeignKey(User, on_delete=models.CASCADE)
+    grade = models.IntegerField(default=0)
+    
+    # Дополнительные поля для оценивания
+    grader = models.ForeignKey(User, on_delete=models.CASCADE, related_name='given_grades', null=True, blank=True)
+    feedback = models.TextField(blank=True)
+    grade_type = models.CharField(max_length=50, default='manual')  # manual, automatic, peer
 
 class Theme(models.Model):
     name = models.CharField(max_length=100, default='')
     description = models.TextField(default='')
     creationdate = models.DateField(default=timezone.now)
     lastupdate = models.DateTimeField(default=timezone.now)
-    subject = models.ForeignKey(Subject, on_delete= models.CASCADE, default=0)
+    subject = models.ForeignKey(Subject, on_delete=models.CASCADE, default=0)
+    
+    # Дополнительные поля
+    sort_order = models.IntegerField(default=0)
+    is_visible = models.BooleanField(default=True)
+    completion_required = models.BooleanField(default=False)
 
 class Lesson(models.Model):
     class LessonType(models.TextChoices):
         video = 'V'
-        conference ='C'
+        conference = 'C'
         lecture = 'L'
+        assignment = 'A'
+        quiz = 'Q'
+        forum = 'F'
+        file = 'FILE'
+        url = 'URL'
+        
     name = models.CharField(max_length=100, default='')
     description = models.TextField(default='')
     creationdate = models.DateField(default=timezone.now)
     lastupdate = models.DateTimeField(default=timezone.now)
-    lessontype = models.CharField(max_length=40,choices=LessonType.choices, default=LessonType.lecture)
-    content = models.BinaryField (default=b'\x08')
-    theme = models.ForeignKey(Theme, on_delete= models.CASCADE)
+    lessontype = models.CharField(max_length=40, choices=LessonType.choices, default=LessonType.lecture)
+    content = models.BinaryField(default=b'\x08')
+    theme = models.ForeignKey(Theme, on_delete=models.CASCADE)
+    
+    # Новые поля
+    availability_start = models.DateTimeField(null=True, blank=True)
+    availability_end = models.DateTimeField(null=True, blank=True)
+    completion_required = models.BooleanField(default=False)
+    sort_order = models.IntegerField(default=0)
+    is_visible = models.BooleanField(default=True)
 
+# Файлы и ресурсы курса
+class CourseFile(models.Model):
+    subject = models.ForeignKey(Subject, on_delete=models.CASCADE, related_name='files')
+    lesson = models.ForeignKey(Lesson, on_delete=models.CASCADE, null=True, blank=True, related_name='files')
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    file = models.FileField(upload_to='course_files/')
+    file_size = models.BigIntegerField()
+    file_type = models.CharField(max_length=100)
+    uploaded_by = models.ForeignKey(User, on_delete=models.CASCADE)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    download_count = models.IntegerField(default=0)
+    is_visible = models.BooleanField(default=True)
+
+# Форумы
+class Forum(models.Model):
+    FORUM_TYPES = [
+        ('general', 'Общий форум'),
+        ('q_and_a', 'Вопросы и ответы'),
+        ('single', 'Одна дискуссия'),
+        ('each_person', 'Каждый участник создает одну тему'),
+    ]
+    
+    subject = models.ForeignKey(Subject, on_delete=models.CASCADE, related_name='forums')
+    name = models.CharField(max_length=255)
+    description = models.TextField()
+    forum_type = models.CharField(max_length=20, choices=FORUM_TYPES, default='general')
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_locked = models.BooleanField(default=False)
+    allow_subscriptions = models.BooleanField(default=True)
+    
+    def __str__(self):
+        return self.name
+
+# Дискуссии форума
+class ForumDiscussion(models.Model):
+    forum = models.ForeignKey(Forum, on_delete=models.CASCADE, related_name='discussions')
+    name = models.CharField(max_length=255)
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_post_at = models.DateTimeField(auto_now_add=True)
+    is_pinned = models.BooleanField(default=False)
+    is_locked = models.BooleanField(default=False)
+    posts_count = models.IntegerField(default=0)
+    
+    def __str__(self):
+        return self.name
+
+# Посты в дискуссиях
+class ForumPost(models.Model):
+    discussion = models.ForeignKey(ForumDiscussion, on_delete=models.CASCADE, related_name='posts')
+    parent = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='replies')
+    author = models.ForeignKey(User, on_delete=models.CASCADE)
+    content = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    attachments = models.ManyToManyField(CourseFile, blank=True)
+    
+    def __str__(self):
+        return f"Post by {self.author.username} in {self.discussion.name}"
+
+# Календарь событий
+class CalendarEvent(models.Model):
+    EVENT_TYPES = [
+        ('assignment', 'Задание'),
+        ('quiz', 'Тест'),
+        ('lesson', 'Урок'),
+        ('exam', 'Экзамен'),
+        ('deadline', 'Крайний срок'),
+        ('other', 'Другое'),
+    ]
+    
+    subject = models.ForeignKey(Subject, on_delete=models.CASCADE, related_name='events')
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    event_type = models.CharField(max_length=20, choices=EVENT_TYPES, default='other')
+    start_date = models.DateTimeField()
+    end_date = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_all_day = models.BooleanField(default=False)
+    location = models.CharField(max_length=255, blank=True)
+    
+    def __str__(self):
+        return self.title
+
+# Значки и достижения
+class Badge(models.Model):
+    BADGE_TYPES = [
+        ('course_completion', 'Завершение курса'),
+        ('perfect_quiz', 'Отличный результат теста'),
+        ('active_participant', 'Активный участник'),
+        ('early_bird', 'Ранняя птичка'),
+        ('helpful', 'Помощник'),
+        ('custom', 'Настраиваемый'),
+    ]
+    
+    name = models.CharField(max_length=255)
+    description = models.TextField()
+    badge_type = models.CharField(max_length=30, choices=BADGE_TYPES, default='custom')
+    image = models.ImageField(upload_to='badges/', null=True, blank=True)
+    subject = models.ForeignKey(Subject, on_delete=models.CASCADE, null=True, blank=True, related_name='badges')
+    criteria = models.TextField()  # Критерии получения значка
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return self.name
+
+# Выданные значки
+class UserBadge(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='badges')
+    badge = models.ForeignKey(Badge, on_delete=models.CASCADE)
+    awarded_at = models.DateTimeField(auto_now_add=True)
+    awarded_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='awarded_badges', null=True, blank=True)
+    
+    class Meta:
+        unique_together = ['user', 'badge']
+
+# Оставшиеся модели остаются без изменений
 class TestBank(models.Model):
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
@@ -75,30 +315,46 @@ class Test(models.Model):
     lastupdate = models.DateTimeField(default=timezone.now)
     lesson = models.ForeignKey(Lesson, on_delete=models.CASCADE)
     timelimit = models.IntegerField(default=0)
+    
     class TestType(models.TextChoices):
         close = 'C'
         game = 'G'
         open = 'O'
-    type = models.CharField(max_length=100,choices=TestType, default= TestType.close)   
+        
+    type = models.CharField(max_length=100, choices=TestType, default=TestType.close)   
     title = models.CharField(max_length=255, default='')
     test_bank = models.ForeignKey(TestBank, on_delete=models.CASCADE, related_name='tests', null=True, blank=True)
     duration_minutes = models.IntegerField(default=60)
     passing_score = models.IntegerField(default=70)
     is_active = models.BooleanField(default=True)
-
+    
+    # Новые поля для тестов
+    max_attempts = models.IntegerField(default=1)
+    show_correct_answers = models.BooleanField(default=False)
+    randomize_questions = models.BooleanField(default=False)
+    available_from = models.DateTimeField(null=True, blank=True)
+    available_until = models.DateTimeField(null=True, blank=True)
 
 class Question(models.Model):
     text = models.TextField(default='')
     points = models.IntegerField(default=0)
     lastupdate = models.DateTimeField(default=timezone.now)
     correctanswer = models.TextField(default='')
+    
     class QuestionType(models.TextChoices):
         single = 'S'
         open = 'O'
         multiple = 'M'
+        true_false = 'TF'
+        matching = 'MATCH'
+        
     type = models.CharField(max_length=100, choices=QuestionType, default=QuestionType.single)
     test = models.ForeignKey(Test, on_delete=models.CASCADE)
     test_bank = models.ForeignKey(TestBank, on_delete=models.CASCADE, related_name='questions', null=True, blank=True)
+    
+    # Дополнительные поля
+    explanation = models.TextField(blank=True)
+    difficulty = models.CharField(max_length=20, choices=[('easy', 'Легкий'), ('medium', 'Средний'), ('hard', 'Сложный')], default='medium')
 
 class Answer(models.Model):
     question = models.ForeignKey(Question, on_delete=models.CASCADE, related_name='answers')
@@ -118,6 +374,7 @@ class TestAttempt(models.Model):
     score = models.IntegerField(null=True, blank=True)
     is_passed = models.BooleanField(null=True, blank=True)
     status = models.CharField(max_length=20, default='in_progress')
+    attempt_number = models.IntegerField(default=1)
 
     def __str__(self):
         return f"{self.student.username} - {self.test.title}"
@@ -177,19 +434,70 @@ class UserAnswer(models.Model):
     student = models.ForeignKey(User, on_delete=models.CASCADE)
     question = models.ForeignKey(Question, on_delete=models.CASCADE)
 
-
 class Assignment(models.Model):
     title = models.CharField(max_length=255, default='')
     description = models.TextField(default='')
     deadline = models.DateField(default=timezone.now)
     creationdate = models.DateField(default=timezone.now)
     lastupdate = models.DateTimeField(default=timezone.now)
-    lesson = models.ForeignKey(Lesson, on_delete= models.CASCADE)
+    lesson = models.ForeignKey(Lesson, on_delete=models.CASCADE)
+    
+    # Дополнительные поля
+    max_grade = models.IntegerField(default=100)
+    allow_late_submissions = models.BooleanField(default=False)
+    submission_type = models.CharField(max_length=50, choices=[
+        ('file', 'Файл'),
+        ('text', 'Текст'),
+        ('both', 'Файл и текст')
+    ], default='file')
+    max_file_size = models.IntegerField(default=10485760)  # 10MB in bytes
 
 class SubmittedAssignment(models.Model):
     submittedassignment = models.BinaryField(default=b'\x08')
     comment = models.TextField(default='')
     grade = models.IntegerField(default=0)
     dateofsubmit = models.DateField(default=timezone.now)
-    student = models.ForeignKey(User, on_delete= models.CASCADE)
-    assignment = models.ForeignKey(Assignment, on_delete= models.CASCADE)
+    student = models.ForeignKey(User, on_delete=models.CASCADE)
+    assignment = models.ForeignKey(Assignment, on_delete=models.CASCADE)
+    
+    # Дополнительные поля
+    submission_text = models.TextField(blank=True)
+    feedback = models.TextField(blank=True)
+    graded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='graded_assignments')
+    graded_at = models.DateTimeField(null=True, blank=True)
+
+# Система уведомлений
+class Notification(models.Model):
+    NOTIFICATION_TYPES = [
+        ('assignment_due', 'Крайний срок задания'),
+        ('grade_posted', 'Выставлена оценка'),
+        ('new_forum_post', 'Новый пост на форуме'),
+        ('course_update', 'Обновление курса'),
+        ('message', 'Личное сообщение'),
+        ('badge_awarded', 'Получен значок'),
+    ]
+    
+    recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
+    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_notifications', null=True, blank=True)
+    notification_type = models.CharField(max_length=30, choices=NOTIFICATION_TYPES)
+    title = models.CharField(max_length=255)
+    message = models.TextField()
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    related_object_id = models.IntegerField(null=True, blank=True)
+    
+    def __str__(self):
+        return f"{self.title} - {self.recipient.username}"
+
+# Личные сообщения
+class PrivateMessage(models.Model):
+    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_messages')
+    recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='received_messages')
+    subject = models.CharField(max_length=255)
+    content = models.TextField()
+    sent_at = models.DateTimeField(auto_now_add=True)
+    is_read = models.BooleanField(default=False)
+    read_at = models.DateTimeField(null=True, blank=True)
+    
+    def __str__(self):
+        return f"{self.subject} - {self.sender} to {self.recipient}"

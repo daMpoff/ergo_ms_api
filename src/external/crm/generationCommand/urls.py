@@ -4,6 +4,4 @@ from src.external.crm.generationCommand.views import AllUsersAcademicPerformance
 urlpatterns = [
         path('grade_users/', AllUsersAcademicPerformanceView.as_view(), name='grade-users'),
         path('optimal_team/', OptimalTeamFormationView.as_view(), name='optimal-team'),
-
-
 ]
