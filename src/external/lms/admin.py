@@ -5,7 +5,7 @@ from django.utils.safestring import mark_safe
 
 from .models import (
     UserRole, UserProfile, Teacher, Student, StudentGroup,
-    CourseCategory, Subject, Enrollment, Grade, Theme, Lesson,
+    CourseCategory, CourseFormat, Subject, Enrollment, Grade, Theme, Lesson,
     CourseFile, Forum, ForumDiscussion, ForumPost,
     TestBank, Test, Question, Answer, TestAttempt,
     StudentAnswer, StudentAnswerSelection, Assignment,
@@ -76,6 +76,19 @@ class CourseCategoryAdmin(admin.ModelAdmin):
     list_filter = ['is_visible', 'parent']
     search_fields = ['name', 'description']
     ordering = ['sort_order', 'name']
+    
+    def courses_count(self, obj):
+        return obj.subject_set.count()
+    courses_count.short_description = 'Количество курсов'
+
+
+@admin.register(CourseFormat)
+class CourseFormatAdmin(admin.ModelAdmin):
+    list_display = ['name', 'is_active', 'courses_count', 'created_at']
+    list_filter = ['is_active', 'created_at']
+    search_fields = ['name', 'description']
+    ordering = ['name']
+    readonly_fields = ['created_at', 'updated_at']
     
     def courses_count(self, obj):
         return obj.subject_set.count()

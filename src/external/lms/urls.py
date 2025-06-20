@@ -2,12 +2,12 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from src.external.lms.views import (
     AnalyticsViewSet, UserProfileViewSet, CourseCategoryViewSet,
-    SubjectViewSet, EnrollmentViewSet, ThemeViewSet, LessonViewSet,
-    ForumViewSet, ForumDiscussionViewSet, ForumPostViewSet,
-    TestBankViewSet, TestViewSet, TestAttemptViewSet,
+    CourseFormatViewSet, SubjectViewSet, EnrollmentViewSet, 
+    ThemeViewSet, LessonViewSet, ForumViewSet, ForumDiscussionViewSet, 
+    ForumPostViewSet, TestBankViewSet, TestViewSet, TestAttemptViewSet,
     AssignmentViewSet, SubmittedAssignmentViewSet,
     CalendarEventViewSet, BadgeViewSet, UserBadgeViewSet,
-    NotificationViewSet, PrivateMessageViewSet
+    NotificationViewSet, PrivateMessageViewSet, UserRoleViewSet
 )
 
 app_name = 'lms'
@@ -17,7 +17,9 @@ router = DefaultRouter()
 
 # Регистрируем ViewSet'ы
 router.register(r'profiles', UserProfileViewSet, basename='userprofile')
+router.register(r'user-roles', UserRoleViewSet, basename='userrole')
 router.register(r'categories', CourseCategoryViewSet, basename='coursecategory')
+router.register(r'course-formats', CourseFormatViewSet, basename='courseformat')
 router.register(r'subjects', SubjectViewSet, basename='subject')
 router.register(r'enrollments', EnrollmentViewSet, basename='enrollment')
 router.register(r'themes', ThemeViewSet, basename='theme')
@@ -48,6 +50,10 @@ urlpatterns = [
     
     # Endpoints для профиля
     path('profile/me/', UserProfileViewSet.as_view({'get': 'my_profile', 'patch': 'my_profile'}), name='my-profile'),
+    
+    # Endpoints для ролей
+    path('user/roles/', UserRoleViewSet.as_view({'get': 'current'}), name='user-roles'),
+    path('user/roles/switch/', UserRoleViewSet.as_view({'post': 'switch_role'}), name='switch-role'),
     
     # Endpoints для курсов
     path('subjects/<int:pk>/enroll/', SubjectViewSet.as_view({'post': 'enroll'}), name='subject-enroll'),

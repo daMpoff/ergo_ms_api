@@ -5,7 +5,7 @@ from .models import (
     Lesson, TestBank, Test, Question, Answer, TestAttempt,
     StudentAnswer, StudentAnswerSelection, Assignment,
     SubmittedAssignment, UserRole, UserProfile, CourseCategory,
-    Enrollment, CourseFile, Forum, ForumDiscussion, ForumPost,
+    CourseFormat, Enrollment, CourseFile, Forum, ForumDiscussion, ForumPost,
     CalendarEvent, Badge, UserBadge, Notification, PrivateMessage
 )
 
@@ -73,9 +73,20 @@ class CourseCategorySerializer(serializers.ModelSerializer):
     def get_courses_count(self, obj):
         return obj.subject_set.filter(is_published=True).count()
 
+class CourseFormatSerializer(serializers.ModelSerializer):
+    courses_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = CourseFormat
+        fields = '__all__'
+    
+    def get_courses_count(self, obj):
+        return obj.subject_set.filter(is_published=True).count()
+
 class SubjectSerializer(serializers.ModelSerializer):
     teacher = LMSUserSerializer(read_only=True)
     category = CourseCategorySerializer(read_only=True)
+    course_format = CourseFormatSerializer(read_only=True)
     enrolled_students_count = serializers.SerializerMethodField()
     themes_count = serializers.SerializerMethodField()
     

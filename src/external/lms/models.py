@@ -72,15 +72,23 @@ class CourseCategory(models.Model):
         verbose_name_plural = "Course Categories"
         ordering = ['sort_order', 'name']
 
+# Форматы курсов
+class CourseFormat(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return self.name
+    
+    class Meta:
+        verbose_name_plural = "Course Formats"
+        ordering = ['name']
+
 # Расширенная модель курса (предмета)
 class Subject(models.Model):
-    COURSE_FORMAT_CHOICES = [
-        ('topics', 'Темы'),
-        ('weeks', 'Недели'),
-        ('social', 'Социальный формат'),
-        ('single', 'Одна активность'),
-    ]
-    
     name = models.CharField(max_length=100, default='')
     description = models.TextField(default='')
     creationdate = models.DateField(default=timezone.now)
@@ -90,7 +98,7 @@ class Subject(models.Model):
     
     # Новые поля в стиле Moodle
     category = models.ForeignKey(CourseCategory, on_delete=models.SET_NULL, null=True, blank=True)
-    course_format = models.CharField(max_length=20, choices=COURSE_FORMAT_CHOICES, default='topics')
+    course_format = models.ForeignKey(CourseFormat, on_delete=models.SET_NULL, null=True, blank=True)
     start_date = models.DateField(null=True, blank=True)
     end_date = models.DateField(null=True, blank=True)
     enrollment_key = models.CharField(max_length=50, blank=True)

@@ -9,7 +9,7 @@ from datetime import timedelta
 from .models import (
     Student, Teacher, StudentGroup, Subject, Grade, Theme,
     Lesson, Test, TestAttempt, SubmittedAssignment, UserRole,
-    UserProfile, CourseCategory, Enrollment, CourseFile,
+    UserProfile, CourseCategory, CourseFormat, Enrollment, CourseFile,
     Forum, ForumDiscussion, ForumPost, CalendarEvent,
     Badge, UserBadge, Notification, PrivateMessage,
     TestBank, Question, Answer, Assignment
@@ -19,13 +19,14 @@ from .serializers import (
     SubjectSerializer, GradeSerializer, ThemeSerializer,
     LessonSerializer, TestSerializer, TestAttemptSerializer,
     SubmittedAssignmentSerializer, UserProfileSerializer,
-    CourseCategorySerializer, EnrollmentSerializer,
+    CourseCategorySerializer, CourseFormatSerializer, EnrollmentSerializer,
     CourseFileSerializer, ForumSerializer, ForumDiscussionSerializer,
     ForumPostSerializer, CalendarEventSerializer, BadgeSerializer,
     UserBadgeSerializer, NotificationSerializer, PrivateMessageSerializer,
     CreateSubjectSerializer, CreateForumSerializer, CreateAssignmentSerializer,
     StudentStatsSerializer, TeacherStatsSerializer, TestBankSerializer,
-    QuestionSerializer, AnswerSerializer, AssignmentSerializer
+    QuestionSerializer, AnswerSerializer, AssignmentSerializer,
+    UserRoleSerializer
 )
 
 class UserProfileViewSet(viewsets.ModelViewSet):
@@ -64,6 +65,102 @@ class CourseCategoryViewSet(viewsets.ModelViewSet):
     search_fields = ['name', 'description']
     ordering_fields = ['sort_order', 'name']
     ordering = ['sort_order', 'name']
+    
+    def destroy(self, request, *args, **kwargs):
+        """Удаление категории с проверкой использования"""
+        category = self.get_object()
+        cascade = request.query_params.get('cascade', False)
+        
+        # Проверяем, есть ли курсы в этой категории
+        courses_count = Subject.objects.filter(category=category).count()
+        if courses_count > 0 and not cascade:
+            return Response({
+                'error': f'Нельзя удалить категорию, которая используется в {courses_count} курсах. Сначала переместите курсы в другую категорию.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Проверяем, есть ли подкатегории
+        subcategories_count = CourseCategory.objects.filter(parent=category).count()
+        if subcategories_count > 0 and not cascade:
+            return Response({
+                'error': f'Нельзя удалить категорию, у которой есть {subcategories_count} подкатегорий. Сначала удалите или переместите подкатегории.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Каскадное удаление курсов если указан параметр cascade
+        if cascade and courses_count > 0:
+            Subject.objects.filter(category=category).delete()
+        
+        # Каскадное удаление подкатегорий если указан параметр cascade
+        if cascade and subcategories_count > 0:
+            CourseCategory.objects.filter(parent=category).delete()
+        
+        return super().destroy(request, *args, **kwargs)
+    
+    def partial_update(self, request, *args, **kwargs):
+        """Обновление категории с перемещением курсов"""
+        category = self.get_object()
+        move_courses_to = request.data.get('move_courses_to')
+        
+        if move_courses_to is not None:
+            # Перемещаем курсы в другую категорию или убираем категорию
+            if move_courses_to == '':
+                move_courses_to = None
+            
+            Subject.objects.filter(category=category).update(category=move_courses_to)
+            
+            # Удаляем категорию после перемещения курсов
+            category.delete()
+            return Response({'message': 'Категория удалена, курсы перемещены'})
+        
+        return super().partial_update(request, *args, **kwargs)
+
+class CourseFormatViewSet(viewsets.ModelViewSet):
+    """ViewSet для форматов курсов"""
+    queryset = CourseFormat.objects.filter(is_active=True)
+    serializer_class = CourseFormatSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    filter_backends = [SearchFilter, OrderingFilter]
+    search_fields = ['name', 'description']
+    ordering_fields = ['name']
+    ordering = ['name']
+    
+    def destroy(self, request, *args, **kwargs):
+        """Удаление формата с проверкой использования"""
+        format_obj = self.get_object()
+        cascade = request.query_params.get('cascade', False)
+        
+        # Проверяем, есть ли курсы с этим форматом
+        courses_count = Subject.objects.filter(course_format=format_obj).count()
+        if courses_count > 0 and not cascade:
+            return Response({
+                'error': f'Нельзя удалить формат, который используется в {courses_count} курсах. Сначала измените формат у этих курсов.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Каскадное удаление курсов если указан параметр cascade
+        if cascade and courses_count > 0:
+            Subject.objects.filter(course_format=format_obj).delete()
+        
+        return super().destroy(request, *args, **kwargs)
+    
+    def partial_update(self, request, *args, **kwargs):
+        """Обновление формата с изменением у курсов"""
+        format_obj = self.get_object()
+        move_courses_to = request.data.get('move_courses_to')
+        
+        if move_courses_to is not None:
+            # Изменяем формат у курсов
+            try:
+                new_format = CourseFormat.objects.get(id=move_courses_to)
+                Subject.objects.filter(course_format=format_obj).update(course_format=new_format)
+                
+                # Удаляем формат после изменения у курсов
+                format_obj.delete()
+                return Response({'message': 'Формат удален, у курсов изменен формат'})
+            except CourseFormat.DoesNotExist:
+                return Response({
+                    'error': 'Указанный формат для перемещения не найден'
+                }, status=status.HTTP_400_BAD_REQUEST)
+        
+        return super().partial_update(request, *args, **kwargs)
 
 class SubjectViewSet(viewsets.ModelViewSet):
     """ViewSet для курсов (предметов)"""
@@ -422,7 +519,7 @@ class PrivateMessageViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return PrivateMessage.objects.filter(
             Q(sender=self.request.user) | Q(recipient=self.request.user)
-        )
+)
 
 class AnalyticsViewSet(viewsets.ViewSet):
     """ViewSet для аналитики"""
@@ -550,7 +647,7 @@ class AnalyticsViewSet(viewsets.ViewSet):
         # Непрочитанные уведомления
         unread_notifications = Notification.objects.filter(
             recipient=user, is_read=False
-        ).count()
+            ).count()
         
         # Последние оценки
         recent_grades = Grade.objects.filter(
@@ -571,3 +668,48 @@ class AnalyticsViewSet(viewsets.ViewSet):
         }
         
         return Response(dashboard_data)
+
+class UserRoleViewSet(viewsets.ModelViewSet):
+    """ViewSet для ролей пользователей"""
+    serializer_class = UserRoleSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        return UserRole.objects.filter(user=self.request.user)
+    
+    @action(detail=False, methods=['get'])
+    def current(self, request):
+        """Получить текущие роли пользователя"""
+        roles = UserRole.objects.filter(user=request.user, is_active=True)
+        serializer = self.get_serializer(roles, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['post'])
+    def switch_role(self, request):
+        """Переключить роль пользователя (только для демо)"""
+        role_name = request.data.get('role')
+        
+        if role_name not in ['student', 'teacher', 'admin']:
+            return Response(
+                {'error': 'Недопустимая роль'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Деактивируем все роли
+        UserRole.objects.filter(user=request.user).update(is_active=False)
+        
+        # Создаем или активируем новую роль
+        role, created = UserRole.objects.get_or_create(
+            user=request.user,
+            role=role_name,
+            defaults={'is_active': True}
+        )
+        
+        if not created:
+            role.is_active = True
+            role.save()
+        
+        return Response({
+            'message': f'Роль переключена на {role_name}',
+            'role': role_name
+        })
