@@ -37,7 +37,10 @@ from ..services.services import (
     create_temp_table_from_source,
     import_file_upload_to_table,
     populate_initial_fields,
-    auto_join_table
+    auto_join_table,
+    introspect_columns,
+    rebuild_dataset_joins,
+    create_temp_table_from_staging
 )
 
 # ==============================================================================
@@ -51,7 +54,7 @@ class DatasetListCreateView(generics.ListCreateAPIView):
 
     @transaction.atomic
     def perform_create(self, serializer):
-        dataset = serializer.save(owner=self.request.user, is_temporary=True)
+        dataset = serializer.save(owner=self.request.user)
         if not dataset.file_source:
             raise ValidationError("file_source is required for dataset creation")
 
@@ -119,7 +122,7 @@ class DatasetListView(generics.ListAPIView):
             # Для генерации схемы Swagger возвращаем пустой queryset
             return Dataset.objects.none()
         return (Dataset.objects
-            .filter(owner=self.request.user, is_temporary=False)
+            .filter(owner=self.request.user)
             .order_by('-created_at'))
 
 class DatasetDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -144,35 +147,74 @@ class DataSetTableColumnsView(APIView):
         return Response({'columns': columns})
     
 class DatasetJoinTableView(APIView):
-    def post(self, request, pk, *args, **kwargs):
-        table_name = request.data.get('staging_name')
-        left_column = request.data.get('left_column')
-        right_column = request.data.get('right_column')
-        join_type = request.data.get('join_type', 'INNER JOIN')
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, dataset_id):
+        dataset       = get_object_or_404(Dataset, id=dataset_id)
+        right_file_id = abs(int(request.data.get('rightTableId')))
+        join_type     = (request.data.get('joinType') or 'INNER').upper()
+        lines         = request.data.get('lines', [])
+        if not lines:
+            return Response({'error': 'Нет пар колонок для соединения'}, status=400)
 
-        if not pk or not table_name or not left_column or not right_column:
-            return Response({'success': False, 'error': 'Не все параметры указаны'}, status=400)
+        left_col, right_col = lines[0]['left'], lines[0]['right']
+        file_upload = get_object_or_404(FileUpload, id=right_file_id)
 
-        dataset = get_object_or_404(Dataset, pk=pk)
-        table = get_object_or_404(DataSetTable, table_name=table_name, dataset=dataset)
+        # 1) уже есть таблица из этого файла? – используем её
+        tbl = dataset.tables.filter(file_upload=file_upload).first()
+        if not tbl:
+            # 2) иначе создаём staging- и temp-таблицу
+            staging   = import_file_upload_to_table(file_upload.id)
+            temp_name = create_temp_table_from_staging(staging)
 
-        try:
-            join_key = auto_join_table(dataset, table, left_column, right_column, join_type)
+            tbl = DataSetTable.objects.create(
+                dataset      = dataset,
+                connection   = dataset.connection,
+                file_upload  = file_upload,
+                display_name = file_upload.original_filename,
+                columns_info = file_upload.columns_info,
+                table_name   = temp_name,
+            )
 
-            # !!! ДОБАВЬ ЭТО !!!
-            table.joined_on_type = join_type
-            table.joined_on_left = left_column
-            table.joined_on_right = right_column
-            table.save(update_fields=['joined_on_type', 'joined_on_left', 'joined_on_right'])
-            print("Table after join:", table.joined_on_type, table.joined_on_left, table.joined_on_right)
+        # 3) записываем join-параметры
+        tbl.joined_on_type  = join_type
+        tbl.joined_on_left  = left_col
+        tbl.joined_on_right = right_col
+        tbl.save(update_fields=['joined_on_type', 'joined_on_left', 'joined_on_right'])
 
-            for t in dataset.tables.all():
-                print("DEBUG:", t.id, t.table_name, t.joined_on_type, t.joined_on_left, t.joined_on_right)
-            serializer = DatasetDetailSerializer(dataset)
-            return Response({'success': True, 'join_key': join_key, 'dataset': serializer.data})
+        # 4) перестраиваем материализованный датасет
+        rebuild_dataset_joins(dataset)
 
-        except ValueError as e:
-            return Response({'success': False, 'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'success': True})
+
+class DatasetAddRelationView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, dataset_id):
+        dataset = Dataset.objects.get(id=dataset_id)
+        right_file_id = int(request.data.get('rightTableId'))
+        join_type = request.data.get('joinType')
+        lines = request.data.get('lines', [])
+        if not lines:
+            return Response({'error': 'Нет пар колонок для соединения'}, status=400)
+        left_col = lines[0]['left']
+        right_col = lines[0]['right']
+
+        file_upload   = FileUpload.objects.get(id=abs(right_file_id))
+        tbl = DataSetTable.objects.create(
+            dataset=dataset,
+            connection=dataset.connection,
+            file_upload=file_upload,
+            display_name=file_upload.original_filename,
+            columns_info=file_upload.columns_info,
+            table_name=f"temp_{uuid4().hex}",
+            joined_on_type=join_type.upper(),
+            joined_on_left=left_col,
+            joined_on_right=right_col,
+        )
+        # Здесь можно вызвать import_file_upload_to_table() если надо создать temp-таблицу.
+        rebuild_dataset_joins(dataset)
+        return Response({'success': True})
         
 class AddTableToDatasetView(APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -243,6 +285,80 @@ class DatasetPreviewView(APIView):
             "rows": rows
         })
 
+class DatasetDraftPreviewView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        """
+        Принимает черновик датасета (главная таблица + join'ы), возвращает предпросмотр данных.
+        """
+        data = request.data
+        connection_id = data.get('connection_id')
+        main_table    = data.get('mainTable')
+        joined_tables = data.get('joinedTables', [])
+        limit         = int(data.get('limit', 20))
+
+        # 1. Импортируем главную таблицу во временную (если надо)
+        staging_tables = {}
+
+        def import_table(tbl):
+            if 'file_id' in tbl:
+                # из FileUpload
+                return import_file_upload_to_table(tbl['file_id'])
+            elif 'table_name' in tbl:
+                return tbl['table_name']
+            else:
+                raise ValidationError("Не удалось определить источник таблицы")
+
+        main_staging = import_table(main_table)
+        staging_tables['main'] = main_staging
+
+        # 2. Импортируем все joinedTables
+        joined_stagings = []
+        for jt in joined_tables:
+            staging = import_table(jt)
+            joined_stagings.append({
+                **jt, 'staging': staging
+            })
+
+        # 3. Формируем SELECT и JOIN'ы
+        select_sql = []
+        main_alias = 'a'
+        main_cols = introspect_columns(main_staging)
+        select_sql += [f'{main_alias}."{col}" AS "{col}"' for col in main_cols]
+        join_clauses = []
+        alias = ord('b')
+
+        for jt in joined_stagings:
+            tbl_alias = chr(alias)
+            cols = introspect_columns(jt['staging'])
+            select_sql += [f'{tbl_alias}."{col}" AS "{col}"' for col in cols if col not in main_cols]
+
+            # LEFT JOIN "staging" b ON a."left_col" = b."right_col"
+            join_type = jt.get('joinType', 'LEFT JOIN').strip().upper()
+            if not join_type.endswith('JOIN'):
+                join_type += ' JOIN'
+            lines = jt.get('lines') or []
+            if not lines or not lines[0].get('left') or not lines[0].get('right'):
+                raise ValidationError("Не указаны поля для join'а")
+            left_col = lines[0]['left']
+            right_col = lines[0]['right']
+            join_clause = f"{join_type} \"{jt['staging']}\" {tbl_alias} ON {main_alias}.\"{left_col}\" = {tbl_alias}.\"{right_col}\""
+            join_clauses.append(join_clause)
+            alias += 1
+
+        sql = f'SELECT {", ".join(select_sql)} FROM "{main_staging}" {main_alias} ' + " ".join(join_clauses) + f' LIMIT {limit}'
+
+        with connection.cursor() as cursor:
+            cursor.execute(sql)
+            rows = cursor.fetchall()
+            columns = [col[0] for col in cursor.description]
+
+        return Response({
+            "columns": columns,
+            "rows": rows
+        })
+
 # ==============================================================================
 # DataSetTable endpoints
 # ==============================================================================
@@ -255,7 +371,6 @@ class DataSetTableViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save()
     
-
 class RenameDatasetColumnsView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 

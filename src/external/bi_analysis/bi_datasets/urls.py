@@ -6,7 +6,7 @@ from .views import (
     TempUploadView, FileUploadDetailView,
     FinalizeUploadView, XlsxSheetListView,
     XlsxTempPreviewView, FileUploadByConnectionView, AddTableToDatasetView, DatasetRemoveRelationView,
-    RenameDatasetColumnsView, DatasetListCreateView, DatasetJoinTableView, DataSetTableColumnsView
+    RenameDatasetColumnsView, DatasetListCreateView, DatasetJoinTableView, DataSetTableColumnsView, DatasetDraftPreviewView, DatasetAddRelationView
 )
 
 router = SimpleRouter()
@@ -23,6 +23,8 @@ urlpatterns = [
     path('<int:pk>/auto-join/', DatasetJoinTableView.as_view(), name='dataset-auto-join'),
     path('<int:pk>/add-table/', AddTableToDatasetView.as_view(), name="add_table_to_dataset"),
     path('tables/<int:pk>/columns/', DataSetTableColumnsView.as_view(), name='dataset-table-columns'),
+    path('draft_preview/', DatasetDraftPreviewView.as_view(), name='bi_datasets-draft-preview'),
+    path('<int:dataset_id>/add-relation/', DatasetAddRelationView.as_view()),
 
     path('', DatasetListCreateView.as_view(), name='bi_datasets-list-create'),
     path('<int:pk>/', DatasetDetailView.as_view(), name='bi_datasets-detail'),

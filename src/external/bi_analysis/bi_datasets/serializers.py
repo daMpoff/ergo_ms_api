@@ -72,8 +72,8 @@ class DataSetTableSerializer(serializers.ModelSerializer):
 class DatasetUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model  = Dataset
-        fields = ['id', 'name', 'description', 'owner']
-        read_only_fields = ['id', 'owner']
+        fields = ['id', 'name', 'description', "connection"]
+        read_only_fields = ['id', 'connection']
 
 class DataSetFieldSerializer(serializers.ModelSerializer):
     source_table_name = serializers.SerializerMethodField()
@@ -157,7 +157,6 @@ class DatasetSerializer(serializers.ModelSerializer):
             'table_ref',
             'tables',
             'fields',
-            'is_temporary',
         ]
         read_only_fields = ['id', 'created_at', 'owner']
 

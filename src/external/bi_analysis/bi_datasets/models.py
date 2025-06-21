@@ -40,7 +40,6 @@ class FileUpload(models.Model):
         return self.name
 
 class Dataset(models.Model):
-    is_temporary = models.BooleanField(default=False)
     name        = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
     created_at  = models.DateTimeField(auto_now_add=True)
