@@ -208,6 +208,7 @@ def rebuild_dataset_joins(dataset):
     dataset.save(update_fields=["table_ref"])
 
     for t in (dataset.tables.filter(joined_on_type__isnull=False).order_by("id")):
+        print(f"Table id={t.id} joined_on_type={t.joined_on_type} joined_on_left={t.joined_on_left} joined_on_right={t.joined_on_right}")
         ensure_temp_table_exists(t)
         auto_join_table(
             dataset,

@@ -146,53 +146,60 @@ class DataSetTableColumnsView(APIView):
         columns = [f.source_column or f.name for f in fields]
         return Response({'columns': columns})
     
+
 class DatasetJoinTableView(APIView):
-    permission_classes = [IsAuthenticated]
-    
-    def post(self, request, dataset_id):
-        dataset       = get_object_or_404(Dataset, id=dataset_id)
-        right_file_id = abs(int(request.data.get('rightTableId')))
-        join_type     = (request.data.get('joinType') or 'INNER').upper()
-        lines         = request.data.get('lines', [])
-        if not lines:
-            return Response({'error': 'Нет пар колонок для соединения'}, status=400)
+    """
+    Прицепить (или переприцепить) staging-таблицу к датасету.
+    POST body:
+        {
+            "staging_name": "temp_abcd1234…",
+            "left_column" : "Город",
+            "right_column": "Город",
+            "join_type"   : "INNER JOIN"   # опционально, default — INNER JOIN
+        }
+    """
+    permission_classes = []
 
-        left_col, right_col = lines[0]['left'], lines[0]['right']
-        file_upload = get_object_or_404(FileUpload, id=right_file_id)
+    def post(self, request, pk, *args, **kwargs):
+        dataset = get_object_or_404(Dataset, pk=pk)
 
-        # 1) уже есть таблица из этого файла? – используем её
-        tbl = dataset.tables.filter(file_upload=file_upload).first()
-        if not tbl:
-            # 2) иначе создаём staging- и temp-таблицу
-            staging   = import_file_upload_to_table(file_upload.id)
-            temp_name = create_temp_table_from_staging(staging)
+        staging_name = request.data.get("staging_name") or request.data.get("stagingName")
+        left_column  = request.data.get("left_column")  or request.data.get("leftColumn")
+        right_column = request.data.get("right_column") or request.data.get("rightColumn")
+        join_type    = (request.data.get("join_type")   or
+                        request.data.get("joinType")    or
+                        "INNER JOIN").upper()
 
-            tbl = DataSetTable.objects.create(
-                dataset      = dataset,
-                connection   = dataset.connection,
-                file_upload  = file_upload,
-                display_name = file_upload.original_filename,
-                columns_info = file_upload.columns_info,
-                table_name   = temp_name,
+        if not all([staging_name, left_column, right_column]):
+            return Response(
+                {"success": False, "error": "staging_name, left_column и right_column обязательны"},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # 3) записываем join-параметры
-        tbl.joined_on_type  = join_type
-        tbl.joined_on_left  = left_col
-        tbl.joined_on_right = right_col
-        tbl.save(update_fields=['joined_on_type', 'joined_on_left', 'joined_on_right'])
+        try:
+            auto_join_table(
+                dataset        = dataset,
+                staging_name   = staging_name,
+                left_column    = left_column,
+                right_column   = right_column,
+                join_type      = join_type,
+            )
+        except Exception as exc:
+            return Response(
+                {"success": False, "error": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        # 4) перестраиваем материализованный датасет
-        rebuild_dataset_joins(dataset)
-
-        return Response({'success': True})
+        return Response({"success": True})
 
 class DatasetAddRelationView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, dataset_id):
+        from src.external.bi_analysis.bi_datasets.models import DataSetTable, FileUpload
+
         dataset = Dataset.objects.get(id=dataset_id)
-        right_file_id = int(request.data.get('rightTableId'))
+        right_table_id = int(request.data.get('rightTableId'))
         join_type = request.data.get('joinType')
         lines = request.data.get('lines', [])
         if not lines:
@@ -200,7 +207,34 @@ class DatasetAddRelationView(APIView):
         left_col = lines[0]['left']
         right_col = lines[0]['right']
 
-        file_upload   = FileUpload.objects.get(id=abs(right_file_id))
+        file_upload = None
+
+        file_id = request.data.get("file_id")
+        if file_id:
+            try:
+                file_upload = FileUpload.objects.get(pk=file_id)
+            except FileUpload.DoesNotExist:
+                return Response({'error': f'Файл с id={file_id} не найден.'}, status=404)
+        else:
+            try:
+                ds_table = DataSetTable.objects.get(pk=right_table_id)
+                file_upload = ds_table.file_upload
+            except DataSetTable.DoesNotExist:
+                try:
+                    file_upload = FileUpload.objects.get(pk=abs(right_table_id))
+                except FileUpload.DoesNotExist:
+                    return Response({'error': f'Не найден ни DataSetTable, ни FileUpload с id={right_table_id}'}, status=404)
+        existing = dataset.tables.filter(pk=right_table_id).first()
+        if existing:
+            existing.joined_on_type  = join_type.upper()
+            existing.joined_on_left  = left_col
+            existing.joined_on_right = right_col
+            existing.save(update_fields=["joined_on_type", "joined_on_left", "joined_on_right"])
+            return Response({"success": True})
+
+        if not file_upload:
+            return Response({'error': f'Файл для связи с id={right_table_id} не найден.'}, status=404)
+
         tbl = DataSetTable.objects.create(
             dataset=dataset,
             connection=dataset.connection,
@@ -212,7 +246,7 @@ class DatasetAddRelationView(APIView):
             joined_on_left=left_col,
             joined_on_right=right_col,
         )
-        # Здесь можно вызвать import_file_upload_to_table() если надо создать temp-таблицу.
+        
         rebuild_dataset_joins(dataset)
         return Response({'success': True})
         
