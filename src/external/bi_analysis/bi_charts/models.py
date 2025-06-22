@@ -1,5 +1,6 @@
 from django.db import models
 from django.conf import settings
+from ..bi_datasets.models import DataSetField
 
 class Chart(models.Model):
     name = models.CharField(max_length=256)
@@ -9,6 +10,7 @@ class Chart(models.Model):
     engine = models.CharField(max_length=32, default='apex')
     params = models.JSONField(default=dict, blank=True)
     options = models.JSONField(default=dict, blank=True)
+    selected_fields = models.ManyToManyField(DataSetField, blank=True, related_name='charts')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     owner = models.ForeignKey(

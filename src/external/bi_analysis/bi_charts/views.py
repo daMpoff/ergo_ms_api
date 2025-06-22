@@ -37,9 +37,11 @@ class ChartDetailView(generics.RetrieveUpdateDestroyAPIView):
     
 class ChartRowsAPIView(APIView):
     def get(self, request, pk):
-        rows = get_rows_for_chart(pk)
+        chart = get_object_or_404(Chart, pk=pk)
+        dataset = chart.dataset
+        chart_fields = chart.selected_fields.all()
+        rows = get_rows_for_chart(dataset, chart_fields)
         return Response(rows)
-    
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])

@@ -86,7 +86,7 @@ class DataSetFieldSerializer(serializers.ModelSerializer):
         return obj.source_table.table_name if obj.source_table else None
 
 class DatasetUpdateSerializer(serializers.ModelSerializer):
-    fields = DataSetFieldSerializer(many=True, required=False)
+    fields = DataSetFieldSerializer(many=True, read_only=True)
 
     class Meta:
         model  = Dataset
@@ -98,7 +98,11 @@ class DatasetUpdateSerializer(serializers.ModelSerializer):
         fields_data = self.initial_data.get('fields', [])
         if fields_data:
             for field in fields_data:
-                obj = instance.fields.filter(id=field.get('id')).first()
+                obj = None
+                if field.get('id'):
+                    obj = instance.fields.filter(id=field.get('id')).first()
+                if not obj and field.get('name'):
+                    obj = instance.fields.filter(name=field['name']).first()
                 if obj and 'aggregation' in field:
                     obj.aggregation = field['aggregation']
                     obj.save(update_fields=['aggregation'])

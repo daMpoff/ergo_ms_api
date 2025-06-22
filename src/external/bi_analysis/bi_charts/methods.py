@@ -62,21 +62,71 @@ def fetch_columns_and_types(table_name: str):
     return cols
 
 
-def get_rows_for_chart(pk):
+def get_rows_for_chart(dataset, chart_fields):
     """
-    Получить все строки итоговой (временной) таблицы для выбранного чарта/dataset.
-    :param pk: ID чарта/датасета
-    :return: Список словарей — строки итоговой таблицы
+    :param dataset: объект DataSet (или строка с именем итоговой таблицы)
+    :param chart_fields: список объектов DataSetField (или dict с полями name, aggregation, expression/source_column)
+    :return: список словарей (одна строка — одна агрегированная группа)
     """
-    from src.external.bi_analysis.bi_datasets.models import Dataset
-    dataset = Dataset.objects.get(pk=pk)
-    table_name = dataset.table_ref
+    # Получаем имя итоговой таблицы
+    table_name = getattr(dataset, 'table_name', None) or getattr(dataset, 'table_ref', None) or dataset
+    if not isinstance(table_name, str):
+        raise ValueError('dataset должен быть объектом с table_name/table_ref или строкой')
+
+    select_exprs = []
+    group_by_exprs = []
+
+    def get_agg_sql(agg, col):
+        if agg is None or agg.lower() == 'none':
+            return sql.Identifier(col), False
+        agg_l = agg.lower()
+        if agg_l == 'count':
+            return sql.SQL('COUNT({})').format(sql.Identifier(col)), True
+        elif agg_l == 'ucount':
+            return sql.SQL('COUNT(DISTINCT {})').format(sql.Identifier(col)), True
+        elif agg_l == 'sum':
+            return sql.SQL('SUM({})').format(sql.Identifier(col)), True
+        elif agg_l == 'avg':
+            return sql.SQL('AVG({})').format(sql.Identifier(col)), True
+        # ... добавь другие агрегации если нужно
+        else:
+            return sql.Identifier(col), False
+
+    for field in chart_fields:
+        output_name = getattr(field, 'name', None) or field.get('name')
+        column = (
+            getattr(field, 'expression', None)
+            or getattr(field, 'source_column', None)
+            or field.get('expression')
+            or field.get('source_column')
+            or output_name
+        )
+        aggregation = getattr(field, 'aggregation', None) or field.get('aggregation', 'none')
+
+        agg_expr, is_agg = get_agg_sql(aggregation, column)
+        expr = sql.SQL('{} AS {}').format(
+            agg_expr,
+            sql.Identifier(output_name)
+        )
+        select_exprs.append(expr)
+        if not is_agg:
+            group_by_exprs.append(sql.Identifier(column))
+
+    query = sql.SQL('SELECT {} FROM {}').format(
+        sql.SQL(', ').join(select_exprs),
+        sql.Identifier(table_name)
+    )
+    if group_by_exprs:
+        query += sql.SQL(' GROUP BY {}').format(
+            sql.SQL(', ').join(group_by_exprs)
+        )
 
     with connection.cursor() as cursor:
-        cursor.execute(f'SELECT * FROM "{table_name}" LIMIT 10000')
+        cursor.execute(query)
         columns = [col[0] for col in cursor.description]
         result = [
             dict(zip(columns, row))
             for row in cursor.fetchall()
         ]
+
     return result

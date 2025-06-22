@@ -39,13 +39,21 @@ from ..services.services import (
     populate_initial_fields,
     auto_join_table,
     introspect_columns,
-    rebuild_dataset_joins,
-    create_temp_table_from_staging
+    rebuild_dataset_joins
 )
+
+from ..bi_charts.methods import get_rows_for_chart
 
 # ==============================================================================
 # Dataset endpoints
 # ==============================================================================
+
+class DatasetRowsAPIView(APIView):
+    def get(self, request, pk):
+        dataset = get_object_or_404(Dataset, pk=pk, owner=request.user)
+        chart_fields = dataset.fields.all()
+        rows = get_rows_for_chart(dataset, chart_fields)
+        return Response(rows)
 
 class DatasetListCreateView(generics.ListCreateAPIView):
     queryset = Dataset.objects.all()
