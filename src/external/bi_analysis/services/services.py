@@ -217,6 +217,7 @@ def rebuild_dataset_joins(dataset):
             t.joined_on_right,
             t.joined_on_type or "INNER JOIN",
         )
+    sync_dataset_fields_with_current_table(dataset)
 
 def create_temp_table_from_staging(staging_name):
     """
@@ -269,5 +270,38 @@ def ensure_temp_table_exists(ds_table):
 
     ds_table.table_name = new_name
     ds_table.save(update_fields=['table_name'])
+    
+def sync_dataset_fields_with_current_table(dataset):
+    table_name = dataset.table_ref
+    columns = introspect_columns(table_name)
+    existing_fields = {f.source_column: f for f in DataSetField.objects.filter(dataset=dataset)}
+    ds_tables = {t.table_name: t for t in DataSetTable.objects.filter(dataset=dataset)}
+
+    # Добавить/обновить поля
+    for idx, col in enumerate(columns):
+        if col in existing_fields:
+            field = existing_fields[col]
+            # Можно обновить order, тип данных и т.д., если требуется
+            field.order = idx
+            field.save(update_fields=['order'])
+        else:
+            # Определи source_table (по логике как раньше)
+            source_tbl = None
+            for t in ds_tables.values():
+                if col in introspect_columns(t.table_name):
+                    source_tbl = t
+                    break
+            DataSetField.objects.create(
+                dataset=dataset,
+                name=col,
+                source_table=source_tbl,
+                source_column=col,
+                order=idx
+            )
+
+    # Удалить устаревшие поля
+    for col, field in existing_fields.items():
+        if col not in columns:
+            field.delete()
 
 

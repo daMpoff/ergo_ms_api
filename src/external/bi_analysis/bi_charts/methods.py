@@ -1,5 +1,6 @@
 from django.db import connection
 from psycopg2 import sql
+from decimal import Decimal
 
 PG_NUMERIC = {
     'smallint', 'integer', 'bigint',
@@ -85,7 +86,10 @@ def get_rows_for_chart(dataset, chart_fields):
         elif agg_l == 'ucount':
             return sql.SQL('COUNT(DISTINCT {})').format(sql.Identifier(col)), True
         elif agg_l == 'sum':
-            return sql.SQL('SUM({})').format(sql.Identifier(col)), True
+            return sql.SQL(
+                "SUM(CASE WHEN trim(replace({}, ',', '.')) ~ '^[0-9]+(\\\\.[0-9]+)?$' "
+                "THEN trim(replace({}, ',', '.'))::numeric ELSE 0 END)"
+            ).format(sql.Identifier(col), sql.Identifier(col)), True
         elif agg_l == 'avg':
             return sql.SQL('AVG({})').format(sql.Identifier(col)), True
         # ... добавь другие агрегации если нужно
@@ -128,5 +132,22 @@ def get_rows_for_chart(dataset, chart_fields):
             dict(zip(columns, row))
             for row in cursor.fetchall()
         ]
+
+    # Логируем суммы по всем числовым полям
+    for col in columns:
+        try:
+            s = sum(float(row[col]) for row in result if row[col] is not None)
+            print(f"Сумма по полю {col}: {s}")
+        except Exception as e:
+            pass  # не числовое поле
+
+    # Логируем строки результата для отладки
+    print('Строки результата:')
+    for row in result:
+        print(row)
+
+    for row in result:
+        if isinstance(row['Часов в неделю'], Decimal):
+            row['Часов в неделю'] = float(row['Часов в неделю'])
 
     return result

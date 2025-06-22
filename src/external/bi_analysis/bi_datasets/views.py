@@ -119,6 +119,10 @@ class DatasetRemoveRelationView(APIView):
                 {"success": False, "error": "table not found in dataset"}, status=404
             )
 
+        # Удаляем все поля из DataSetField, которые ссылаются на эту таблицу
+        deleted_fields, _ = dataset.fields.filter(source_table=tbl).delete()
+
+        # Очищаем связь
         tbl.joined_on_type = tbl.joined_on_left = tbl.joined_on_right = None
         tbl.joined_on = {}
         tbl.save()
@@ -128,6 +132,7 @@ class DatasetRemoveRelationView(APIView):
 
         serializer = DatasetDetailSerializer(dataset)
         return Response({"success": True, "dataset": serializer.data})
+
 
 class DatasetListView(generics.ListAPIView):
     serializer_class = DatasetShortSerializer

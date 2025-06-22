@@ -78,15 +78,16 @@ class DataSetFieldSerializer(serializers.ModelSerializer):
             'id', 'dataset', 'name',
             'source_table', 'source_table_name',
             'source_column', 'expression', 'type',
-            'aggregation', 'order'
+            'aggregation', 'order', 'description'
         ]
-        read_only_fields = ['id']
+        read_only_fields = ['id', 'source_table',
+        'source_column', 'expression', 'order', 'source_table_name']
 
     def get_source_table_name(self, obj):
         return obj.source_table.table_name if obj.source_table else None
 
 class DatasetUpdateSerializer(serializers.ModelSerializer):
-    fields = DataSetFieldSerializer(many=True, read_only=True)
+    fields = DataSetFieldSerializer(many=True, required=False)
 
     class Meta:
         model  = Dataset
@@ -94,18 +95,16 @@ class DatasetUpdateSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'connection']
 
     def update(self, instance, validated_data):
-        instance = super().update(instance, validated_data)
+        instance = super().update(instance, {k: v for k, v in validated_data.items() if k != 'fields'})
         fields_data = self.initial_data.get('fields', [])
         if fields_data:
-            for field in fields_data:
-                obj = None
-                if field.get('id'):
-                    obj = instance.fields.filter(id=field.get('id')).first()
-                if not obj and field.get('name'):
-                    obj = instance.fields.filter(name=field['name']).first()
-                if obj and 'aggregation' in field:
-                    obj.aggregation = field['aggregation']
-                    obj.save(update_fields=['aggregation'])
+            for field_data in fields_data:
+                field_obj = instance.fields.filter(id=field_data.get('id')).first()
+                if field_obj:
+                    for attr in ['name', 'aggregation', 'type', 'description']:
+                        if attr in field_data:
+                            setattr(field_obj, attr, field_data[attr])
+                    field_obj.save(update_fields=['name', 'aggregation', 'type', 'description'])
         return instance
     
 class DatasetDetailSerializer(serializers.ModelSerializer):
