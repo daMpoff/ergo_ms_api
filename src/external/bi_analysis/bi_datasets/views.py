@@ -81,6 +81,14 @@ class DatasetListCreateView(generics.ListCreateAPIView):
 
         populate_initial_fields(dataset, temp_name, staging_table=main_table)
         
+        fields_data = self.request.data.get('fields', [])
+        if fields_data:
+            for field in fields_data:
+                obj = dataset.fields.filter(name=field.get('name')).first()
+                if obj and 'aggregation' in field:
+                    obj.aggregation = field['aggregation']
+                    obj.save(update_fields=['aggregation'])
+        
 class DatasetRemoveRelationView(APIView):
     """
     POST /bi_analysis/bi_datasets/<pk>/remove-relation/

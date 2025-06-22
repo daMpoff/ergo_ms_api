@@ -69,12 +69,6 @@ class DataSetTableSerializer(serializers.ModelSerializer):
             }
         return None
 
-class DatasetUpdateSerializer(serializers.ModelSerializer):
-    class Meta:
-        model  = Dataset
-        fields = ['id', 'name', 'description', "connection"]
-        read_only_fields = ['id', 'connection']
-
 class DataSetFieldSerializer(serializers.ModelSerializer):
     source_table_name = serializers.SerializerMethodField()
 
@@ -90,6 +84,25 @@ class DataSetFieldSerializer(serializers.ModelSerializer):
 
     def get_source_table_name(self, obj):
         return obj.source_table.table_name if obj.source_table else None
+
+class DatasetUpdateSerializer(serializers.ModelSerializer):
+    fields = DataSetFieldSerializer(many=True, required=False)
+
+    class Meta:
+        model  = Dataset
+        fields = ['id', 'name', 'description', "connection", 'fields']
+        read_only_fields = ['id', 'connection']
+
+    def update(self, instance, validated_data):
+        instance = super().update(instance, validated_data)
+        fields_data = self.initial_data.get('fields', [])
+        if fields_data:
+            for field in fields_data:
+                obj = instance.fields.filter(id=field.get('id')).first()
+                if obj and 'aggregation' in field:
+                    obj.aggregation = field['aggregation']
+                    obj.save(update_fields=['aggregation'])
+        return instance
     
 class DatasetDetailSerializer(serializers.ModelSerializer):
     tables = DataSetTableSerializer(many=True, read_only=True)
