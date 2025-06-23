@@ -34,7 +34,7 @@ from .serializers import (
     StudentStatsSerializer, TeacherStatsSerializer, TestBankSerializer,
     QuestionSerializer, AnswerSerializer, AssignmentSerializer,
     UserRoleSerializer, CreateLessonSerializer, UpdateLessonSerializer,
-    CreateThemeSerializer, UpdateThemeSerializer
+    CreateThemeSerializer, UpdateThemeSerializer, CreateTestSerializer, UpdateTestSerializer
 )
 
 class UserProfileViewSet(UserOwnedViewSet):
@@ -173,7 +173,12 @@ class SubjectViewSet(BaseLMSViewSet):
     ordering = ['-creationdate']
     
     def get_queryset(self):
-        return get_user_accessible_subjects(self.request.user)
+        queryset = get_user_accessible_subjects(self.request.user)
+        print(f"🔍 SubjectViewSet.get_queryset() для пользователя: {self.request.user.username}")
+        print(f"🔍 Возвращаем курсы: {queryset.count()}")
+        if queryset.count() > 0:
+            print(f"🔍 Первые курсы: {[s.name for s in queryset[:3]]}")
+        return queryset
     
     def get_serializer_class(self):
         if self.action == 'create':
@@ -396,17 +401,29 @@ class ThemeViewSet(SubjectRelatedViewSet, ToggleVisibilityMixin, OrderingMixin):
         user = self.request.user
         user_roles = user.roles.values_list('role', flat=True)
         
+        print(f"🔍 ThemeViewSet.get_queryset() для пользователя: {user.username}")
+        print(f"🔍 Роли пользователя: {list(user_roles)}")
+        
         if 'admin' in user_roles:
-            return self.queryset.all()
-        elif 'teacher' in user_roles or hasattr(user, 'teacher'):
-            return self.queryset.filter(
+            queryset = Theme.objects.all()
+            print(f"🔍 Администратор - возвращаем все темы: {queryset.count()}")
+            return queryset
+        elif 'teacher' in user_roles:
+            queryset = Theme.objects.filter(
                 Q(subject__teacher=user) | Q(subject__is_published=True)
             ).distinct()
+            print(f"🔍 Преподаватель - возвращаем темы: {queryset.count()}")
+            return queryset
         else:
+            # Студенты видят темы курсов, на которые они записаны
             enrolled_subjects = Enrollment.objects.filter(
                 student=user, status='active'
             ).values_list('subject', flat=True)
-            return self.queryset.filter(subject__in=enrolled_subjects, is_visible=True)
+            print(f"🔍 Студент записан на курсы: {list(enrolled_subjects)}")
+            
+            queryset = Theme.objects.filter(subject__in=enrolled_subjects)
+            print(f"🔍 Студент - возвращаем темы: {queryset.count()}")
+            return queryset
     
     def get_serializer_class(self):
         if self.action == 'create':
@@ -457,22 +474,33 @@ class LessonViewSet(viewsets.ModelViewSet):
         user = self.request.user
         user_roles = user.roles.values_list('role', flat=True)
         
+        print(f"🔍 LessonViewSet.get_queryset() для пользователя: {user.username}")
+        print(f"🔍 Роли пользователя: {list(user_roles)}")
+        
         if 'admin' in user_roles:
-            return Lesson.objects.all()
+            queryset = Lesson.objects.all()
+            print(f"🔍 Администратор - возвращаем все уроки: {queryset.count()}")
+            return queryset
         elif 'teacher' in user_roles or hasattr(user, 'teacher'):
             # Преподаватели видят уроки своих курсов + уроки опубликованных курсов
-            return Lesson.objects.filter(
+            queryset = Lesson.objects.filter(
                 Q(theme__subject__teacher=user) | Q(theme__subject__is_published=True)
             ).distinct()
+            print(f"🔍 Преподаватель - возвращаем уроки: {queryset.count()}")
+            return queryset
         else:
             # Студенты видят только видимые уроки курсов, на которые они записаны
             enrolled_subjects = Enrollment.objects.filter(
                 student=user, status='active'
             ).values_list('subject', flat=True)
-            return Lesson.objects.filter(
+            print(f"🔍 Студент записан на курсы: {list(enrolled_subjects)}")
+            
+            queryset = Lesson.objects.filter(
                 theme__subject__in=enrolled_subjects,
                 is_visible=True
             )
+            print(f"🔍 Студент - возвращаем видимые уроки: {queryset.count()}")
+            return queryset
     
     def get_serializer_class(self):
         if self.action == 'create':
@@ -585,13 +613,23 @@ class ForumViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         user = self.request.user
+        
+        # Проверяем роли пользователя
+        user_roles = user.roles.values_list('role', flat=True)
+        
+        # Админы и модераторы видят все форумы
+        if 'admin' in user_roles or 'moderator' in user_roles:
+            return Forum.objects.all()
+        
+        # Учителя видят форумы своих курсов
         if hasattr(user, 'teacher'):
             return Forum.objects.filter(subject__teacher=user)
-        else:
-            enrolled_subjects = Enrollment.objects.filter(
-                student=user, status='active'
-            ).values_list('subject', flat=True)
-            return Forum.objects.filter(subject__in=enrolled_subjects)
+        
+        # Студенты видят форумы курсов, на которые записаны
+        enrolled_subjects = Enrollment.objects.filter(
+            student=user, status='active'
+        ).values_list('subject', flat=True)
+        return Forum.objects.filter(subject__in=enrolled_subjects)
     
     def get_serializer_class(self):
         if self.action in ['create', 'update', 'partial_update']:
@@ -652,6 +690,13 @@ class TestViewSet(viewsets.ModelViewSet):
                 lesson__theme__subject__in=enrolled_subjects,
                 is_active=True
             )
+    
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return CreateTestSerializer
+        elif self.action in ['update', 'partial_update']:
+            return UpdateTestSerializer
+        return TestSerializer
     
     @action(detail=True, methods=['post'])
     def start_attempt(self, request, pk=None):
@@ -872,6 +917,70 @@ class AnalyticsViewSet(viewsets.ViewSet):
         }
         
         return Response(dashboard_data)
+
+    @action(detail=False, methods=['get'])
+    def debug_lessons(self, request):
+        """Отладочный endpoint для диагностики проблем с уроками"""
+        from .models import Subject, Theme, Lesson, Enrollment, UserRole
+        
+        user = request.user
+        user_roles = list(user.roles.values_list('role', flat=True))
+        
+        debug_info = {
+            'user': {
+                'username': user.username,
+                'id': user.id,
+                'roles': user_roles,
+                'is_authenticated': user.is_authenticated,
+                'has_teacher_attr': hasattr(user, 'teacher')
+            },
+            'totals': {
+                'subjects_total': Subject.objects.count(),
+                'themes_total': Theme.objects.count(),
+                'lessons_total': Lesson.objects.count(),
+                'enrollments_total': Enrollment.objects.count()
+            },
+            'subjects': {
+                'all': Subject.objects.count(),
+                'published': Subject.objects.filter(is_published=True).count(),
+                'by_user': Subject.objects.filter(teacher=user).count(),
+                'accessible_to_user': get_user_accessible_subjects(user).count()
+            },
+            'themes': {
+                'all': Theme.objects.count(),
+                'visible': Theme.objects.filter(is_visible=True).count()
+            },
+            'lessons': {
+                'all': Lesson.objects.count(),
+                'visible': Lesson.objects.filter(is_visible=True).count()
+            },
+            'enrollments': {
+                'by_user': Enrollment.objects.filter(student=user).count(),
+                'active_by_user': Enrollment.objects.filter(student=user, status='active').count()
+            }
+        }
+        
+        # Проверяем конкретные данные для первых записей
+        first_subjects = list(Subject.objects.all()[:3].values('id', 'name', 'teacher__username', 'is_published'))
+        first_themes = list(Theme.objects.all()[:3].values('id', 'name', 'subject__name', 'is_visible'))
+        first_lessons = list(Lesson.objects.all()[:3].values('id', 'name', 'theme__name', 'is_visible'))
+        
+        debug_info['sample_data'] = {
+            'subjects': first_subjects,
+            'themes': first_themes,
+            'lessons': first_lessons
+        }
+        
+        # Проверяем связи между данными
+        orphaned_themes = Theme.objects.filter(subject__isnull=True).count()
+        orphaned_lessons = Lesson.objects.filter(theme__isnull=True).count()
+        
+        debug_info['data_integrity'] = {
+            'orphaned_themes': orphaned_themes,
+            'orphaned_lessons': orphaned_lessons
+        }
+        
+        return Response(debug_info)
 
 class UserRoleViewSet(viewsets.ModelViewSet):
     """ViewSet для ролей пользователей"""

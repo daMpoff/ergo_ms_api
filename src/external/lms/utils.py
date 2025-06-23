@@ -9,14 +9,25 @@ def get_user_accessible_subjects(user):
     
     user_roles = user.roles.values_list('role', flat=True)
     
+    print(f"🔍 get_user_accessible_subjects для пользователя: {user.username}")
+    print(f"🔍 Роли пользователя: {list(user_roles)}")
+    
     if 'admin' in user_roles:
-        return Subject.objects.all()
+        queryset = Subject.objects.all()
+        print(f"🔍 Администратор - возвращаем все курсы: {queryset.count()}")
+        return queryset
     elif 'teacher' in user_roles or hasattr(user, 'teacher'):
-        return Subject.objects.filter(
+        queryset = Subject.objects.filter(
             Q(teacher=user) | Q(is_published=True)
         ).distinct()
+        print(f"🔍 Преподаватель - курсы пользователя: {Subject.objects.filter(teacher=user).count()}")
+        print(f"🔍 Преподаватель - опубликованные курсы: {Subject.objects.filter(is_published=True).count()}")
+        print(f"🔍 Преподаватель - итого курсов: {queryset.count()}")
+        return queryset
     else:
-        return Subject.objects.filter(is_published=True)
+        queryset = Subject.objects.filter(is_published=True)
+        print(f"🔍 Студент/гость - опубликованные курсы: {queryset.count()}")
+        return queryset
 
 
 def format_file_size(size_bytes):

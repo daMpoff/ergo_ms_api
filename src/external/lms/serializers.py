@@ -10,6 +10,7 @@ from .models import (
     CourseFormat, Enrollment, CourseFile, Forum, ForumDiscussion, ForumPost,
     CalendarEvent, Badge, UserBadge, Notification, PrivateMessage
 )
+from django.utils import timezone
 from .base_serializers import (
     LMSUserSerializer, BaseModelSerializer, TimestampedModelSerializer,
     CourseRelatedMixin, CountMixin
@@ -266,6 +267,7 @@ class TestSerializer(serializers.ModelSerializer):
     test_bank = TestBankSerializer(read_only=True)
     questions = QuestionSerializer(many=True, read_only=True)
     attempts_count = serializers.SerializerMethodField()
+    type_display = serializers.SerializerMethodField()
     
     class Meta:
         model = Test
@@ -273,6 +275,28 @@ class TestSerializer(serializers.ModelSerializer):
     
     def get_attempts_count(self, obj):
         return obj.attempts.count()
+    
+    def get_type_display(self, obj):
+        """Возвращает читаемое название типа теста"""
+        type_mapping = {
+            'C': 'close',
+            'O': 'open', 
+            'G': 'game'
+        }
+        return type_mapping.get(obj.type, obj.type)
+    
+    def to_representation(self, instance):
+        """Кастомизируем вывод для фронтенда"""
+        data = super().to_representation(instance)
+        # Конвертируем тип обратно в формат фронтенда
+        if 'type' in data:
+            type_mapping = {
+                'C': 'close',
+                'O': 'open', 
+                'G': 'game'
+            }
+            data['type'] = type_mapping.get(data['type'], data['type'])
+        return data
 
 class StudentAnswerSelectionSerializer(serializers.ModelSerializer):
     answer = AnswerSerializer(read_only=True)
@@ -323,6 +347,179 @@ class SubmittedAssignmentSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 # Специальные сериализаторы для создания и обновления
+class CreateTestSerializer(serializers.ModelSerializer):
+    """Сериализатор для создания теста"""
+    class Meta:
+        model = Test
+        exclude = ['creationdate', 'lastupdate']
+    
+    def validate_name(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError("Название теста обязательно для заполнения.")
+        
+        value = value.strip()
+        if len(value) < 3:
+            raise serializers.ValidationError("Название теста должно содержать минимум 3 символа.")
+        if len(value) > 100:
+            raise serializers.ValidationError("Название теста не должно превышать 100 символов.")
+        
+        return value
+    
+    def validate_title(self, value):
+        if value and len(value) > 255:
+            raise serializers.ValidationError("Заголовок не должен превышать 255 символов.")
+        return value or ''
+    
+    def validate_type(self, value):
+        # Конвертируем значения фронтенда в значения модели
+        type_mapping = {
+            'close': 'C',
+            'open': 'O', 
+            'game': 'G'
+        }
+        
+        if value in type_mapping:
+            return type_mapping[value]
+        elif value in ['C', 'O', 'G']:
+            return value
+        else:
+            raise serializers.ValidationError("Неверный тип теста. Допустимые значения: close, open, game")
+    
+    def validate_duration_minutes(self, value):
+        if value is not None and value < 1:
+            raise serializers.ValidationError("Продолжительность теста должна быть больше 0 минут.")
+        return value or 60
+    
+    def validate_passing_score(self, value):
+        if value is not None and (value < 0 or value > 100):
+            raise serializers.ValidationError("Проходной балл должен быть от 0 до 100.")
+        return value or 70
+    
+    def validate_max_attempts(self, value):
+        if value is not None and value < 1:
+            raise serializers.ValidationError("Максимальное количество попыток должно быть больше 0.")
+        return value or 1
+    
+    def validate(self, attrs):
+        # Валидация дат доступности
+        available_from = attrs.get('available_from')
+        available_until = attrs.get('available_until')
+        
+        errors = {}
+        
+        if available_from and available_until:
+            if available_from >= available_until:
+                errors['available_from'] = 'Дата начала должна быть раньше даты окончания.'
+                errors['available_until'] = 'Дата окончания должна быть позже даты начала.'
+        
+        # Проверяем, что урок существует и принадлежит курсу пользователя
+        lesson = attrs.get('lesson')
+        if lesson:
+            user = self.context['request'].user
+            user_roles = user.roles.values_list('role', flat=True)
+            
+            # Если не админ, проверяем права на урок
+            if 'admin' not in user_roles:
+                # Через lesson -> theme -> subject -> teacher
+                if hasattr(lesson, 'theme') and hasattr(lesson.theme, 'subject'):
+                    if lesson.theme.subject.teacher != user:
+                        errors['lesson'] = 'У вас нет прав на создание теста для этого урока.'
+                else:
+                    errors['lesson'] = 'Некорректный урок.'
+        
+        if errors:
+            raise serializers.ValidationError(errors)
+        
+        return attrs
+    
+    def create(self, validated_data):
+        # Устанавливаем значения по умолчанию
+        validated_data.setdefault('title', validated_data.get('name', ''))
+        validated_data.setdefault('description', '')
+        validated_data.setdefault('duration_minutes', 60)
+        validated_data.setdefault('passing_score', 70)
+        validated_data.setdefault('max_attempts', 1)
+        validated_data.setdefault('is_active', True)
+        validated_data.setdefault('show_correct_answers', False)
+        validated_data.setdefault('randomize_questions', False)
+        
+        return super().create(validated_data)
+
+class UpdateTestSerializer(serializers.ModelSerializer):
+    """Сериализатор для обновления теста"""
+    class Meta:
+        model = Test
+        exclude = ['creationdate']  # Не позволяем менять дату создания
+    
+    def validate_name(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError("Название теста обязательно для заполнения.")
+        
+        value = value.strip()
+        if len(value) < 3:
+            raise serializers.ValidationError("Название теста должно содержать минимум 3 символа.")
+        if len(value) > 100:
+            raise serializers.ValidationError("Название теста не должно превышать 100 символов.")
+        
+        return value
+    
+    def validate_title(self, value):
+        if value and len(value) > 255:
+            raise serializers.ValidationError("Заголовок не должен превышать 255 символов.")
+        return value or ''
+    
+    def validate_type(self, value):
+        # Конвертируем значения фронтенда в значения модели
+        type_mapping = {
+            'close': 'C',
+            'open': 'O', 
+            'game': 'G'
+        }
+        
+        if value in type_mapping:
+            return type_mapping[value]
+        elif value in ['C', 'O', 'G']:
+            return value
+        else:
+            raise serializers.ValidationError("Неверный тип теста. Допустимые значения: close, open, game")
+    
+    def validate_duration_minutes(self, value):
+        if value is not None and value < 1:
+            raise serializers.ValidationError("Продолжительность теста должна быть больше 0 минут.")
+        return value
+    
+    def validate_passing_score(self, value):
+        if value is not None and (value < 0 or value > 100):
+            raise serializers.ValidationError("Проходной балл должен быть от 0 до 100.")
+        return value
+    
+    def validate_max_attempts(self, value):
+        if value is not None and value < 1:
+            raise serializers.ValidationError("Максимальное количество попыток должно быть больше 0.")
+        return value
+    
+    def validate(self, attrs):
+        # Валидация дат доступности
+        available_from = attrs.get('available_from')
+        available_until = attrs.get('available_until')
+        
+        errors = {}
+        
+        if available_from and available_until:
+            if available_from >= available_until:
+                errors['available_from'] = 'Дата начала должна быть раньше даты окончания.'
+                errors['available_until'] = 'Дата окончания должна быть позже даты начала.'
+        
+        if errors:
+            raise serializers.ValidationError(errors)
+        
+        return attrs
+    
+    def update(self, instance, validated_data):
+        # Обновляем lastupdate автоматически
+        validated_data['lastupdate'] = timezone.now()
+        return super().update(instance, validated_data)
+
 class CreateSubjectSerializer(serializers.ModelSerializer):
     class Meta:
         model = Subject
@@ -472,8 +669,64 @@ class CreateAssignmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Assignment
         exclude = ['creationdate', 'lastupdate']
+    
+    def validate_title(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError("Название задания обязательно для заполнения.")
+        
+        value = value.strip()
+        if len(value) < 3:
+            raise serializers.ValidationError("Название задания должно содержать минимум 3 символа.")
+        if len(value) > 255:
+            raise serializers.ValidationError("Название задания не должно превышать 255 символов.")
+        
+        return value
+    
+    def validate_max_grade(self, value):
+        if value is not None and value < 1:
+            raise serializers.ValidationError("Максимальная оценка должна быть больше 0.")
+        return value or 100
+    
+    def validate_max_file_size(self, value):
+        if value is not None and value < 1024:  # Минимум 1KB
+            raise serializers.ValidationError("Максимальный размер файла должен быть больше 1KB.")
+        return value
+    
+    def validate(self, attrs):
+        # Валидация даты крайнего срока
+        deadline = attrs.get('deadline')
+        if deadline:
+            from django.utils import timezone
+            if deadline < timezone.now().date():
+                raise serializers.ValidationError({
+                    'deadline': 'Дата крайнего срока не может быть в прошлом.'
+                })
+        
+        # Проверяем права на урок
+        lesson = attrs.get('lesson')
+        if lesson:
+            user = self.context['request'].user
+            user_roles = user.roles.values_list('role', flat=True)
+            
+            # Если не админ, проверяем права на урок
+            if 'admin' not in user_roles:
+                if hasattr(lesson, 'theme') and hasattr(lesson.theme, 'subject'):
+                    if lesson.theme.subject.teacher != user:
+                        raise serializers.ValidationError({
+                            'lesson': 'У вас нет прав на создание задания для этого урока.'
+                        })
+                else:
+                    raise serializers.ValidationError({'lesson': 'Некорректный урок.'})
+        
+        return attrs
 
     def create(self, validated_data):
+        # Устанавливаем значения по умолчанию
+        validated_data.setdefault('max_grade', 100)
+        validated_data.setdefault('allow_late_submissions', False)
+        validated_data.setdefault('submission_type', 'file')
+        validated_data.setdefault('max_file_size', 10485760)  # 10MB
+        
         return Assignment.objects.create(**validated_data)
 
 # Новые сериализаторы для управления уроками
