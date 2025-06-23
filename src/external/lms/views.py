@@ -7,6 +7,12 @@ from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Avg, Count, Q
 from django.utils import timezone
 from datetime import timedelta
+from .base_views import (
+    BaseLMSViewSet, UserOwnedViewSet, SubjectRelatedViewSet, 
+    ReadOnlyLMSViewSet, ToggleVisibilityMixin, OrderingMixin
+)
+from .utils import get_user_accessible_subjects, get_upcoming_deadlines
+from .analytics import AnalyticsService
 from .models import (
     Student, Teacher, StudentGroup, Subject, Grade, Theme,
     Lesson, Test, TestAttempt, SubmittedAssignment, UserRole,
@@ -31,13 +37,10 @@ from .serializers import (
     CreateThemeSerializer, UpdateThemeSerializer
 )
 
-class UserProfileViewSet(viewsets.ModelViewSet):
+class UserProfileViewSet(UserOwnedViewSet):
     """ViewSet для профилей пользователей"""
+    queryset = UserProfile.objects.all()
     serializer_class = UserProfileSerializer
-    permission_classes = [permissions.IsAuthenticated]
-    
-    def get_queryset(self):
-        return UserProfile.objects.filter(user=self.request.user)
     
     @action(detail=False, methods=['get', 'patch'])
     def my_profile(self, request):
@@ -58,12 +61,10 @@ class UserProfileViewSet(viewsets.ModelViewSet):
                 return Response(serializer.data)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-class CourseCategoryViewSet(viewsets.ModelViewSet):
+class CourseCategoryViewSet(ReadOnlyLMSViewSet):
     """ViewSet для категорий курсов"""
     queryset = CourseCategory.objects.filter(is_visible=True)
     serializer_class = CourseCategorySerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-    filter_backends = [SearchFilter, OrderingFilter]
     search_fields = ['name', 'description']
     ordering_fields = ['sort_order', 'name']
     ordering = ['sort_order', 'name']
@@ -115,12 +116,10 @@ class CourseCategoryViewSet(viewsets.ModelViewSet):
         
         return super().partial_update(request, *args, **kwargs)
 
-class CourseFormatViewSet(viewsets.ModelViewSet):
+class CourseFormatViewSet(ReadOnlyLMSViewSet):
     """ViewSet для форматов курсов"""
     queryset = CourseFormat.objects.filter(is_active=True)
     serializer_class = CourseFormatSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-    filter_backends = [SearchFilter, OrderingFilter]
     search_fields = ['name', 'description']
     ordering_fields = ['name']
     ordering = ['name']
@@ -164,33 +163,17 @@ class CourseFormatViewSet(viewsets.ModelViewSet):
         
         return super().partial_update(request, *args, **kwargs)
 
-class SubjectViewSet(viewsets.ModelViewSet):
+class SubjectViewSet(BaseLMSViewSet):
     """ViewSet для курсов (предметов)"""
+    queryset = Subject.objects.all()
     serializer_class = SubjectSerializer
-    permission_classes = [permissions.IsAuthenticated]
-    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['is_published', 'category', 'course_format']
     search_fields = ['name', 'description', 'summary']
     ordering_fields = ['creationdate', 'name', 'start_date']
     ordering = ['-creationdate']
     
     def get_queryset(self):
-        user = self.request.user
-        
-        # Проверяем роль пользователя
-        user_roles = user.roles.values_list('role', flat=True)
-        
-        if 'admin' in user_roles:
-            # Админы видят все курсы
-            return Subject.objects.all()
-        elif 'teacher' in user_roles or hasattr(user, 'teacher'):
-            # Преподаватели видят свои курсы (включая черновики) + опубликованные курсы других
-            return Subject.objects.filter(
-                Q(teacher=user) | Q(is_published=True)
-            ).distinct()
-        else:
-            # Студенты видят только опубликованные курсы
-            return Subject.objects.filter(is_published=True)
+        return get_user_accessible_subjects(self.request.user)
     
     def get_serializer_class(self):
         if self.action == 'create':
@@ -400,32 +383,30 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return Enrollment.objects.filter(student=self.request.user)
 
-class ThemeViewSet(viewsets.ModelViewSet):
+class ThemeViewSet(SubjectRelatedViewSet, ToggleVisibilityMixin, OrderingMixin):
     """ViewSet для тем курсов"""
+    queryset = Theme.objects.all()
     serializer_class = ThemeSerializer
-    permission_classes = [permissions.IsAuthenticated]
-    filter_backends = [DjangoFilterBackend, OrderingFilter]
     filterset_fields = ['subject', 'is_visible']
     ordering_fields = ['sort_order', 'creationdate']
     ordering = ['sort_order']
     
     def get_queryset(self):
+        # Переопределяем для тем, так как нужна проверка записи студентов
         user = self.request.user
         user_roles = user.roles.values_list('role', flat=True)
         
         if 'admin' in user_roles:
-            return Theme.objects.all()
+            return self.queryset.all()
         elif 'teacher' in user_roles or hasattr(user, 'teacher'):
-            # Преподаватели видят темы своих курсов + темы опубликованных курсов
-            return Theme.objects.filter(
+            return self.queryset.filter(
                 Q(subject__teacher=user) | Q(subject__is_published=True)
             ).distinct()
         else:
-            # Студенты видят только видимые темы опубликованных курсов
             enrolled_subjects = Enrollment.objects.filter(
                 student=user, status='active'
             ).values_list('subject', flat=True)
-            return Theme.objects.filter(subject__in=enrolled_subjects, is_visible=True)
+            return self.queryset.filter(subject__in=enrolled_subjects, is_visible=True)
     
     def get_serializer_class(self):
         if self.action == 'create':
@@ -798,16 +779,15 @@ class UserBadgeViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return UserBadge.objects.filter(user=self.request.user)
 
-class NotificationViewSet(viewsets.ModelViewSet):
+class NotificationViewSet(BaseLMSViewSet):
     """ViewSet для уведомлений"""
+    queryset = Notification.objects.all()
     serializer_class = NotificationSerializer
-    permission_classes = [permissions.IsAuthenticated]
-    filter_backends = [DjangoFilterBackend, OrderingFilter]
     filterset_fields = ['is_read', 'notification_type']
     ordering = ['-created_at']
     
     def get_queryset(self):
-        return Notification.objects.filter(recipient=self.request.user)
+        return self.queryset.filter(recipient=self.request.user)
     
     @action(detail=True, methods=['patch'])
     def mark_as_read(self, request, pk=None):
@@ -846,48 +826,7 @@ class AnalyticsViewSet(viewsets.ViewSet):
     @action(detail=False, methods=['get'])
     def student_stats(self, request):
         """Статистика студента"""
-        user = request.user
-        
-        # Оценки
-        grades = Grade.objects.filter(student=user)
-        average_grade = grades.aggregate(Avg('grade'))['grade__avg'] or 0
-        
-        # Тесты
-        total_tests = TestAttempt.objects.filter(student=user).count()
-        passed_tests = TestAttempt.objects.filter(
-            student=user, is_passed=True
-        ).count()
-        
-        # Задания
-        submitted_assignments = SubmittedAssignment.objects.filter(
-            student=user
-        ).count()
-        
-        # Курсы
-        enrolled_courses = Enrollment.objects.filter(
-            student=user, status='active'
-        ).count()
-        completed_courses = Enrollment.objects.filter(
-            student=user, status='completed'
-        ).count()
-        
-        # Значки
-        total_badges = UserBadge.objects.filter(user=user).count()
-        
-        # Посты на форуме
-        forum_posts = ForumPost.objects.filter(author=user).count()
-        
-        stats = {
-            'average_grade': round(average_grade, 2),
-            'total_tests': total_tests,
-            'passed_tests': passed_tests,
-            'submitted_assignments': submitted_assignments,
-            'enrolled_courses': enrolled_courses,
-            'completed_courses': completed_courses,
-            'total_badges': total_badges,
-            'forum_posts': forum_posts
-        }
-        
+        stats = AnalyticsService.get_student_stats(request.user)
         serializer = StudentStatsSerializer(stats)
         return Response(serializer.data)
 
@@ -895,58 +834,15 @@ class AnalyticsViewSet(viewsets.ViewSet):
     def teacher_stats(self, request):
         """Статистика преподавателя"""
         user = request.user
+        user_roles = user.roles.values_list('role', flat=True)
         
-        if not hasattr(user, 'teacher'):
+        if 'teacher' not in user_roles and 'admin' not in user_roles:
             return Response(
                 {'error': 'Пользователь не является преподавателем'}, 
                 status=status.HTTP_403_FORBIDDEN
             )
         
-        # Курсы преподавателя
-        subjects = Subject.objects.filter(teacher=user)
-        
-        # Студенты
-        total_students = Enrollment.objects.filter(
-            subject__in=subjects, status='active'
-        ).values('student').distinct().count()
-        
-        # Средние оценки
-        average_grades = Grade.objects.filter(
-            subject__in=subjects
-        ).aggregate(Avg('grade'))['grade__avg'] or 0
-        
-        # Активные тесты
-        active_tests = Test.objects.filter(
-            lesson__theme__subject__in=subjects,
-            is_active=True
-        ).count()
-        
-        # Задания, ожидающие проверки
-        pending_assignments = SubmittedAssignment.objects.filter(
-            assignment__lesson__theme__subject__in=subjects,
-            grade=0
-        ).count()
-        
-        # Дискуссии форума
-        forum_discussions = ForumDiscussion.objects.filter(
-            forum__subject__in=subjects
-        ).count()
-        
-        # Выданные значки
-        badges_awarded = UserBadge.objects.filter(
-            badge__subject__in=subjects
-        ).count()
-        
-        stats = {
-            'total_students': total_students,
-            'total_subjects': subjects.count(),
-            'average_grades': round(average_grades, 2),
-            'active_tests': active_tests,
-            'pending_assignments': pending_assignments,
-            'forum_discussions': forum_discussions,
-            'badges_awarded': badges_awarded
-        }
-        
+        stats = AnalyticsService.get_teacher_stats(user)
         serializer = TeacherStatsSerializer(stats)
         return Response(serializer.data)
     
@@ -955,34 +851,24 @@ class AnalyticsViewSet(viewsets.ViewSet):
         """Общая информация для дашборда"""
         user = request.user
         
-        # Предстоящие события
-        upcoming_events = CalendarEvent.objects.filter(
-            subject__enrollment__student=user,
-            start_date__gte=timezone.now(),
-            start_date__lte=timezone.now() + timedelta(days=7)
-        )[:5]
+        # Используем утилиту для получения дедлайнов
+        deadlines = get_upcoming_deadlines(user)
         
         # Непрочитанные уведомления
         unread_notifications = Notification.objects.filter(
             recipient=user, is_read=False
-            ).count()
+        ).count()
         
         # Последние оценки
         recent_grades = Grade.objects.filter(
             student=user
         ).order_by('-lastupdate')[:5]
         
-        # Активные задания
-        active_assignments = Assignment.objects.filter(
-            lesson__theme__subject__enrollment__student=user,
-            deadline__gte=timezone.now()
-        ).order_by('deadline')[:5]
-        
         dashboard_data = {
-            'upcoming_events': CalendarEventSerializer(upcoming_events, many=True).data,
+            'upcoming_assignments': AssignmentSerializer(deadlines['assignments'], many=True).data,
+            'upcoming_events': CalendarEventSerializer(deadlines['events'], many=True).data,
             'unread_notifications': unread_notifications,
-            'recent_grades': GradeSerializer(recent_grades, many=True).data,
-            'active_assignments': AssignmentSerializer(active_assignments, many=True).data
+            'recent_grades': GradeSerializer(recent_grades, many=True).data
         }
         
         return Response(dashboard_data)

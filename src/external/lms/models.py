@@ -436,11 +436,7 @@ class StudentAnswerSelection(models.Model):
     def __str__(self):
         return f"Selection for {self.answer.text[:50]}..."
 
-class UserAnswer(models.Model):
-    answer = models.TextField(default='')
-    iscorrect = models.BooleanField(default=False)
-    student = models.ForeignKey(User, on_delete=models.CASCADE)
-    question = models.ForeignKey(Question, on_delete=models.CASCADE)
+# UserAnswer модель удалена, используем StudentAnswer вместо неё
 
 class Assignment(models.Model):
     title = models.CharField(max_length=255, default='')

@@ -10,16 +10,11 @@ from .models import (
     CourseFormat, Enrollment, CourseFile, Forum, ForumDiscussion, ForumPost,
     CalendarEvent, Badge, UserBadge, Notification, PrivateMessage
 )
-
-class LMSUserSerializer(serializers.ModelSerializer):
-    full_name = serializers.SerializerMethodField()
-    
-    class Meta:
-        model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'full_name', 'is_active', 'date_joined']
-    
-    def get_full_name(self, obj):
-        return f"{obj.first_name} {obj.last_name}".strip() or obj.username
+from .base_serializers import (
+    LMSUserSerializer, BaseModelSerializer, TimestampedModelSerializer,
+    CourseRelatedMixin, CountMixin
+)
+from .utils import format_file_size
 
 class UserRoleSerializer(serializers.ModelSerializer):
     user = LMSUserSerializer(read_only=True)
@@ -60,7 +55,7 @@ class StudentGroupSerializer(serializers.ModelSerializer):
     def get_students_count(self, obj):
         return obj.student_set.count()
 
-class CourseCategorySerializer(serializers.ModelSerializer):
+class CourseCategorySerializer(BaseModelSerializer, CountMixin):
     subcategories = serializers.SerializerMethodField()
     courses_count = serializers.SerializerMethodField()
     
@@ -73,9 +68,9 @@ class CourseCategorySerializer(serializers.ModelSerializer):
         return CourseCategorySerializer(subcategories, many=True).data
     
     def get_courses_count(self, obj):
-        return obj.subject_set.filter(is_published=True).count()
+        return self.get_count_field(obj, 'subject_set', {'is_published': True})
 
-class CourseFormatSerializer(serializers.ModelSerializer):
+class CourseFormatSerializer(BaseModelSerializer, CountMixin):
     courses_count = serializers.SerializerMethodField()
     
     class Meta:
@@ -83,7 +78,7 @@ class CourseFormatSerializer(serializers.ModelSerializer):
         fields = '__all__'
     
     def get_courses_count(self, obj):
-        return obj.subject_set.filter(is_published=True).count()
+        return self.get_count_field(obj, 'subject_set', {'is_published': True})
 
 class SubjectSerializer(serializers.ModelSerializer):
     teacher = LMSUserSerializer(read_only=True)
@@ -130,7 +125,7 @@ class ThemeSerializer(serializers.ModelSerializer):
     def get_lessons_count(self, obj):
         return obj.lesson_set.count()
 
-class CourseFileSerializer(serializers.ModelSerializer):
+class CourseFileSerializer(BaseModelSerializer):
     uploaded_by = LMSUserSerializer(read_only=True)
     file_size_formatted = serializers.SerializerMethodField()
     
@@ -140,12 +135,7 @@ class CourseFileSerializer(serializers.ModelSerializer):
     
     def get_file_size_formatted(self, obj):
         """Format file size in human readable format"""
-        size = obj.file_size
-        for unit in ['B', 'KB', 'MB', 'GB']:
-            if size < 1024.0:
-                return f"{size:.1f} {unit}"
-            size /= 1024.0
-        return f"{size:.1f} TB"
+        return format_file_size(obj.file_size)
 
 class LessonSerializer(serializers.ModelSerializer):
     theme = ThemeSerializer(read_only=True)
