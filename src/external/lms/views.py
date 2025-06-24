@@ -61,39 +61,37 @@ class UserProfileViewSet(UserOwnedViewSet):
                 return Response(serializer.data)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-class CourseCategoryViewSet(ReadOnlyLMSViewSet):
+class CourseCategoryViewSet(BaseLMSViewSet):
     """ViewSet для категорий курсов"""
-    queryset = CourseCategory.objects.filter(is_visible=True)
+    queryset = CourseCategory.objects.all()
     serializer_class = CourseCategorySerializer
     search_fields = ['name', 'description']
     ordering_fields = ['sort_order', 'name']
     ordering = ['sort_order', 'name']
     
     def destroy(self, request, *args, **kwargs):
-        """Удаление категории с проверкой использования"""
+        """Удаление категории с каскадным удалением связанных курсов"""
         category = self.get_object()
-        cascade = request.query_params.get('cascade', False)
+        force_delete = request.query_params.get('force', 'false').lower() == 'true'
         
-        # Проверяем, есть ли курсы в этой категории
+        # Считаем количество связанных объектов
         courses_count = Subject.objects.filter(category=category).count()
-        if courses_count > 0 and not cascade:
-            return Response({
-                'error': f'Нельзя удалить категорию, которая используется в {courses_count} курсах. Сначала переместите курсы в другую категорию.'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Проверяем, есть ли подкатегории
         subcategories_count = CourseCategory.objects.filter(parent=category).count()
-        if subcategories_count > 0 and not cascade:
+        
+        # Если это не принудительное удаление, возвращаем информацию для подтверждения
+        if not force_delete and (courses_count > 0 or subcategories_count > 0):
             return Response({
-                'error': f'Нельзя удалить категорию, у которой есть {subcategories_count} подкатегорий. Сначала удалите или переместите подкатегории.'
-            }, status=status.HTTP_400_BAD_REQUEST)
+                'requires_confirmation': True,
+                'courses_count': courses_count,
+                'subcategories_count': subcategories_count,
+                'message': f'Удаление категории приведет к удалению {courses_count} курсов и {subcategories_count} подкатегорий. Продолжить?'
+            }, status=status.HTTP_200_OK)
         
-        # Каскадное удаление курсов если указан параметр cascade
-        if cascade and courses_count > 0:
+        # Принудительное удаление - удаляем все связанные объекты
+        if force_delete:
+            # Удаляем связанные курсы
             Subject.objects.filter(category=category).delete()
-        
-        # Каскадное удаление подкатегорий если указан параметр cascade
-        if cascade and subcategories_count > 0:
+            # Удаляем подкатегории
             CourseCategory.objects.filter(parent=category).delete()
         
         return super().destroy(request, *args, **kwargs)
@@ -116,28 +114,32 @@ class CourseCategoryViewSet(ReadOnlyLMSViewSet):
         
         return super().partial_update(request, *args, **kwargs)
 
-class CourseFormatViewSet(ReadOnlyLMSViewSet):
+class CourseFormatViewSet(BaseLMSViewSet):
     """ViewSet для форматов курсов"""
-    queryset = CourseFormat.objects.filter(is_active=True)
+    queryset = CourseFormat.objects.all()
     serializer_class = CourseFormatSerializer
     search_fields = ['name', 'description']
     ordering_fields = ['name']
     ordering = ['name']
     
     def destroy(self, request, *args, **kwargs):
-        """Удаление формата с проверкой использования"""
+        """Удаление формата с каскадным удалением связанных курсов"""
         format_obj = self.get_object()
-        cascade = request.query_params.get('cascade', False)
+        force_delete = request.query_params.get('force', 'false').lower() == 'true'
         
-        # Проверяем, есть ли курсы с этим форматом
+        # Считаем количество связанных курсов
         courses_count = Subject.objects.filter(course_format=format_obj).count()
-        if courses_count > 0 and not cascade:
-            return Response({
-                'error': f'Нельзя удалить формат, который используется в {courses_count} курсах. Сначала измените формат у этих курсов.'
-            }, status=status.HTTP_400_BAD_REQUEST)
         
-        # Каскадное удаление курсов если указан параметр cascade
-        if cascade and courses_count > 0:
+        # Если это не принудительное удаление, возвращаем информацию для подтверждения
+        if not force_delete and courses_count > 0:
+            return Response({
+                'requires_confirmation': True,
+                'courses_count': courses_count,
+                'message': f'Удаление формата приведет к удалению {courses_count} курсов. Продолжить?'
+            }, status=status.HTTP_200_OK)
+        
+        # Принудительное удаление - удаляем все связанные курсы
+        if force_delete:
             Subject.objects.filter(course_format=format_obj).delete()
         
         return super().destroy(request, *args, **kwargs)
