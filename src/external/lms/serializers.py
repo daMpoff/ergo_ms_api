@@ -426,6 +426,9 @@ class CreateTestSerializer(serializers.ModelSerializer):
                         errors['lesson'] = 'У вас нет прав на создание теста для этого урока.'
                 else:
                     errors['lesson'] = 'Некорректный урок.'
+        else:
+            # Если урок не указан, это обязательное поле
+            errors['lesson'] = 'Поле lesson обязательно для заполнения.'
         
         if errors:
             raise serializers.ValidationError(errors)
@@ -652,6 +655,13 @@ class UpdateSubjectSerializer(serializers.ModelSerializer):
         return attrs
     
     def update(self, instance, validated_data):
+        # Обрабатываем удаление изображения
+        if self.initial_data.get('remove_image') == 'true':
+            if instance.course_image:
+                # Удаляем файл изображения
+                instance.course_image.delete(save=False)
+            validated_data['course_image'] = None
+        
         # Обновляем lastupdate автоматически
         validated_data['lastupdate'] = timezone.now()
         return super().update(instance, validated_data)
