@@ -633,6 +633,19 @@ class FileUploadByConnectionView(generics.ListAPIView):
     def get_queryset(self):
         conn_id = self.kwargs['connection_id']
         return FileUpload.objects.filter(owner=self.request.user, connection_id=conn_id).order_by('-uploaded_at')
+    
+class DatasetRowsAggAPIView(APIView):
+    """
+    POST  .../datasets/<dataset_id>/rows-agg/
+    body = { "fields": {... exactly Chart.params ...} }
+    """
+    def post(self, request, pk):
+        ds = get_object_or_404(Dataset, pk=pk)
+        chart_fields = []
+        for group_key, field_list in (request.data.get('fields') or {}).items():
+            chart_fields.extend(field_list)
+        data = get_rows_for_chart(ds, chart_fields)
+        return Response(data)
 
 def detect_column_type(values):
     filtered = [v for v in values if v not in (None, '')]

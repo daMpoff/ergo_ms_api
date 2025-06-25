@@ -36,33 +36,6 @@ def _probe_type(table: str, column: str) -> str:
 
     return 'string'
 
-
-def fetch_columns_and_types(table_name: str):
-    sql = """
-        SELECT column_name, data_type
-          FROM information_schema.columns
-         WHERE table_schema = 'public' AND table_name = %s
-         ORDER BY ordinal_position
-    """
-    with connection.cursor() as cur:
-        cur.execute(sql, [table_name])
-        rows = cur.fetchall()
-
-    cols = []
-    for name, pg_type in rows:
-        if pg_type in PG_NUMERIC:
-            t = 'number'
-        elif pg_type in PG_DATE:
-            t = 'date'
-        elif pg_type == 'text':
-            t = _probe_type(table_name, name)
-        else:
-            t = 'string'
-
-        cols.append({"name": name, "pg_type": pg_type, "type": t})
-    return cols
-
-
 def get_rows_for_chart(dataset, chart_fields):
     """
     :param dataset: объект DataSet (или строка с именем итоговой таблицы)
@@ -74,25 +47,56 @@ def get_rows_for_chart(dataset, chart_fields):
     if not isinstance(table_name, str):
         raise ValueError('dataset должен быть объектом с table_name/table_ref или строкой')
 
+    # --------- ДОПОЛНЯЕМ aggregation из DataSetField, если не указано ---------
+    ds_fields_map = {}
+    if hasattr(dataset, 'fields'):
+        ds_fields_map = {f.name: f for f in dataset.fields.all()}
+    enriched_fields = []
+    for field in chart_fields:
+        name = getattr(field, 'name', None) or field.get('name')
+        aggregation = (
+            getattr(field, 'aggregation', None) or
+            field.get('aggregation')
+        )
+        # Если не задана агрегация — ищем дефолтную из DataSetField
+        if not aggregation and name in ds_fields_map:
+            aggregation = getattr(ds_fields_map[name], 'aggregation', None)
+        # Если всё ещё нет, то ставим 'none'
+        new_field = dict(field)
+        new_field['aggregation'] = aggregation or 'none'
+        enriched_fields.append(new_field)
+    chart_fields = enriched_fields
+    # --------------------------------------------------------------------------
+
     select_exprs = []
     group_by_exprs = []
 
     def get_agg_sql(agg, col):
         if agg is None or agg.lower() == 'none':
             return sql.Identifier(col), False
+
         agg_l = agg.lower()
+
         if agg_l == 'count':
-            return sql.SQL('COUNT({})').format(sql.Identifier(col)), True
+            return sql.SQL('COUNT({col})').format(col=sql.Identifier(col)), True
+
         elif agg_l == 'ucount':
-            return sql.SQL('COUNT(DISTINCT {})').format(sql.Identifier(col)), True
+            return sql.SQL('COUNT(DISTINCT {col})').format(col=sql.Identifier(col)), True
+
         elif agg_l == 'sum':
             return sql.SQL(
-                "SUM(CASE WHEN trim(replace({}, ',', '.')) ~ '^[0-9]+(\\\\.[0-9]+)?$' "
-                "THEN trim(replace({}, ',', '.'))::numeric ELSE 0 END)"
-            ).format(sql.Identifier(col), sql.Identifier(col)), True
+                "SUM( NULLIF( "
+                "       regexp_replace( "
+                "           replace({col}::text, ',', '.'), "
+                "           '[^0-9\\.-]', '', 'g' "
+                "       ), "
+                "       '' "
+                "   )::numeric )"
+            ).format(col=sql.Identifier(col)), True
+
         elif agg_l == 'avg':
-            return sql.SQL('AVG({})').format(sql.Identifier(col)), True
-        # ... добавь другие агрегации если нужно
+            return sql.SQL('AVG({col})').format(col=sql.Identifier(col)), True
+
         else:
             return sql.Identifier(col), False
 
@@ -115,6 +119,7 @@ def get_rows_for_chart(dataset, chart_fields):
         select_exprs.append(expr)
         if not is_agg:
             group_by_exprs.append(sql.Identifier(column))
+        
 
     query = sql.SQL('SELECT {} FROM {}').format(
         sql.SQL(', ').join(select_exprs),
@@ -132,22 +137,5 @@ def get_rows_for_chart(dataset, chart_fields):
             dict(zip(columns, row))
             for row in cursor.fetchall()
         ]
-
-    # Логируем суммы по всем числовым полям
-    for col in columns:
-        try:
-            s = sum(float(row[col]) for row in result if row[col] is not None)
-            print(f"Сумма по полю {col}: {s}")
-        except Exception as e:
-            pass  # не числовое поле
-
-    # Логируем строки результата для отладки
-    print('Строки результата:')
-    for row in result:
-        print(row)
-
-    for row in result:
-        if isinstance(row['Часов в неделю'], Decimal):
-            row['Часов в неделю'] = float(row['Часов в неделю'])
 
     return result

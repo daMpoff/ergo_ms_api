@@ -7,7 +7,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework import status
 from django.shortcuts import get_object_or_404
-from .methods import fetch_columns_and_types, get_rows_for_chart
+from .methods import get_rows_for_chart
 from rest_framework.views import APIView
 
 class ChartListCreateView(generics.ListCreateAPIView):
@@ -35,11 +35,37 @@ class ChartDetailView(generics.RetrieveUpdateDestroyAPIView):
             return self.queryset.none()
         return self.queryset.filter(owner=user)
     
+class DatasetRowsAggAPIView(APIView):
+    """
+    POST  .../charts/<chart_id>/rows-agg/
+    body = { "fields": {... exactly Chart.params ...} }
+    """
+    def post(self, request, pk):
+        chart = get_object_or_404(Chart, pk=pk)
+        ds = chart.dataset
+
+        chart_fields = []
+        for group_key, field_list in (request.data.get('fields') or {}).items():
+            chart_fields.extend(field_list)
+
+        data = get_rows_for_chart(ds, chart_fields)
+        return Response(data)
+    
 class ChartRowsAPIView(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request, pk):
         chart = get_object_or_404(Chart, pk=pk)
         dataset = chart.dataset
-        chart_fields = chart.selected_fields.all()
+
+        params = chart.params or {}
+        chart_fields = []
+        for section in ('x', 'y', 'color', 'labels', 'sort', 'filters'):
+            if section in params:
+                section_fields = params[section]
+                if isinstance(section_fields, list):
+                    chart_fields.extend(section_fields)
+                elif section_fields:
+                    chart_fields.append(section_fields)
         rows = get_rows_for_chart(dataset, chart_fields)
         return Response(rows)
 
@@ -51,13 +77,14 @@ def dataset_columns(request, pk: int):
         pk=pk, owner=request.user
     )
 
-    try:
-        cols = fetch_columns_and_types(ds.table_ref)
-    except Exception as exc:
-        return Response(
-            {"detail": f"Не удалось получить колонки: {exc}"},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
+    fields = ds.fields.all()
+    cols = []
+    for f in fields:
+        cols.append({
+            "name": f.name,
+            "type": f.type,
+            "aggregation": f.aggregation,
+        })
 
     return Response({
         "dataset_id": pk,
