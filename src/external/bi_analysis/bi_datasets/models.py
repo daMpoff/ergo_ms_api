@@ -31,6 +31,7 @@ class FileUpload(models.Model):
     file = models.FileField(upload_to='uploads/')
     uploaded_at = models.DateTimeField(auto_now_add=True)
     owner = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, related_name='uploaded_files')
+    columns_info = models.JSONField(null=True, blank=True, default=dict)
 
     original_filename = models.CharField(max_length=255, blank=True, null=True)
     file_type = models.CharField(max_length=50, blank=True, null=True)
@@ -39,7 +40,6 @@ class FileUpload(models.Model):
         return self.name
 
 class Dataset(models.Model):
-    is_temporary = models.BooleanField(default=False)
     name        = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
     created_at  = models.DateTimeField(auto_now_add=True)
@@ -61,27 +61,58 @@ class Dataset(models.Model):
     )
     table_ref   = models.CharField(max_length=255, blank=True, null=True)
 
+    def fields_for_current_dataset(self):
+        return self.fields.all()
+    
     def __str__(self):
         return self.name
 
 
 class DataSetTable(models.Model):
     dataset    = models.ForeignKey(
-        Dataset,
-        related_name="tables",
-        on_delete=models.CASCADE
+        Dataset, related_name="tables", on_delete=models.CASCADE
     )
     connection = models.ForeignKey(
-        Connection,
-        on_delete=models.CASCADE,
-        related_name='dataset_tables'
+        Connection, related_name="dataset_tables", on_delete=models.CASCADE
     )
+
     table_name = models.CharField(max_length=200)
     alias      = models.CharField(max_length=100, blank=True)
-    joined_on  = JSONField(default=dict)
+
+    # ключ и порядок
+    joined_on  = models.JSONField(default=dict)      # {type, left, right}
     order      = models.PositiveSmallIntegerField(default=0)
 
-    def __str__(self):
+    # ← ОСТАВЛЯЕМ ровно ОДНО поле file_upload
+    file_upload  = models.ForeignKey(
+        FileUpload, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="dataset_tables"
+    )
+
+    # «человеческое» имя и схема колонок
+    display_name = models.CharField(max_length=255, blank=True)
+    columns_info = models.JSONField(null=True, blank=True)
+
+    # --- новые атрибуты ---
+    sheet_name       = models.CharField(max_length=255, blank=True, null=True)
+    joined_on_type   = models.CharField(max_length=16,  blank=True, null=True)
+    joined_on_left   = models.CharField(max_length=128, blank=True, null=True)
+    joined_on_right  = models.CharField(max_length=128, blank=True, null=True)
+
+    # ----------------------
+
+    def save(self, *args, **kwargs):
+        """Если таблица привязана к FileUpload — подтянуть имя и columns_info."""
+        if self.file_upload_id:
+            if not self.display_name:
+                self.display_name = self.file_upload.original_filename
+
+            if self.columns_info is None and self.file_upload.columns_info:
+                self.columns_info = self.file_upload.columns_info
+
+        super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
         return f"{self.dataset.name} → {self.table_name}"
 
 
