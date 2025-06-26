@@ -3,7 +3,7 @@ from rest_framework.routers import DefaultRouter
 from src.external.lms.views import (
     AnalyticsViewSet, UserProfileViewSet, CourseCategoryViewSet,
     CourseFormatViewSet, SubjectViewSet, EnrollmentViewSet, 
-    ThemeViewSet, LessonViewSet, ForumViewSet, ForumDiscussionViewSet, 
+    ThemeViewSet, LessonViewSet, ResourceViewSet, ForumViewSet, ForumDiscussionViewSet, 
     ForumPostViewSet, TestBankViewSet, TestViewSet, TestAttemptViewSet,
     AssignmentViewSet, SubmittedAssignmentViewSet,
     CalendarEventViewSet, BadgeViewSet, UserBadgeViewSet,
@@ -24,6 +24,7 @@ router.register(r'subjects', SubjectViewSet, basename='subject')
 router.register(r'enrollments', EnrollmentViewSet, basename='enrollment')
 router.register(r'themes', ThemeViewSet, basename='theme')
 router.register(r'lessons', LessonViewSet, basename='lesson')
+router.register(r'resources', ResourceViewSet, basename='resource')
 router.register(r'forums', ForumViewSet, basename='forum')
 router.register(r'discussions', ForumDiscussionViewSet, basename='forumdiscussion')
 router.register(r'posts', ForumPostViewSet, basename='forumpost')
@@ -66,11 +67,17 @@ urlpatterns = [
     
     # Endpoints для тем
     path('themes/<int:pk>/reorder-lessons/', ThemeViewSet.as_view({'post': 'reorder_lessons'}), name='theme-reorder-lessons'),
+    path('themes/reorder-themes/', ThemeViewSet.as_view({'post': 'reorder_themes'}), name='reorder-themes'),
     
     # Endpoints для уроков
     path('lessons/<int:pk>/duplicate/', LessonViewSet.as_view({'post': 'duplicate'}), name='lesson-duplicate'),
     path('lessons/<int:pk>/toggle-visibility/', LessonViewSet.as_view({'patch': 'toggle_visibility'}), name='lesson-toggle-visibility'),
     path('lessons/by-course/', LessonViewSet.as_view({'get': 'by_course'}), name='lessons-by-course'),
+    
+    # Endpoints для ресурсов
+    path('resources/<int:pk>/download/', ResourceViewSet.as_view({'get': 'download'}), name='resource-download'),
+    path('resources/<int:pk>/toggle-visibility/', ResourceViewSet.as_view({'patch': 'toggle_visibility'}), name='resource-toggle-visibility'),
+    path('resources/by-context/', ResourceViewSet.as_view({'get': 'by_context'}), name='resources-by-context'),
     
     # Endpoints для тестов
     path('tests/<int:pk>/start/', TestViewSet.as_view({'post': 'start_attempt'}), name='test-start-attempt'),

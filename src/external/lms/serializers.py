@@ -7,7 +7,7 @@ from .models import (
     Lesson, TestBank, Test, Question, Answer, TestAttempt,
     StudentAnswer, StudentAnswerSelection, Assignment,
     SubmittedAssignment, UserRole, UserProfile, CourseCategory,
-    CourseFormat, Enrollment, CourseFile, Forum, ForumDiscussion, ForumPost,
+    CourseFormat, Enrollment, CourseFile, Resource, Forum, ForumDiscussion, ForumPost,
     CalendarEvent, Badge, UserBadge, Notification, PrivateMessage
 )
 from django.utils import timezone
@@ -148,6 +148,8 @@ class LessonSerializer(serializers.ModelSerializer):
 
 class ForumSerializer(serializers.ModelSerializer):
     subject = SubjectSerializer(read_only=True)
+    theme = ThemeSerializer(read_only=True)
+    lesson = LessonSerializer(read_only=True)
     created_by = LMSUserSerializer(read_only=True)
     discussions_count = serializers.SerializerMethodField()
     last_post = serializers.SerializerMethodField()
@@ -263,6 +265,8 @@ class QuestionSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class TestSerializer(serializers.ModelSerializer):
+    subject = SubjectSerializer(read_only=True)
+    theme = ThemeSerializer(read_only=True)
     lesson = LessonSerializer(read_only=True)
     test_bank = TestBankSerializer(read_only=True)
     questions = QuestionSerializer(many=True, read_only=True)
@@ -327,6 +331,8 @@ class TestAttemptSerializer(serializers.ModelSerializer):
         return obj.calculate_score()
 
 class AssignmentSerializer(serializers.ModelSerializer):
+    subject = SubjectSerializer(read_only=True)
+    theme = ThemeSerializer(read_only=True)
     lesson = LessonSerializer(read_only=True)
     submissions_count = serializers.SerializerMethodField()
     
@@ -412,23 +418,43 @@ class CreateTestSerializer(serializers.ModelSerializer):
                 errors['available_from'] = 'Дата начала должна быть раньше даты окончания.'
                 errors['available_until'] = 'Дата окончания должна быть позже даты начала.'
         
-        # Проверяем, что урок существует и принадлежит курсу пользователя
+        # Валидация принадлежности (тест должен принадлежать хотя бы одной сущности)
+        subject = attrs.get('subject')
+        theme = attrs.get('theme')
         lesson = attrs.get('lesson')
-        if lesson:
-            user = self.context['request'].user
-            user_roles = user.roles.values_list('role', flat=True)
+        
+        if not any([subject, theme, lesson]):
+            errors['general'] = 'Тест должен принадлежать курсу, теме или уроку'
+        
+        # Проверяем согласованность связей
+        if lesson and theme:
+            if lesson.theme_id != theme.id:
+                errors['lesson'] = 'Урок должен принадлежать выбранной теме'
+        
+        if lesson and subject:
+            if lesson.theme.subject_id != subject.id:
+                errors['lesson'] = 'Урок должен принадлежать выбранному курсу'
+        
+        if theme and subject:
+            if theme.subject_id != subject.id:
+                errors['theme'] = 'Тема должна принадлежать выбранному курсу'
+        
+        # Проверяем права пользователя
+        user = self.context['request'].user
+        user_roles = user.roles.values_list('role', flat=True)
+        
+        if 'admin' not in user_roles:
+            # Определяем курс для проверки прав
+            course_to_check = None
+            if lesson:
+                course_to_check = lesson.theme.subject
+            elif theme:
+                course_to_check = theme.subject
+            elif subject:
+                course_to_check = subject
             
-            # Если не админ, проверяем права на урок
-            if 'admin' not in user_roles:
-                # Через lesson -> theme -> subject -> teacher
-                if hasattr(lesson, 'theme') and hasattr(lesson.theme, 'subject'):
-                    if lesson.theme.subject.teacher != user:
-                        errors['lesson'] = 'У вас нет прав на создание теста для этого урока.'
-                else:
-                    errors['lesson'] = 'Некорректный урок.'
-        else:
-            # Если урок не указан, это обязательное поле
-            errors['lesson'] = 'Поле lesson обязательно для заполнения.'
+            if course_to_check and course_to_check.teacher != user:
+                errors['permissions'] = 'У вас нет прав на создание теста в этом курсе'
         
         if errors:
             raise serializers.ValidationError(errors)
@@ -712,21 +738,49 @@ class CreateAssignmentSerializer(serializers.ModelSerializer):
                     'deadline': 'Дата крайнего срока не может быть в прошлом.'
                 })
         
-        # Проверяем права на урок
+        # Валидация принадлежности (задание должно принадлежать хотя бы одной сущности)
+        subject = attrs.get('subject')
+        theme = attrs.get('theme')
         lesson = attrs.get('lesson')
-        if lesson:
-            user = self.context['request'].user
-            user_roles = user.roles.values_list('role', flat=True)
+        
+        if not any([subject, theme, lesson]):
+            raise serializers.ValidationError("Задание должно принадлежать курсу, теме или уроку")
+        
+        # Проверяем согласованность связей
+        if lesson and theme:
+            if lesson.theme_id != theme.id:
+                raise serializers.ValidationError({
+                    'lesson': 'Урок должен принадлежать выбранной теме'
+                })
+        
+        if lesson and subject:
+            if lesson.theme.subject_id != subject.id:
+                raise serializers.ValidationError({
+                    'lesson': 'Урок должен принадлежать выбранному курсу'
+                })
+        
+        if theme and subject:
+            if theme.subject_id != subject.id:
+                raise serializers.ValidationError({
+                    'theme': 'Тема должна принадлежать выбранному курсу'
+                })
+        
+        # Проверяем права пользователя
+        user = self.context['request'].user
+        user_roles = user.roles.values_list('role', flat=True)
+        
+        if 'admin' not in user_roles:
+            # Определяем курс для проверки прав
+            course_to_check = None
+            if lesson:
+                course_to_check = lesson.theme.subject
+            elif theme:
+                course_to_check = theme.subject
+            elif subject:
+                course_to_check = subject
             
-            # Если не админ, проверяем права на урок
-            if 'admin' not in user_roles:
-                if hasattr(lesson, 'theme') and hasattr(lesson.theme, 'subject'):
-                    if lesson.theme.subject.teacher != user:
-                        raise serializers.ValidationError({
-                            'lesson': 'У вас нет прав на создание задания для этого урока.'
-                        })
-                else:
-                    raise serializers.ValidationError({'lesson': 'Некорректный урок.'})
+            if course_to_check and course_to_check.teacher != user:
+                raise serializers.ValidationError("У вас нет прав на создание задания в этом курсе")
         
         return attrs
 
@@ -884,6 +938,9 @@ class UpdateLessonSerializer(serializers.ModelSerializer):
 class CreateThemeSerializer(serializers.ModelSerializer):
     """Сериализатор для создания темы курса"""
     
+    # Делаем поле description необязательным
+    description = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    
     class Meta:
         model = Theme
         exclude = ['creationdate', 'lastupdate']
@@ -899,9 +956,9 @@ class CreateThemeSerializer(serializers.ModelSerializer):
         return value.strip()
     
     def validate_description(self, value):
-        """Валидация описания темы"""
-        # Обрабатываем None и пустые строки
-        if value is None:
+        """Валидация описания темы - необязательное поле"""
+        # Описание полностью необязательно
+        if value is None or value == '' or (isinstance(value, str) and not value.strip()):
             return ''
         
         # Приводим к строке и убираем лишние пробелы
@@ -951,9 +1008,12 @@ class CreateThemeSerializer(serializers.ModelSerializer):
 class UpdateThemeSerializer(serializers.ModelSerializer):
     """Сериализатор для обновления темы курса"""
     
+    # Делаем поле description необязательным
+    description = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    
     class Meta:
         model = Theme
-        exclude = ['creationdate']  # Не позволяем менять дату создания
+        exclude = ['creationdate', 'sort_order']  # Не позволяем менять дату создания и порядок сортировки
         
     def validate_name(self, value):
         """Валидация названия темы"""
@@ -966,9 +1026,9 @@ class UpdateThemeSerializer(serializers.ModelSerializer):
         return value.strip()
     
     def validate_description(self, value):
-        """Валидация описания темы"""
-        # Обрабатываем None и пустые строки
-        if value is None:
+        """Валидация описания темы - необязательное поле"""
+        # Описание полностью необязательно
+        if value is None or value == '' or (isinstance(value, str) and not value.strip()):
             return ''
         
         # Приводим к строке и убираем лишние пробелы
@@ -976,12 +1036,6 @@ class UpdateThemeSerializer(serializers.ModelSerializer):
         
         if len(value) > 1000:
             raise serializers.ValidationError("Описание темы не должно превышать 1000 символов")
-        return value
-    
-    def validate_sort_order(self, value):
-        """Валидация порядка сортировки"""
-        if value is not None and value < 0:
-            raise serializers.ValidationError("Порядок сортировки не может быть отрицательным")
         return value
     
     def validate(self, attrs):
@@ -1036,3 +1090,163 @@ class TeacherStatsSerializer(serializers.Serializer):
     pending_assignments = serializers.IntegerField()
     forum_discussions = serializers.IntegerField()
     badges_awarded = serializers.IntegerField()
+
+class ResourceSerializer(serializers.ModelSerializer):
+    """Сериализатор для просмотра ресурсов"""
+    uploaded_by = LMSUserSerializer(read_only=True)
+    file_size_formatted = serializers.SerializerMethodField()
+    subject = SubjectSerializer(read_only=True)
+    theme = ThemeSerializer(read_only=True)
+    lesson = LessonSerializer(read_only=True)
+    
+    class Meta:
+        model = Resource
+        fields = '__all__'
+    
+    def get_file_size_formatted(self, obj):
+        """Форматирование размера файла"""
+        if not obj.file_size:
+            return "0 байт"
+            
+        for unit in ['байт', 'КБ', 'МБ', 'ГБ']:
+            if obj.file_size < 1024.0:
+                return f"{obj.file_size:.1f} {unit}"
+            obj.file_size /= 1024.0
+        return f"{obj.file_size:.1f} ТБ"
+
+class CreateResourceSerializer(serializers.ModelSerializer):
+    """Сериализатор для создания ресурса"""
+    file = serializers.FileField(required=True)
+    
+    class Meta:
+        model = Resource
+        exclude = ['uploaded_at', 'uploaded_by', 'file_size', 'file_type', 'download_count']
+    
+    def validate_name(self, value):
+        """Валидация названия ресурса"""
+        if not value or len(value.strip()) < 2:
+            raise serializers.ValidationError("Название ресурса должно содержать минимум 2 символа")
+        
+        if len(value) > 255:
+            raise serializers.ValidationError("Название ресурса не должно превышать 255 символов")
+            
+        return value.strip()
+    
+    def validate_description(self, value):
+        """Валидация описания ресурса"""
+        if value and len(value) > 1000:
+            raise serializers.ValidationError("Описание ресурса не должно превышать 1000 символов")
+        return value
+    
+    def validate_file(self, value):
+        """Валидация файла"""
+        if not value:
+            raise serializers.ValidationError("Файл обязателен")
+        
+        # Проверяем размер файла (максимум 100 МБ)
+        max_size = 100 * 1024 * 1024  # 100 МБ в байтах
+        if value.size > max_size:
+            raise serializers.ValidationError("Размер файла не должен превышать 100 МБ")
+        
+        return value
+    
+    def validate(self, attrs):
+        """Комплексная валидация"""
+        subject = attrs.get('subject')
+        theme = attrs.get('theme')
+        lesson = attrs.get('lesson')
+        
+        # Ресурс должен принадлежать хотя бы одной из сущностей
+        if not any([subject, theme, lesson]):
+            raise serializers.ValidationError("Ресурс должен принадлежать курсу, теме или уроку")
+        
+        # Ресурс не может принадлежать одновременно уроку и теме/курсу если урок не принадлежит этой теме/курсу
+        if lesson and theme:
+            if lesson.theme_id != theme.id:
+                raise serializers.ValidationError("Урок должен принадлежать выбранной теме")
+        
+        if lesson and subject:
+            if lesson.theme.subject_id != subject.id:
+                raise serializers.ValidationError("Урок должен принадлежать выбранному курсу")
+        
+        if theme and subject:
+            if theme.subject_id != subject.id:
+                raise serializers.ValidationError("Тема должна принадлежать выбранному курсу")
+        
+        return attrs
+    
+    def create(self, validated_data):
+        """Создание ресурса"""
+        # Получаем информацию о файле
+        file = validated_data['file']
+        validated_data['file_size'] = file.size
+        validated_data['file_type'] = file.content_type or 'application/octet-stream'
+        
+        # Устанавливаем порядок сортировки автоматически если не указан
+        if 'sort_order' not in validated_data or validated_data['sort_order'] is None:
+            # Определяем контекст для сортировки
+            if validated_data.get('lesson'):
+                max_order = Resource.objects.filter(lesson=validated_data['lesson']).aggregate(
+                    max_order=models.Max('sort_order')
+                )['max_order']
+            elif validated_data.get('theme'):
+                max_order = Resource.objects.filter(theme=validated_data['theme']).aggregate(
+                    max_order=models.Max('sort_order')
+                )['max_order']
+            else:
+                max_order = Resource.objects.filter(subject=validated_data['subject']).aggregate(
+                    max_order=models.Max('sort_order')
+                )['max_order']
+            
+            validated_data['sort_order'] = (max_order or 0) + 1
+        
+        return Resource.objects.create(**validated_data)
+
+class UpdateResourceSerializer(serializers.ModelSerializer):
+    """Сериализатор для обновления ресурса"""
+    file = serializers.FileField(required=False)
+    
+    class Meta:
+        model = Resource
+        exclude = ['uploaded_at', 'uploaded_by', 'download_count']
+    
+    def validate_name(self, value):
+        """Валидация названия ресурса"""
+        if not value or len(value.strip()) < 2:
+            raise serializers.ValidationError("Название ресурса должно содержать минимум 2 символа")
+        
+        if len(value) > 255:
+            raise serializers.ValidationError("Название ресурса не должно превышать 255 символов")
+            
+        return value.strip()
+    
+    def validate_description(self, value):
+        """Валидация описания ресурса"""
+        if value and len(value) > 1000:
+            raise serializers.ValidationError("Описание ресурса не должно превышать 1000 символов")
+        return value
+    
+    def validate_file(self, value):
+        """Валидация файла"""
+        if value:
+            # Проверяем размер файла (максимум 100 МБ)
+            max_size = 100 * 1024 * 1024  # 100 МБ в байтах
+            if value.size > max_size:
+                raise serializers.ValidationError("Размер файла не должен превышать 100 МБ")
+        
+        return value
+    
+    def update(self, instance, validated_data):
+        """Обновление ресурса"""
+        # Если загружается новый файл, обновляем метаданные
+        if 'file' in validated_data and validated_data['file']:
+            file = validated_data['file']
+            validated_data['file_size'] = file.size
+            validated_data['file_type'] = file.content_type or 'application/octet-stream'
+        
+        # Обновляем поля
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        
+        instance.save()
+        return instance

@@ -6,7 +6,9 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Avg, Count, Q
 from django.utils import timezone
+from django.http import HttpResponse
 from datetime import timedelta
+from django.db import models
 from .base_views import (
     BaseLMSViewSet, UserOwnedViewSet, SubjectRelatedViewSet, 
     ReadOnlyLMSViewSet, ToggleVisibilityMixin, OrderingMixin
@@ -16,7 +18,7 @@ from .analytics import AnalyticsService
 from .models import (
     Student, Teacher, StudentGroup, Subject, Grade, Theme,
     Lesson, Test, TestAttempt, SubmittedAssignment, UserRole,
-    UserProfile, CourseCategory, CourseFormat, Enrollment, CourseFile,
+    UserProfile, CourseCategory, CourseFormat, Enrollment, CourseFile, Resource,
     Forum, ForumDiscussion, ForumPost, CalendarEvent,
     Badge, UserBadge, Notification, PrivateMessage,
     TestBank, Question, Answer, Assignment
@@ -27,7 +29,8 @@ from .serializers import (
     LessonSerializer, TestSerializer, TestAttemptSerializer,
     SubmittedAssignmentSerializer, UserProfileSerializer,
     CourseCategorySerializer, CourseFormatSerializer, EnrollmentSerializer,
-    CourseFileSerializer, ForumSerializer, ForumDiscussionSerializer,
+    CourseFileSerializer, ResourceSerializer, CreateResourceSerializer, UpdateResourceSerializer,
+    ForumSerializer, ForumDiscussionSerializer,
     ForumPostSerializer, CalendarEventSerializer, BadgeSerializer,
     UserBadgeSerializer, NotificationSerializer, PrivateMessageSerializer,
     CreateSubjectSerializer, UpdateSubjectSerializer, CreateForumSerializer, CreateAssignmentSerializer,
@@ -434,6 +437,27 @@ class ThemeViewSet(SubjectRelatedViewSet, ToggleVisibilityMixin, OrderingMixin):
             return UpdateThemeSerializer
         return ThemeSerializer
     
+    def perform_create(self, serializer):
+        """Создание темы с проверкой прав"""
+        user = self.request.user
+        user_roles = user.roles.values_list('role', flat=True)
+        subject = serializer.validated_data.get('subject')
+        
+        print(f"🔍 ThemeViewSet.perform_create() для пользователя: {user.username}")
+        print(f"🔍 Роли пользователя: {list(user_roles)}")
+        print(f"🔍 Данные для создания темы: {serializer.validated_data}")
+        print(f"🔍 Курс для темы: {subject}")
+        
+        # Проверяем права на создание темы
+        if 'admin' not in user_roles:
+            if not subject:
+                raise ValidationError({'subject': 'Курс обязателен'})
+            
+            if subject.teacher != user:
+                raise PermissionDenied('У вас нет прав для создания темы в этом курсе')
+        
+        serializer.save()
+    
     @action(detail=True, methods=['post'])
     def reorder_lessons(self, request, pk=None):
         """Изменение порядка уроков в теме"""
@@ -462,6 +486,45 @@ class ThemeViewSet(SubjectRelatedViewSet, ToggleVisibilityMixin, OrderingMixin):
                               status=status.HTTP_400_BAD_REQUEST)
         
         return Response({'message': 'Порядок уроков обновлен'}, status=status.HTTP_200_OK)
+    
+    @action(detail=False, methods=['post'])
+    def reorder_themes(self, request):
+        """Изменение порядка тем в курсе"""
+        subject_id = request.data.get('subject_id')
+        theme_ids = request.data.get('theme_ids', [])
+        
+        if not subject_id:
+            return Response({'error': 'subject_id обязателен'}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        if not theme_ids:
+            return Response({'error': 'Список ID тем не может быть пустым'}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            subject = Subject.objects.get(id=subject_id)
+        except Subject.DoesNotExist:
+            return Response({'error': 'Курс не найден'}, 
+                          status=status.HTTP_404_NOT_FOUND)
+        
+        # Проверяем права
+        user = request.user
+        user_roles = user.roles.values_list('role', flat=True)
+        if 'admin' not in user_roles and subject.teacher != user:
+            return Response({'error': 'У вас нет прав для изменения порядка тем'}, 
+                          status=status.HTTP_403_FORBIDDEN)
+        
+        # Обновляем порядок
+        for index, theme_id in enumerate(theme_ids):
+            try:
+                theme = Theme.objects.get(id=theme_id, subject=subject)
+                theme.sort_order = index + 1
+                theme.save()
+            except Theme.DoesNotExist:
+                return Response({'error': f'Тема с ID {theme_id} не найдена в этом курсе'}, 
+                              status=status.HTTP_400_BAD_REQUEST)
+        
+        return Response({'message': 'Порядок тем обновлен'}, status=status.HTTP_200_OK)
 
 class LessonViewSet(viewsets.ModelViewSet):
     """ViewSet для уроков"""
@@ -1028,3 +1091,136 @@ class UserRoleViewSet(viewsets.ModelViewSet):
             'message': f'Роль переключена на {role_name}',
             'role': role_name
         })
+
+class ResourceViewSet(viewsets.ModelViewSet):
+    """ViewSet для ресурсов (файлов)"""
+    serializer_class = ResourceSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['subject', 'theme', 'lesson', 'file_type', 'is_visible']
+    search_fields = ['name', 'description']
+    ordering_fields = ['sort_order', 'uploaded_at', 'name']
+    ordering = ['sort_order', 'name']
+    
+    def get_queryset(self):
+        """Фильтрация ресурсов по правам доступа"""
+        user = self.request.user
+        user_roles = user.roles.values_list('role', flat=True)
+        
+        if 'admin' in user_roles:
+            # Админы видят все ресурсы
+            return Resource.objects.all()
+        
+        # Получаем доступные курсы для пользователя
+        accessible_subjects = get_user_accessible_subjects(user)
+        
+        # Фильтруем ресурсы по доступным курсам
+        return Resource.objects.filter(
+            models.Q(subject__in=accessible_subjects) |
+            models.Q(theme__subject__in=accessible_subjects) |
+            models.Q(lesson__theme__subject__in=accessible_subjects)
+        ).filter(is_visible=True).distinct()
+    
+    def get_serializer_class(self):
+        """Выбор сериализатора в зависимости от действия"""
+        if self.action == 'create':
+            return CreateResourceSerializer
+        elif self.action in ['update', 'partial_update']:
+            return UpdateResourceSerializer
+        return ResourceSerializer
+    
+    def perform_create(self, serializer):
+        """Создание ресурса с установкой автора"""
+        user = self.request.user
+        user_roles = user.roles.values_list('role', flat=True)
+        
+        print(f"🔍 ResourceViewSet.perform_create() для пользователя: {user.username}")
+        print(f"🔍 Роли пользователя: {list(user_roles)}")
+        
+        # Устанавливаем автора
+        serializer.save(uploaded_by=user)
+        
+        print(f"✅ Ресурс '{serializer.instance.name}' успешно создан")
+    
+    @action(detail=True, methods=['get'])
+    def download(self, request, pk=None):
+        """Скачивание ресурса"""
+        resource = self.get_object()
+        
+        # Увеличиваем счетчик скачиваний
+        resource.download_count += 1
+        resource.save()
+        
+        # Возвращаем URL файла для скачивания
+        if resource.file:
+            response = HttpResponse(
+                resource.file.read(), 
+                content_type=resource.file_type
+            )
+            response['Content-Disposition'] = f'attachment; filename="{resource.name}"'
+            return response
+        else:
+            return Response(
+                {'error': 'Файл не найден'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+    
+    @action(detail=True, methods=['patch'])
+    def toggle_visibility(self, request, pk=None):
+        """Переключение видимости ресурса"""
+        resource = self.get_object()
+        
+        # Проверяем права (только автор или преподаватель курса может скрывать/показывать)
+        user = request.user
+        user_roles = user.roles.values_list('role', flat=True)
+        
+        can_edit = False
+        if 'admin' in user_roles:
+            can_edit = True
+        elif resource.uploaded_by == user:
+            can_edit = True
+        elif resource.subject and resource.subject.teacher == user:
+            can_edit = True
+        elif resource.theme and resource.theme.subject.teacher == user:
+            can_edit = True
+        elif resource.lesson and resource.lesson.theme.subject.teacher == user:
+            can_edit = True
+        
+        if not can_edit:
+            return Response(
+                {'error': 'У вас нет прав для изменения видимости этого ресурса'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        resource.is_visible = not resource.is_visible
+        resource.save()
+        
+        action_text = 'показан' if resource.is_visible else 'скрыт'
+        return Response({
+            'message': f'Ресурс "{resource.name}" {action_text}',
+            'is_visible': resource.is_visible
+        })
+    
+    @action(detail=False, methods=['get'])
+    def by_context(self, request):
+        """Получение ресурсов по контексту (курс/тема/урок)"""
+        subject_id = request.query_params.get('subject')
+        theme_id = request.query_params.get('theme')
+        lesson_id = request.query_params.get('lesson')
+        
+        queryset = self.get_queryset()
+        
+        if lesson_id:
+            queryset = queryset.filter(lesson_id=lesson_id)
+        elif theme_id:
+            queryset = queryset.filter(theme_id=theme_id, lesson__isnull=True)
+        elif subject_id:
+            queryset = queryset.filter(subject_id=subject_id, theme__isnull=True, lesson__isnull=True)
+        else:
+            return Response(
+                {'error': 'Необходимо указать subject, theme или lesson'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)

@@ -184,7 +184,31 @@ class Lesson(models.Model):
     sort_order = models.IntegerField(default=0)
     is_visible = models.BooleanField(default=True)
 
-# Файлы и ресурсы курса
+# Ресурсы (файлы) - могут принадлежать курсу, теме или уроку
+class Resource(models.Model):
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    file = models.FileField(upload_to='resources/')
+    file_size = models.BigIntegerField()
+    file_type = models.CharField(max_length=100)
+    uploaded_by = models.ForeignKey(User, on_delete=models.CASCADE)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    download_count = models.IntegerField(default=0)
+    is_visible = models.BooleanField(default=True)
+    sort_order = models.IntegerField(default=0)
+    
+    # Гибкая привязка - ресурс может принадлежать курсу, теме или уроку
+    subject = models.ForeignKey(Subject, on_delete=models.CASCADE, null=True, blank=True, related_name='resources')
+    theme = models.ForeignKey(Theme, on_delete=models.CASCADE, null=True, blank=True, related_name='resources')
+    lesson = models.ForeignKey(Lesson, on_delete=models.CASCADE, null=True, blank=True, related_name='resources')
+    
+    def __str__(self):
+        return self.name
+    
+    class Meta:
+        ordering = ['sort_order', 'name']
+
+# Файлы и ресурсы курса (оставляем для обратной совместимости)
 class CourseFile(models.Model):
     subject = models.ForeignKey(Subject, on_delete=models.CASCADE, related_name='files')
     lesson = models.ForeignKey(Lesson, on_delete=models.CASCADE, null=True, blank=True, related_name='files')
@@ -207,7 +231,6 @@ class Forum(models.Model):
         ('each_person', 'Каждый участник создает одну тему'),
     ]
     
-    subject = models.ForeignKey(Subject, on_delete=models.CASCADE, related_name='forums')
     name = models.CharField(max_length=255)
     description = models.TextField()
     forum_type = models.CharField(max_length=20, choices=FORUM_TYPES, default='general')
@@ -215,6 +238,12 @@ class Forum(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     is_locked = models.BooleanField(default=False)
     allow_subscriptions = models.BooleanField(default=True)
+    sort_order = models.IntegerField(default=0)
+    
+    # Гибкая привязка - форум может принадлежать курсу, теме или уроку
+    subject = models.ForeignKey(Subject, on_delete=models.CASCADE, null=True, blank=True, related_name='forums')
+    theme = models.ForeignKey(Theme, on_delete=models.CASCADE, null=True, blank=True, related_name='forums')
+    lesson = models.ForeignKey(Lesson, on_delete=models.CASCADE, null=True, blank=True, related_name='forums')
     
     def __str__(self):
         return self.name
@@ -321,8 +350,12 @@ class Test(models.Model):
     description = models.TextField(default='')
     creationdate = models.DateField(default=timezone.now)
     lastupdate = models.DateTimeField(default=timezone.now)
-    lesson = models.ForeignKey(Lesson, on_delete=models.CASCADE)
     timelimit = models.IntegerField(default=0)
+    
+    # Гибкая привязка - тест может принадлежать курсу, теме или уроку
+    subject = models.ForeignKey(Subject, on_delete=models.CASCADE, null=True, blank=True, related_name='tests')
+    theme = models.ForeignKey(Theme, on_delete=models.CASCADE, null=True, blank=True, related_name='tests')
+    lesson = models.ForeignKey(Lesson, on_delete=models.CASCADE, null=True, blank=True, related_name='tests')
     
     class TestType(models.TextChoices):
         close = 'C'
@@ -444,7 +477,11 @@ class Assignment(models.Model):
     deadline = models.DateField(default=timezone.now)
     creationdate = models.DateField(default=timezone.now)
     lastupdate = models.DateTimeField(default=timezone.now)
-    lesson = models.ForeignKey(Lesson, on_delete=models.CASCADE)
+    
+    # Гибкая привязка - задание может принадлежать курсу, теме или уроку
+    subject = models.ForeignKey(Subject, on_delete=models.CASCADE, null=True, blank=True, related_name='assignments')
+    theme = models.ForeignKey(Theme, on_delete=models.CASCADE, null=True, blank=True, related_name='assignments')
+    lesson = models.ForeignKey(Lesson, on_delete=models.CASCADE, null=True, blank=True, related_name='assignments')
     
     # Дополнительные поля
     max_grade = models.IntegerField(default=100)
