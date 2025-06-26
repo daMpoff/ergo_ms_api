@@ -37,7 +37,8 @@ from .serializers import (
     StudentStatsSerializer, TeacherStatsSerializer, TestBankSerializer,
     QuestionSerializer, AnswerSerializer, AssignmentSerializer,
     UserRoleSerializer, CreateLessonSerializer, UpdateLessonSerializer,
-    CreateThemeSerializer, UpdateThemeSerializer, CreateTestSerializer, UpdateTestSerializer
+    CreateThemeSerializer, UpdateThemeSerializer, CreateTestSerializer, UpdateTestSerializer,
+    CreateQuestionSerializer, CreateAnswerSerializer
 )
 
 class UserProfileViewSet(UserOwnedViewSet):
@@ -740,21 +741,33 @@ class TestViewSet(viewsets.ModelViewSet):
     serializer_class = TestSerializer
     permission_classes = [permissions.IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter]
-    filterset_fields = ['lesson', 'type', 'is_active']
+    filterset_fields = ['lesson', 'theme', 'subject', 'type', 'is_active']
     search_fields = ['name', 'title', 'description']
     
     def get_queryset(self):
         user = self.request.user
-        if hasattr(user, 'teacher'):
-            return Test.objects.filter(lesson__theme__subject__teacher=user)
+        user_roles = user.roles.values_list('role', flat=True)
+        
+        if 'admin' in user_roles:
+            return Test.objects.all()
+        elif 'teacher' in user_roles:
+            # Преподаватели видят тесты своих курсов (привязанные к любому уровню)
+            return Test.objects.filter(
+                Q(subject__teacher=user) |
+                Q(theme__subject__teacher=user) |
+                Q(lesson__theme__subject__teacher=user)
+            ).distinct()
         else:
+            # Студенты видят тесты курсов, на которые они записаны
             enrolled_subjects = Enrollment.objects.filter(
                 student=user, status='active'
             ).values_list('subject', flat=True)
             return Test.objects.filter(
-                lesson__theme__subject__in=enrolled_subjects,
+                Q(subject__in=enrolled_subjects) |
+                Q(theme__subject__in=enrolled_subjects) |
+                Q(lesson__theme__subject__in=enrolled_subjects),
                 is_active=True
-            )
+            ).distinct()
     
     def get_serializer_class(self):
         if self.action == 'create':
@@ -788,6 +801,58 @@ class TestViewSet(viewsets.ModelViewSet):
         
         serializer = TestAttemptSerializer(attempt)
         return Response(serializer.data)
+    
+    @action(detail=False, methods=['post'])
+    def reorder_tests(self, request):
+        """Изменение порядка тестов"""
+        test_ids = request.data.get('test_ids', [])
+        context = request.data.get('context', {})  # {subject_id: id, theme_id: id, lesson_id: id}
+        
+        if not test_ids:
+            return Response({'error': 'Список ID тестов не может быть пустым'}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        # Проверяем права
+        user = request.user
+        user_roles = user.roles.values_list('role', flat=True)
+        
+        if 'admin' not in user_roles and 'teacher' not in user_roles:
+            return Response({'error': 'У вас нет прав для изменения порядка тестов'}, 
+                          status=status.HTTP_403_FORBIDDEN)
+        
+        # Дополнительная проверка прав для teacher
+        if 'admin' not in user_roles:
+            # Проверяем, что все тесты принадлежат преподавателю
+            for test_id in test_ids:
+                try:
+                    test = Test.objects.get(id=test_id)
+                    # Проверяем права на основе привязки теста
+                    has_permission = False
+                    if test.subject and test.subject.teacher == user:
+                        has_permission = True
+                    elif test.theme and test.theme.subject.teacher == user:
+                        has_permission = True
+                    elif test.lesson and test.lesson.theme.subject.teacher == user:
+                        has_permission = True
+                    
+                    if not has_permission:
+                        return Response({'error': f'У вас нет прав на тест с ID {test_id}'}, 
+                                      status=status.HTTP_403_FORBIDDEN)
+                except Test.DoesNotExist:
+                    return Response({'error': f'Тест с ID {test_id} не найден'}, 
+                                  status=status.HTTP_400_BAD_REQUEST)
+        
+        # Обновляем порядок
+        for index, test_id in enumerate(test_ids):
+            try:
+                test = Test.objects.get(id=test_id)
+                test.sort_order = index + 1
+                test.save()
+            except Test.DoesNotExist:
+                return Response({'error': f'Тест с ID {test_id} не найден'}, 
+                              status=status.HTTP_400_BAD_REQUEST)
+        
+        return Response({'message': 'Порядок тестов обновлен'}, status=status.HTTP_200_OK)
 
 class TestAttemptViewSet(viewsets.ModelViewSet):
     """ViewSet для попыток прохождения тестов"""
@@ -802,27 +867,91 @@ class AssignmentViewSet(viewsets.ModelViewSet):
     serializer_class = AssignmentSerializer
     permission_classes = [permissions.IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ['lesson']
+    filterset_fields = ['lesson', 'theme', 'subject']
     search_fields = ['title', 'description']
     ordering_fields = ['deadline', 'creationdate']
     ordering = ['deadline']
     
     def get_queryset(self):
         user = self.request.user
-        if hasattr(user, 'teacher'):
-            return Assignment.objects.filter(lesson__theme__subject__teacher=user)
+        user_roles = user.roles.values_list('role', flat=True)
+        
+        if 'admin' in user_roles:
+            return Assignment.objects.all()
+        elif 'teacher' in user_roles:
+            # Преподаватели видят задания своих курсов (привязанные к любому уровню)
+            return Assignment.objects.filter(
+                Q(subject__teacher=user) |
+                Q(theme__subject__teacher=user) |
+                Q(lesson__theme__subject__teacher=user)
+            ).distinct()
         else:
+            # Студенты видят задания курсов, на которые они записаны
             enrolled_subjects = Enrollment.objects.filter(
                 student=user, status='active'
             ).values_list('subject', flat=True)
             return Assignment.objects.filter(
-                lesson__theme__subject__in=enrolled_subjects
-            )
+                Q(subject__in=enrolled_subjects) |
+                Q(theme__subject__in=enrolled_subjects) |
+                Q(lesson__theme__subject__in=enrolled_subjects)
+            ).distinct()
     
     def get_serializer_class(self):
         if self.action in ['create', 'update', 'partial_update']:
             return CreateAssignmentSerializer
         return AssignmentSerializer
+    
+    @action(detail=False, methods=['post'])
+    def reorder_assignments(self, request):
+        """Изменение порядка заданий"""
+        assignment_ids = request.data.get('assignment_ids', [])
+        context = request.data.get('context', {})  # {subject_id: id, theme_id: id, lesson_id: id}
+        
+        if not assignment_ids:
+            return Response({'error': 'Список ID заданий не может быть пустым'}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        # Проверяем права
+        user = request.user
+        user_roles = user.roles.values_list('role', flat=True)
+        
+        if 'admin' not in user_roles and 'teacher' not in user_roles:
+            return Response({'error': 'У вас нет прав для изменения порядка заданий'}, 
+                          status=status.HTTP_403_FORBIDDEN)
+        
+        # Дополнительная проверка прав для teacher
+        if 'admin' not in user_roles:
+            # Проверяем, что все задания принадлежат преподавателю
+            for assignment_id in assignment_ids:
+                try:
+                    assignment = Assignment.objects.get(id=assignment_id)
+                    # Проверяем права на основе привязки задания
+                    has_permission = False
+                    if assignment.subject and assignment.subject.teacher == user:
+                        has_permission = True
+                    elif assignment.theme and assignment.theme.subject.teacher == user:
+                        has_permission = True
+                    elif assignment.lesson and assignment.lesson.theme.subject.teacher == user:
+                        has_permission = True
+                    
+                    if not has_permission:
+                        return Response({'error': f'У вас нет прав на задание с ID {assignment_id}'}, 
+                                      status=status.HTTP_403_FORBIDDEN)
+                except Assignment.DoesNotExist:
+                    return Response({'error': f'Задание с ID {assignment_id} не найдено'}, 
+                                  status=status.HTTP_400_BAD_REQUEST)
+        
+        # Обновляем порядок
+        for index, assignment_id in enumerate(assignment_ids):
+            try:
+                assignment = Assignment.objects.get(id=assignment_id)
+                assignment.sort_order = index + 1
+                assignment.save()
+            except Assignment.DoesNotExist:
+                return Response({'error': f'Задание с ID {assignment_id} не найдено'}, 
+                              status=status.HTTP_400_BAD_REQUEST)
+        
+        return Response({'message': 'Порядок заданий обновлен'}, status=status.HTTP_200_OK)
 
 class SubmittedAssignmentViewSet(viewsets.ModelViewSet):
     """ViewSet для сданных заданий"""
@@ -1091,6 +1220,69 @@ class UserRoleViewSet(viewsets.ModelViewSet):
             'message': f'Роль переключена на {role_name}',
             'role': role_name
         })
+
+class QuestionViewSet(viewsets.ModelViewSet):
+    """ViewSet для вопросов теста"""
+    serializer_class = QuestionSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['test', 'type', 'difficulty']
+    search_fields = ['text']
+    ordering_fields = ['lastupdate']
+    ordering = ['id']
+    
+    def get_queryset(self):
+        """Фильтрация вопросов по правам доступа"""
+        user = self.request.user
+        user_roles = user.roles.values_list('role', flat=True)
+        
+        if 'admin' in user_roles:
+            return Question.objects.all()
+        elif 'teacher' in user_roles:
+            # Преподаватели видят вопросы своих тестов
+            return Question.objects.filter(
+                Q(test__subject__teacher=user) |
+                Q(test__theme__subject__teacher=user) |
+                Q(test__lesson__theme__subject__teacher=user)
+            ).distinct()
+        else:
+            # Студенты не могут управлять вопросами
+            return Question.objects.none()
+    
+    def get_serializer_class(self):
+        if self.action in ['create', 'update', 'partial_update']:
+            return CreateQuestionSerializer
+        return QuestionSerializer
+
+class AnswerViewSet(viewsets.ModelViewSet):
+    """ViewSet для вариантов ответов"""
+    serializer_class = AnswerSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['question', 'is_correct']
+    
+    def get_queryset(self):
+        """Фильтрация ответов по правам доступа"""
+        user = self.request.user
+        user_roles = user.roles.values_list('role', flat=True)
+        
+        if 'admin' in user_roles:
+            return Answer.objects.all()
+        elif 'teacher' in user_roles:
+            # Преподаватели видят ответы вопросов своих тестов
+            return Answer.objects.filter(
+                Q(question__test__subject__teacher=user) |
+                Q(question__test__theme__subject__teacher=user) |
+                Q(question__test__lesson__theme__subject__teacher=user)
+            ).distinct()
+        else:
+            # Студенты не могут управлять ответами
+            return Answer.objects.none()
+    
+    def get_serializer_class(self):
+        if self.action in ['create', 'update', 'partial_update']:
+            return CreateAnswerSerializer
+        return AnswerSerializer
 
 class ResourceViewSet(viewsets.ModelViewSet):
     """ViewSet для ресурсов (файлов)"""

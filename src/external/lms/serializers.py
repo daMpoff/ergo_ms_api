@@ -1250,3 +1250,110 @@ class UpdateResourceSerializer(serializers.ModelSerializer):
         
         instance.save()
         return instance
+
+class CreateQuestionSerializer(serializers.ModelSerializer):
+    """Сериализатор для создания вопроса"""
+    answers = serializers.ListField(child=serializers.DictField(), write_only=True, required=False)
+    
+    class Meta:
+        model = Question
+        exclude = ['lastupdate']
+    
+    def validate_text(self, value):
+        """Валидация текста вопроса"""
+        if not value or len(value.strip()) < 5:
+            raise serializers.ValidationError("Текст вопроса должен содержать минимум 5 символов")
+        
+        if len(value) > 2000:
+            raise serializers.ValidationError("Текст вопроса не должен превышать 2000 символов")
+            
+        return value.strip()
+    
+    def validate_points(self, value):
+        """Валидация баллов"""
+        if value < 1 or value > 100:
+            raise serializers.ValidationError("Количество баллов должно быть от 1 до 100")
+        return value
+    
+    def validate_type(self, value):
+        """Валидация типа вопроса"""
+        if value not in ['S', 'M', 'O', 'TF', 'MATCH']:
+            raise serializers.ValidationError("Недопустимый тип вопроса")
+        return value
+    
+    def validate(self, attrs):
+        """Комплексная валидация"""
+        question_type = attrs.get('type')
+        answers = attrs.get('answers', [])
+        
+        # Для закрытых вопросов требуются варианты ответов
+        if question_type in ['S', 'M', 'TF'] and not answers:
+            raise serializers.ValidationError({
+                'answers': 'Для закрытых вопросов требуются варианты ответов'
+            })
+        
+        # Для одиночного выбора должен быть ровно один правильный ответ
+        if question_type == 'S':
+            correct_count = sum(1 for ans in answers if ans.get('is_correct'))
+            if correct_count != 1:
+                raise serializers.ValidationError({
+                    'answers': 'Для вопроса с одним ответом должен быть выбран ровно один правильный вариант'
+                })
+        
+        # Для множественного выбора должен быть хотя бы один правильный ответ
+        if question_type == 'M':
+            correct_count = sum(1 for ans in answers if ans.get('is_correct'))
+            if correct_count < 1:
+                raise serializers.ValidationError({
+                    'answers': 'Для вопроса с множественным выбором должен быть выбран хотя бы один правильный вариант'
+                })
+        
+        # Для True/False должно быть ровно 2 варианта
+        if question_type == 'TF':
+            if len(answers) != 2:
+                raise serializers.ValidationError({
+                    'answers': 'Для вопроса Верно/Неверно должно быть ровно 2 варианта ответа'
+                })
+            correct_count = sum(1 for ans in answers if ans.get('is_correct'))
+            if correct_count != 1:
+                raise serializers.ValidationError({
+                    'answers': 'Для вопроса Верно/Неверно должен быть выбран ровно один правильный вариант'
+                })
+        
+        return attrs
+    
+    def create(self, validated_data):
+        """Создание вопроса с ответами"""
+        answers_data = validated_data.pop('answers', [])
+        
+        # Автоматически устанавливаем lastupdate
+        validated_data['lastupdate'] = timezone.now()
+        
+        question = Question.objects.create(**validated_data)
+        
+        # Создаем варианты ответов
+        for answer_data in answers_data:
+            Answer.objects.create(
+                question=question,
+                text=answer_data.get('text', ''),
+                is_correct=answer_data.get('is_correct', False)
+            )
+        
+        return question
+
+class CreateAnswerSerializer(serializers.ModelSerializer):
+    """Сериализатор для создания варианта ответа"""
+    
+    class Meta:
+        model = Answer
+        exclude = ['created_at', 'updated_at']
+    
+    def validate_text(self, value):
+        """Валидация текста ответа"""
+        if not value or len(value.strip()) < 1:
+            raise serializers.ValidationError("Текст ответа не может быть пустым")
+        
+        if len(value) > 500:
+            raise serializers.ValidationError("Текст ответа не должен превышать 500 символов")
+            
+        return value.strip()

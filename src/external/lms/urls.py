@@ -7,7 +7,8 @@ from src.external.lms.views import (
     ForumPostViewSet, TestBankViewSet, TestViewSet, TestAttemptViewSet,
     AssignmentViewSet, SubmittedAssignmentViewSet,
     CalendarEventViewSet, BadgeViewSet, UserBadgeViewSet,
-    NotificationViewSet, PrivateMessageViewSet, UserRoleViewSet
+    NotificationViewSet, PrivateMessageViewSet, UserRoleViewSet,
+    QuestionViewSet, AnswerViewSet
 )
 
 app_name = 'lms'
@@ -30,6 +31,8 @@ router.register(r'discussions', ForumDiscussionViewSet, basename='forumdiscussio
 router.register(r'posts', ForumPostViewSet, basename='forumpost')
 router.register(r'test-banks', TestBankViewSet, basename='testbank')
 router.register(r'tests', TestViewSet, basename='test')
+router.register(r'questions', QuestionViewSet, basename='question')
+router.register(r'answers', AnswerViewSet, basename='answer')
 router.register(r'test-attempts', TestAttemptViewSet, basename='testattempt')
 router.register(r'assignments', AssignmentViewSet, basename='assignment')
 router.register(r'submitted-assignments', SubmittedAssignmentViewSet, basename='submittedassignment')

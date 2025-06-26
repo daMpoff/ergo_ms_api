@@ -368,6 +368,7 @@ class Test(models.Model):
     duration_minutes = models.IntegerField(default=60)
     passing_score = models.IntegerField(default=70)
     is_active = models.BooleanField(default=True)
+    sort_order = models.IntegerField(default=0)
     
     # Новые поля для тестов
     max_attempts = models.IntegerField(default=1)
@@ -375,6 +376,9 @@ class Test(models.Model):
     randomize_questions = models.BooleanField(default=False)
     available_from = models.DateTimeField(null=True, blank=True)
     available_until = models.DateTimeField(null=True, blank=True)
+    
+    class Meta:
+        ordering = ['sort_order', 'creationdate']
 
 class Question(models.Model):
     text = models.TextField(default='')
@@ -492,6 +496,10 @@ class Assignment(models.Model):
         ('both', 'Файл и текст')
     ], default='file')
     max_file_size = models.IntegerField(default=10485760)  # 10MB in bytes
+    sort_order = models.IntegerField(default=0)
+    
+    class Meta:
+        ordering = ['sort_order', 'deadline']
 
 class SubmittedAssignment(models.Model):
     submittedassignment = models.BinaryField(default=b'\x08')
