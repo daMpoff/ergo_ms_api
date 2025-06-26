@@ -8,7 +8,8 @@ from .models import (
     StudentAnswer, StudentAnswerSelection, Assignment,
     SubmittedAssignment, UserRole, UserProfile, CourseCategory,
     CourseFormat, Enrollment, CourseFile, Resource, Forum, ForumDiscussion, ForumPost,
-    CalendarEvent, Badge, UserBadge, Notification, PrivateMessage
+    CalendarEvent, Badge, UserBadge, Notification, PrivateMessage,
+    LessonItem
 )
 from django.utils import timezone
 from .base_serializers import (
@@ -471,6 +472,7 @@ class CreateTestSerializer(serializers.ModelSerializer):
         validated_data.setdefault('is_active', True)
         validated_data.setdefault('show_correct_answers', False)
         validated_data.setdefault('randomize_questions', False)
+        validated_data.setdefault('sort_order', 0)
         
         return super().create(validated_data)
 
@@ -526,6 +528,11 @@ class UpdateTestSerializer(serializers.ModelSerializer):
         if value is not None and value < 1:
             raise serializers.ValidationError("Максимальное количество попыток должно быть больше 0.")
         return value
+    
+    def validate_sort_order(self, value):
+        if value is not None and value < 0:
+            raise serializers.ValidationError("Порядок сортировки не может быть отрицательным.")
+        return value or 0
     
     def validate(self, attrs):
         # Валидация дат доступности
@@ -697,8 +704,14 @@ class CreateForumSerializer(serializers.ModelSerializer):
         model = Forum
         exclude = ['created_by', 'created_at']
     
+    def validate_sort_order(self, value):
+        if value is not None and value < 0:
+            raise serializers.ValidationError("Порядок сортировки не может быть отрицательным.")
+        return value or 0
+    
     def create(self, validated_data):
         validated_data['created_by'] = self.context['request'].user
+        validated_data.setdefault('sort_order', 0)
         return super().create(validated_data)
 
 class CreateAssignmentSerializer(serializers.ModelSerializer):
@@ -727,6 +740,11 @@ class CreateAssignmentSerializer(serializers.ModelSerializer):
         if value is not None and value < 1024:  # Минимум 1KB
             raise serializers.ValidationError("Максимальный размер файла должен быть больше 1KB.")
         return value
+    
+    def validate_sort_order(self, value):
+        if value is not None and value < 0:
+            raise serializers.ValidationError("Порядок сортировки не может быть отрицательным.")
+        return value or 0
     
     def validate(self, attrs):
         # Валидация даты крайнего срока
@@ -790,6 +808,7 @@ class CreateAssignmentSerializer(serializers.ModelSerializer):
         validated_data.setdefault('allow_late_submissions', False)
         validated_data.setdefault('submission_type', 'file')
         validated_data.setdefault('max_file_size', 10485760)  # 10MB
+        validated_data.setdefault('sort_order', 0)
         
         return Assignment.objects.create(**validated_data)
 
@@ -1150,6 +1169,12 @@ class CreateResourceSerializer(serializers.ModelSerializer):
         
         return value
     
+    def validate_sort_order(self, value):
+        """Валидация порядка сортировки"""
+        if value is not None and value < 0:
+            raise serializers.ValidationError("Порядок сортировки не может быть отрицательным")
+        return value or 0
+    
     def validate(self, attrs):
         """Комплексная валидация"""
         subject = attrs.get('subject')
@@ -1199,6 +1224,10 @@ class CreateResourceSerializer(serializers.ModelSerializer):
                 )['max_order']
             
             validated_data['sort_order'] = (max_order or 0) + 1
+        
+        # Устанавливаем значение по умолчанию как fallback
+        validated_data.setdefault('sort_order', 0)
+        validated_data['uploaded_by'] = self.context['request'].user
         
         return Resource.objects.create(**validated_data)
 
@@ -1357,3 +1386,152 @@ class CreateAnswerSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Текст ответа не должен превышать 500 символов")
             
         return value.strip()
+
+# Сериализатор для изменения порядка элементов урока
+class LessonItemReorderSerializer(serializers.Serializer):
+    """Сериализатор для изменения порядка элементов урока"""
+    lesson_id = serializers.IntegerField()
+    items = serializers.ListField(
+        child=serializers.DictField(
+            child=serializers.CharField(),
+            required=True
+        ),
+        min_length=1
+    )
+    
+    def validate_items(self, value):
+        """Валидация списка элементов"""
+        if not value:
+            raise serializers.ValidationError("Список элементов не может быть пустым")
+        
+        # Проверяем наличие обязательных полей в каждом элементе
+        for item in value:
+            if 'id' not in item:
+                raise serializers.ValidationError("Каждый элемент должен содержать поле 'id'")
+            if 'sort_order' not in item:
+                raise serializers.ValidationError("Каждый элемент должен содержать поле 'sort_order'")
+        
+        return value
+    
+    def save(self):
+        """Сохранение нового порядка элементов"""
+        from .models import LessonItem
+        
+        lesson_id = self.validated_data['lesson_id']
+        items_data = self.validated_data['items']
+        
+        updated_items = []
+        
+        for item_data in items_data:
+            item_id = item_data['id']
+            sort_order = int(item_data['sort_order'])
+            
+            try:
+                # Определяем тип элемента по ID (может быть test_1, assignment_2, resource_3)
+                if item_id.startswith('test_'):
+                    test_id = int(item_id.replace('test_', ''))
+                    lesson_item = LessonItem.objects.get(lesson_id=lesson_id, test_id=test_id)
+                elif item_id.startswith('assignment_'):
+                    assignment_id = int(item_id.replace('assignment_', ''))
+                    lesson_item = LessonItem.objects.get(lesson_id=lesson_id, assignment_id=assignment_id)
+                elif item_id.startswith('resource_'):
+                    resource_id = int(item_id.replace('resource_', ''))
+                    lesson_item = LessonItem.objects.get(lesson_id=lesson_id, resource_id=resource_id)
+                else:
+                    # Попытка найти по ID самого LessonItem
+                    lesson_item = LessonItem.objects.get(id=int(item_id), lesson_id=lesson_id)
+                
+                lesson_item.sort_order = sort_order
+                lesson_item.save()
+                updated_items.append(lesson_item)
+                
+            except (LessonItem.DoesNotExist, ValueError):
+                continue  # Пропускаем элементы, которые не найдены
+        
+        return updated_items
+
+# Сериализаторы для унифицированного управления элементами урока
+class LessonItemSerializer(serializers.ModelSerializer):
+    """Сериализатор для просмотра элементов урока"""
+    content = serializers.SerializerMethodField()
+    display_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = LessonItem
+        fields = '__all__'
+    
+    def get_content(self, obj):
+        """Возвращает данные связанного объекта"""
+        content = obj.get_content_object()
+        if not content:
+            return None
+        
+        if obj.item_type == 'test':
+            return TestSerializer(content).data
+        elif obj.item_type == 'assignment':
+            return AssignmentSerializer(content).data
+        elif obj.item_type == 'resource':
+            return ResourceSerializer(content).data
+        return None
+    
+    def get_display_name(self, obj):
+        """Возвращает отображаемое имя элемента"""
+        return obj.get_display_name()
+
+class LessonItemReorderSerializer(serializers.Serializer):
+    """Сериализатор для изменения порядка элементов урока"""
+    lesson_id = serializers.IntegerField()
+    items = serializers.ListField(
+        child=serializers.DictField(child=serializers.IntegerField()),
+        help_text="Список элементов в формате [{'id': item_id, 'sort_order': order}, ...]"
+    )
+    
+    def validate_lesson_id(self, value):
+        """Валидация ID урока"""
+        try:
+            from .models import Lesson
+            lesson = Lesson.objects.get(id=value)
+            return value
+        except Lesson.DoesNotExist:
+            raise serializers.ValidationError("Урок не найден")
+    
+    def validate_items(self, value):
+        """Валидация элементов"""
+        if not value:
+            raise serializers.ValidationError("Список элементов не может быть пустым")
+        
+        item_ids = []
+        for item in value:
+            if 'id' not in item or 'sort_order' not in item:
+                raise serializers.ValidationError("Каждый элемент должен содержать 'id' и 'sort_order'")
+            
+            item_id = item['id']
+            if item_id in item_ids:
+                raise serializers.ValidationError(f"Дублирующийся ID элемента: {item_id}")
+            item_ids.append(item_id)
+            
+            if item['sort_order'] < 0:
+                raise serializers.ValidationError("Порядок сортировки не может быть отрицательным")
+        
+        return value
+    
+    def save(self):
+        """Обновляет порядок элементов урока"""
+        from .models import LessonItem
+        lesson_id = self.validated_data['lesson_id']
+        items = self.validated_data['items']
+        
+        # Получаем все элементы урока для валидации
+        lesson_items = LessonItem.objects.filter(lesson_id=lesson_id)
+        existing_ids = set(lesson_items.values_list('id', flat=True))
+        
+        # Проверяем, что все переданные ID существуют и принадлежат этому уроку
+        for item in items:
+            if item['id'] not in existing_ids:
+                raise serializers.ValidationError(f"Элемент с ID {item['id']} не найден в данном уроке")
+        
+        # Обновляем порядок
+        for item in items:
+            LessonItem.objects.filter(id=item['id']).update(sort_order=item['sort_order'])
+        
+        return lesson_items.order_by('sort_order')

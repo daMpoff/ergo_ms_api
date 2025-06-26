@@ -21,7 +21,7 @@ from .models import (
     UserProfile, CourseCategory, CourseFormat, Enrollment, CourseFile, Resource,
     Forum, ForumDiscussion, ForumPost, CalendarEvent,
     Badge, UserBadge, Notification, PrivateMessage,
-    TestBank, Question, Answer, Assignment
+    TestBank, Question, Answer, Assignment, LessonItem
 )
 from .serializers import (
     StudentSerializer, TeacherSerializer, StudentGroupSerializer,
@@ -38,7 +38,7 @@ from .serializers import (
     QuestionSerializer, AnswerSerializer, AssignmentSerializer,
     UserRoleSerializer, CreateLessonSerializer, UpdateLessonSerializer,
     CreateThemeSerializer, UpdateThemeSerializer, CreateTestSerializer, UpdateTestSerializer,
-    CreateQuestionSerializer, CreateAnswerSerializer
+    CreateQuestionSerializer, CreateAnswerSerializer, LessonItemSerializer, LessonItemReorderSerializer
 )
 
 class UserProfileViewSet(UserOwnedViewSet):
@@ -1056,7 +1056,7 @@ class PrivateMessageViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return PrivateMessage.objects.filter(
             Q(sender=self.request.user) | Q(recipient=self.request.user)
-)
+        )
 
 class AnalyticsViewSet(viewsets.ViewSet):
     """ViewSet для аналитики"""
@@ -1416,3 +1416,183 @@ class ResourceViewSet(viewsets.ModelViewSet):
         
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
+
+# ViewSet для унифицированного управления элементами урока
+class LessonItemViewSet(viewsets.ModelViewSet):
+    """ViewSet для элементов урока (тесты, задания, ресурсы)"""
+    serializer_class = LessonItemSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, OrderingFilter]
+    filterset_fields = ['lesson', 'item_type']
+    ordering_fields = ['sort_order', 'created_at']
+    ordering = ['sort_order', 'created_at']
+    
+    def get_queryset(self):
+        """Фильтрация элементов урока по правам доступа"""
+        user = self.request.user
+        user_roles = user.roles.values_list('role', flat=True)
+        
+        if 'admin' in user_roles:
+            return LessonItem.objects.all()
+        
+        # Получаем доступные курсы для пользователя
+        accessible_subjects = get_user_accessible_subjects(user)
+        
+        # Фильтруем элементы по доступным курсам
+        return LessonItem.objects.filter(
+            lesson__theme__subject__in=accessible_subjects
+        ).distinct()
+    
+    @action(detail=False, methods=['get'])
+    def by_lesson(self, request):
+        """Получение всех элементов конкретного урока"""
+        lesson_id = request.query_params.get('lesson_id')
+        
+        if not lesson_id:
+            return Response(
+                {'error': 'Необходимо указать lesson_id'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            lesson_id = int(lesson_id)
+        except ValueError:
+            return Response(
+                {'error': 'Некорректный lesson_id'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Проверяем доступ к уроку
+        queryset = self.get_queryset().filter(lesson_id=lesson_id)
+        
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['post'])
+    def reorder(self, request):
+        """Изменение порядка элементов урока через drag and drop"""
+        from .serializers import LessonItemReorderSerializer
+        
+        serializer = LessonItemReorderSerializer(data=request.data)
+        if serializer.is_valid():
+            # Проверяем права доступа к уроку
+            lesson_id = serializer.validated_data['lesson_id']
+            
+            try:
+                from .models import Lesson
+                lesson = Lesson.objects.get(id=lesson_id)
+                
+                # Проверяем права
+                user = request.user
+                user_roles = user.roles.values_list('role', flat=True)
+                
+                can_edit = False
+                if 'admin' in user_roles:
+                    can_edit = True
+                elif 'teacher' in user_roles and lesson.theme.subject.teacher == user:
+                    can_edit = True
+                
+                if not can_edit:
+                    return Response(
+                        {'error': 'У вас нет прав для изменения порядка элементов в этом уроке'}, 
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+                
+                # Обновляем порядок
+                updated_items = serializer.save()
+                
+                # Возвращаем обновленный список
+                response_serializer = LessonItemSerializer(updated_items, many=True)
+                return Response({
+                    'message': 'Порядок элементов урока обновлен',
+                    'items': response_serializer.data
+                })
+                
+            except Lesson.DoesNotExist:
+                return Response(
+                    {'error': 'Урок не найден'}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['post'])
+    def migrate_existing(self, request):
+        """Миграция существующих тестов, заданий и ресурсов в систему LessonItem"""
+        from .models import Test, Assignment, Resource, LessonItem
+        
+        user = request.user
+        user_roles = user.roles.values_list('role', flat=True)
+        
+        if 'admin' not in user_roles:
+            return Response(
+                {'error': 'Только администраторы могут выполнять миграцию'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        created_count = 0
+        
+        # Миграция тестов, привязанных к урокам
+        tests_to_migrate = Test.objects.filter(
+            lesson__isnull=False
+        ).exclude(
+            lesson_items__isnull=False
+        )
+        
+        for test in tests_to_migrate:
+            max_order = LessonItem.objects.filter(lesson=test.lesson).aggregate(
+                max_order=models.Max('sort_order')
+            )['max_order']
+            
+            LessonItem.objects.create(
+                lesson=test.lesson,
+                item_type='test',
+                test=test,
+                sort_order=(max_order or 0) + 1
+            )
+            created_count += 1
+        
+        # Миграция заданий, привязанных к урокам
+        assignments_to_migrate = Assignment.objects.filter(
+            lesson__isnull=False
+        ).exclude(
+            lesson_items__isnull=False
+        )
+        
+        for assignment in assignments_to_migrate:
+            max_order = LessonItem.objects.filter(lesson=assignment.lesson).aggregate(
+                max_order=models.Max('sort_order')
+            )['max_order']
+            
+            LessonItem.objects.create(
+                lesson=assignment.lesson,
+                item_type='assignment',
+                assignment=assignment,
+                sort_order=(max_order or 0) + 1
+            )
+            created_count += 1
+        
+        # Миграция ресурсов, привязанных к урокам
+        resources_to_migrate = Resource.objects.filter(
+            lesson__isnull=False
+        ).exclude(
+            lesson_items__isnull=False
+        )
+        
+        for resource in resources_to_migrate:
+            max_order = LessonItem.objects.filter(lesson=resource.lesson).aggregate(
+                max_order=models.Max('sort_order')
+            )['max_order']
+            
+            LessonItem.objects.create(
+                lesson=resource.lesson,
+                item_type='resource',
+                resource=resource,
+                sort_order=(max_order or 0) + 1
+            )
+            created_count += 1
+        
+        return Response({
+            'message': f'Миграция завершена. Создано {created_count} записей LessonItem',
+            'created_count': created_count
+        })

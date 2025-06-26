@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
 from django.core.validators import MinValueValidator, MaxValueValidator
+from django.core.exceptions import ValidationError
 
 
 # Роли пользователей в системе
@@ -550,3 +551,76 @@ class PrivateMessage(models.Model):
     
     def __str__(self):
         return f"{self.subject} - {self.sender} to {self.recipient}"
+
+
+# Унифицированная модель для элементов урока (тесты, задания, ресурсы)
+class LessonItem(models.Model):
+    ITEM_TYPE_CHOICES = [
+        ('test', 'Тест'),
+        ('assignment', 'Задание'),
+        ('resource', 'Ресурс'),
+    ]
+    
+    lesson = models.ForeignKey(Lesson, on_delete=models.CASCADE, related_name='lesson_items')
+    item_type = models.CharField(max_length=20, choices=ITEM_TYPE_CHOICES)
+    sort_order = models.IntegerField(default=0)
+    
+    # Гибкие связи - только одна из них должна быть заполнена
+    test = models.ForeignKey(Test, on_delete=models.CASCADE, null=True, blank=True, related_name='lesson_items')
+    assignment = models.ForeignKey(Assignment, on_delete=models.CASCADE, null=True, blank=True, related_name='lesson_items')
+    resource = models.ForeignKey(Resource, on_delete=models.CASCADE, null=True, blank=True, related_name='lesson_items')
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['sort_order', 'created_at']
+        unique_together = [
+            ['lesson', 'test'],
+            ['lesson', 'assignment'], 
+            ['lesson', 'resource']
+        ]
+    
+    def clean(self):
+        """Валидация: должен быть заполнен ровно один из типов элементов"""
+        filled_fields = sum([
+            bool(self.test),
+            bool(self.assignment),
+            bool(self.resource)
+        ])
+        
+        if filled_fields != 1:
+            raise ValidationError("Должен быть заполнен ровно один тип элемента")
+        
+        # Автоматически устанавливаем item_type на основе заполненного поля
+        if self.test:
+            self.item_type = 'test'
+        elif self.assignment:
+            self.item_type = 'assignment'
+        elif self.resource:
+            self.item_type = 'resource'
+    
+    def get_content_object(self):
+        """Возвращает связанный объект контента"""
+        if self.test:
+            return self.test
+        elif self.assignment:
+            return self.assignment
+        elif self.resource:
+            return self.resource
+        return None
+    
+    def get_display_name(self):
+        """Возвращает отображаемое имя элемента"""
+        content = self.get_content_object()
+        if not content:
+            return f"Элемент урока #{self.id}"
+        
+        if hasattr(content, 'title') and content.title:
+            return content.title
+        elif hasattr(content, 'name') and content.name:
+            return content.name
+        return f"{self.get_item_type_display()} #{content.id}"
+    
+    def __str__(self):
+        return f"{self.lesson.name} - {self.get_display_name()}"

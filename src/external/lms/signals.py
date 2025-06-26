@@ -3,11 +3,12 @@ from django.dispatch import receiver
 from django.contrib.auth.models import User
 from django.utils import timezone
 from datetime import timedelta
+from django.db import models
 
 from .models import (
     Grade, TestAttempt, SubmittedAssignment, Assignment,
     ForumPost, Enrollment, UserProfile, CalendarEvent,
-    Test, UserBadge
+    Test, UserBadge, LessonItem, Resource
 )
 from .services import (
     NotificationService, BadgeService, ProgressTrackingService,
@@ -272,4 +273,130 @@ def update_course_progress_for_all():
         ProgressTrackingService.calculate_course_progress(
             enrollment.student,
             enrollment.subject
-        ) 
+        )
+
+
+# Сигналы для автоматического управления LessonItem
+@receiver(post_save, sender=Test)
+def create_lesson_item_for_test(sender, instance, created, **kwargs):
+    """Создает LessonItem при создании теста для урока"""
+    if created and instance.lesson:
+        # Получаем максимальный sort_order для этого урока
+        max_order = LessonItem.objects.filter(lesson=instance.lesson).aggregate(
+            max_order=models.Max('sort_order')
+        )['max_order']
+        
+        LessonItem.objects.create(
+            lesson=instance.lesson,
+            item_type='test',
+            test=instance,
+            sort_order=(max_order or 0) + 1
+        )
+
+@receiver(post_save, sender=Assignment)
+def create_lesson_item_for_assignment(sender, instance, created, **kwargs):
+    """Создает LessonItem при создании задания для урока"""
+    if created and instance.lesson:
+        # Получаем максимальный sort_order для этого урока
+        max_order = LessonItem.objects.filter(lesson=instance.lesson).aggregate(
+            max_order=models.Max('sort_order')
+        )['max_order']
+        
+        LessonItem.objects.create(
+            lesson=instance.lesson,
+            item_type='assignment',
+            assignment=instance,
+            sort_order=(max_order or 0) + 1
+        )
+
+@receiver(post_save, sender=Resource)
+def create_lesson_item_for_resource(sender, instance, created, **kwargs):
+    """Создает LessonItem при создании ресурса для урока"""
+    if created and instance.lesson:
+        # Получаем максимальный sort_order для этого урока
+        max_order = LessonItem.objects.filter(lesson=instance.lesson).aggregate(
+            max_order=models.Max('sort_order')
+        )['max_order']
+        
+        LessonItem.objects.create(
+            lesson=instance.lesson,
+            item_type='resource',
+            resource=instance,
+            sort_order=(max_order or 0) + 1
+        )
+
+@receiver(post_delete, sender=Test)
+def delete_lesson_item_for_test(sender, instance, **kwargs):
+    """Удаляет связанные LessonItem при удалении теста"""
+    LessonItem.objects.filter(test=instance).delete()
+
+@receiver(post_delete, sender=Assignment)
+def delete_lesson_item_for_assignment(sender, instance, **kwargs):
+    """Удаляет связанные LessonItem при удалении задания"""
+    LessonItem.objects.filter(assignment=instance).delete()
+
+@receiver(post_delete, sender=Resource)
+def delete_lesson_item_for_resource(sender, instance, **kwargs):
+    """Удаляет связанные LessonItem при удалении ресурса"""
+    LessonItem.objects.filter(resource=instance).delete()
+
+# Сигнал для обновления LessonItem при изменении связи с уроком
+@receiver(post_save, sender=Test)
+def update_lesson_item_for_test(sender, instance, created, **kwargs):
+    """Обновляет LessonItem при изменении связи теста с уроком"""
+    if not created:
+        # Удаляем старые связи
+        LessonItem.objects.filter(test=instance).delete()
+        
+        # Создаем новую связь, если тест привязан к уроку
+        if instance.lesson:
+            max_order = LessonItem.objects.filter(lesson=instance.lesson).aggregate(
+                max_order=models.Max('sort_order')
+            )['max_order']
+            
+            LessonItem.objects.create(
+                lesson=instance.lesson,
+                item_type='test',
+                test=instance,
+                sort_order=(max_order or 0) + 1
+            )
+
+@receiver(post_save, sender=Assignment)
+def update_lesson_item_for_assignment(sender, instance, created, **kwargs):
+    """Обновляет LessonItem при изменении связи задания с уроком"""
+    if not created:
+        # Удаляем старые связи
+        LessonItem.objects.filter(assignment=instance).delete()
+        
+        # Создаем новую связь, если задание привязано к уроку
+        if instance.lesson:
+            max_order = LessonItem.objects.filter(lesson=instance.lesson).aggregate(
+                max_order=models.Max('sort_order')
+            )['max_order']
+            
+            LessonItem.objects.create(
+                lesson=instance.lesson,
+                item_type='assignment',
+                assignment=instance,
+                sort_order=(max_order or 0) + 1
+            )
+
+@receiver(post_save, sender=Resource)
+def update_lesson_item_for_resource(sender, instance, created, **kwargs):
+    """Обновляет LessonItem при изменении связи ресурса с уроком"""
+    if not created:
+        # Удаляем старые связи
+        LessonItem.objects.filter(resource=instance).delete()
+        
+        # Создаем новую связь, если ресурс привязан к уроку
+        if instance.lesson:
+            max_order = LessonItem.objects.filter(lesson=instance.lesson).aggregate(
+                max_order=models.Max('sort_order')
+            )['max_order']
+            
+            LessonItem.objects.create(
+                lesson=instance.lesson,
+                item_type='resource',
+                resource=instance,
+                sort_order=(max_order or 0) + 1
+            ) 

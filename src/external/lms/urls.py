@@ -8,7 +8,7 @@ from src.external.lms.views import (
     AssignmentViewSet, SubmittedAssignmentViewSet,
     CalendarEventViewSet, BadgeViewSet, UserBadgeViewSet,
     NotificationViewSet, PrivateMessageViewSet, UserRoleViewSet,
-    QuestionViewSet, AnswerViewSet
+    QuestionViewSet, AnswerViewSet, LessonItemViewSet
 )
 
 app_name = 'lms'
@@ -25,6 +25,7 @@ router.register(r'subjects', SubjectViewSet, basename='subject')
 router.register(r'enrollments', EnrollmentViewSet, basename='enrollment')
 router.register(r'themes', ThemeViewSet, basename='theme')
 router.register(r'lessons', LessonViewSet, basename='lesson')
+router.register(r'lesson-items', LessonItemViewSet, basename='lessonitem')
 router.register(r'resources', ResourceViewSet, basename='resource')
 router.register(r'forums', ForumViewSet, basename='forum')
 router.register(r'discussions', ForumDiscussionViewSet, basename='forumdiscussion')
@@ -76,6 +77,11 @@ urlpatterns = [
     path('lessons/<int:pk>/duplicate/', LessonViewSet.as_view({'post': 'duplicate'}), name='lesson-duplicate'),
     path('lessons/<int:pk>/toggle-visibility/', LessonViewSet.as_view({'patch': 'toggle_visibility'}), name='lesson-toggle-visibility'),
     path('lessons/by-course/', LessonViewSet.as_view({'get': 'by_course'}), name='lessons-by-course'),
+    
+    # Endpoints для элементов урока (тесты, задания, ресурсы)
+    path('lesson-items/by-lesson/', LessonItemViewSet.as_view({'get': 'by_lesson'}), name='lesson-items-by-lesson'),
+    path('lesson-items/reorder/', LessonItemViewSet.as_view({'post': 'reorder'}), name='lesson-items-reorder'),
+    path('lesson-items/migrate/', LessonItemViewSet.as_view({'post': 'migrate_existing'}), name='lesson-items-migrate'),
     
     # Endpoints для ресурсов
     path('resources/<int:pk>/download/', ResourceViewSet.as_view({'get': 'download'}), name='resource-download'),
