@@ -273,11 +273,8 @@ class TestSerializer(serializers.ModelSerializer):
     questions = QuestionSerializer(many=True, read_only=True)
     attempts_count = serializers.SerializerMethodField()
     type_display = serializers.SerializerMethodField()
-    
-    class Meta:
-        model = Test
-        fields = '__all__'
-    
+    questions_count = serializers.SerializerMethodField()
+
     def get_attempts_count(self, obj):
         return obj.attempts.count()
     
@@ -290,18 +287,12 @@ class TestSerializer(serializers.ModelSerializer):
         }
         return type_mapping.get(obj.type, obj.type)
     
-    def to_representation(self, instance):
-        """Кастомизируем вывод для фронтенда"""
-        data = super().to_representation(instance)
-        # Конвертируем тип обратно в формат фронтенда
-        if 'type' in data:
-            type_mapping = {
-                'C': 'close',
-                'O': 'open', 
-                'G': 'game'
-            }
-            data['type'] = type_mapping.get(data['type'], data['type'])
-        return data
+    def get_questions_count(self, obj):
+        return obj.question_set.count()
+
+    class Meta:
+        model = Test
+        fields = '__all__'
 
 class StudentAnswerSelectionSerializer(serializers.ModelSerializer):
     answer = AnswerSerializer(read_only=True)
@@ -1392,96 +1383,6 @@ class LessonItemReorderSerializer(serializers.Serializer):
     """Сериализатор для изменения порядка элементов урока"""
     lesson_id = serializers.IntegerField()
     items = serializers.ListField(
-        child=serializers.DictField(
-            child=serializers.CharField(),
-            required=True
-        ),
-        min_length=1
-    )
-    
-    def validate_items(self, value):
-        """Валидация списка элементов"""
-        if not value:
-            raise serializers.ValidationError("Список элементов не может быть пустым")
-        
-        # Проверяем наличие обязательных полей в каждом элементе
-        for item in value:
-            if 'id' not in item:
-                raise serializers.ValidationError("Каждый элемент должен содержать поле 'id'")
-            if 'sort_order' not in item:
-                raise serializers.ValidationError("Каждый элемент должен содержать поле 'sort_order'")
-        
-        return value
-    
-    def save(self):
-        """Сохранение нового порядка элементов"""
-        from .models import LessonItem
-        
-        lesson_id = self.validated_data['lesson_id']
-        items_data = self.validated_data['items']
-        
-        updated_items = []
-        
-        for item_data in items_data:
-            item_id = item_data['id']
-            sort_order = int(item_data['sort_order'])
-            
-            try:
-                # Определяем тип элемента по ID (может быть test_1, assignment_2, resource_3)
-                if item_id.startswith('test_'):
-                    test_id = int(item_id.replace('test_', ''))
-                    lesson_item = LessonItem.objects.get(lesson_id=lesson_id, test_id=test_id)
-                elif item_id.startswith('assignment_'):
-                    assignment_id = int(item_id.replace('assignment_', ''))
-                    lesson_item = LessonItem.objects.get(lesson_id=lesson_id, assignment_id=assignment_id)
-                elif item_id.startswith('resource_'):
-                    resource_id = int(item_id.replace('resource_', ''))
-                    lesson_item = LessonItem.objects.get(lesson_id=lesson_id, resource_id=resource_id)
-                else:
-                    # Попытка найти по ID самого LessonItem
-                    lesson_item = LessonItem.objects.get(id=int(item_id), lesson_id=lesson_id)
-                
-                lesson_item.sort_order = sort_order
-                lesson_item.save()
-                updated_items.append(lesson_item)
-                
-            except (LessonItem.DoesNotExist, ValueError):
-                continue  # Пропускаем элементы, которые не найдены
-        
-        return updated_items
-
-# Сериализаторы для унифицированного управления элементами урока
-class LessonItemSerializer(serializers.ModelSerializer):
-    """Сериализатор для просмотра элементов урока"""
-    content = serializers.SerializerMethodField()
-    display_name = serializers.SerializerMethodField()
-    
-    class Meta:
-        model = LessonItem
-        fields = '__all__'
-    
-    def get_content(self, obj):
-        """Возвращает данные связанного объекта"""
-        content = obj.get_content_object()
-        if not content:
-            return None
-        
-        if obj.item_type == 'test':
-            return TestSerializer(content).data
-        elif obj.item_type == 'assignment':
-            return AssignmentSerializer(content).data
-        elif obj.item_type == 'resource':
-            return ResourceSerializer(content).data
-        return None
-    
-    def get_display_name(self, obj):
-        """Возвращает отображаемое имя элемента"""
-        return obj.get_display_name()
-
-class LessonItemReorderSerializer(serializers.Serializer):
-    """Сериализатор для изменения порядка элементов урока"""
-    lesson_id = serializers.IntegerField()
-    items = serializers.ListField(
         child=serializers.DictField(child=serializers.IntegerField()),
         help_text="Список элементов в формате [{'id': item_id, 'sort_order': order}, ...]"
     )
@@ -1535,3 +1436,31 @@ class LessonItemReorderSerializer(serializers.Serializer):
             LessonItem.objects.filter(id=item['id']).update(sort_order=item['sort_order'])
         
         return lesson_items.order_by('sort_order')
+
+# Сериализаторы для унифицированного управления элементами урока
+class LessonItemSerializer(serializers.ModelSerializer):
+    """Сериализатор для просмотра элементов урока"""
+    content = serializers.SerializerMethodField()
+    display_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = LessonItem
+        fields = '__all__'
+    
+    def get_content(self, obj):
+        """Возвращает данные связанного объекта"""
+        content = obj.get_content_object()
+        if not content:
+            return None
+        
+        if obj.item_type == 'test':
+            return TestSerializer(content).data
+        elif obj.item_type == 'assignment':
+            return AssignmentSerializer(content).data
+        elif obj.item_type == 'resource':
+            return ResourceSerializer(content).data
+        return None
+    
+    def get_display_name(self, obj):
+        """Возвращает отображаемое имя элемента"""
+        return obj.get_display_name()

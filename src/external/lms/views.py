@@ -854,6 +854,36 @@ class TestViewSet(viewsets.ModelViewSet):
         
         return Response({'message': 'Порядок тестов обновлен'}, status=status.HTTP_200_OK)
 
+    @action(detail=True, methods=['post'])
+    def duplicate(self, request, pk=None):
+        """Дублирует тест вместе с вопросами и ответами"""
+        from django.db import transaction
+        try:
+            with transaction.atomic():
+                original = self.get_object()
+                # Копируем сам тест
+                original.pk = None
+                original.name = f"{original.name} (копия)"
+                original.title = f"{original.title} (копия)"
+                original.save()
+                new_test = original
+                # Копируем вопросы
+                questions = Question.objects.filter(test=pk)
+                for q in questions:
+                    answers = list(q.answers.all())
+                    q.pk = None
+                    q.test = new_test
+                    q.save()
+                    # Копируем ответы
+                    for a in answers:
+                        a.pk = None
+                        a.question = q
+                        a.save()
+                serializer = self.get_serializer(new_test)
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 class TestAttemptViewSet(viewsets.ModelViewSet):
     """ViewSet для попыток прохождения тестов"""
     serializer_class = TestAttemptSerializer
