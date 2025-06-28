@@ -8,16 +8,22 @@ from drf_yasg import openapi
 
 from django.contrib.auth import authenticate
 from django.utils.crypto import get_random_string
+import re
 
 from src.core.utils.methods import (
     parse_errors_to_dict, 
     send_confirmation_email,
 )
-from src.core.cms.adp.models import EmailConfirmationCode
+from src.core.cms.adp.models import EmailConfirmationCode, UserDevice, UserProfile
 from src.core.cms.adp.serializers import (
     UserLoginSerializer, 
     UserRegistrationSerializer,
     UserRegistrationValidationSerializer,
+    ChangePasswordSerializer,
+    UserDeviceSerializer,
+    UserSerializer,
+    UserProfileSerializer,
+    UpdateUserProfileSerializer,
 )
 from src.core.utils.base.base_views import BaseAPIView, BaseAPIViewAuthMixin
 
@@ -226,7 +232,7 @@ class UserAuthorizationView(BaseAPIView):
                     "application/json": {
                         "refresh": "your_refresh_token",
                         "access": "your_access_token",
-                        "user_id": 1  # Добавьте это в пример ответа
+                        "user_id": 1
                     }
                 }
             ),
@@ -243,12 +249,15 @@ class UserAuthorizationView(BaseAPIView):
             user = authenticate(request, username=username, password=password)
 
             if user is not None:
+                # Создаем или обновляем информацию об устройстве
+                self._create_or_update_device(request, user)
+                
                 refresh = RefreshToken.for_user(user)
                 return Response(
                     {
                         'refresh': str(refresh),
                         'access': str(refresh.access_token),
-                        'user_id': user.id  # Добавьте ID пользователя в ответ
+                        'user_id': user.id
                     },
                     status=status.HTTP_200_OK
                 )
@@ -265,18 +274,414 @@ class UserAuthorizationView(BaseAPIView):
             errors,
             status=status.HTTP_400_BAD_REQUEST
         )
+    
+    def _create_or_update_device(self, request, user):
+        """Создает или обновляет информацию об устройстве пользователя"""
+        ip_address = self._get_client_ip(request)
+        user_agent = request.META.get('HTTP_USER_AGENT', '')
+        device_type = self._detect_device_type(user_agent)
+        device_name = self._get_device_name(user_agent, device_type)
+        
+        # Ищем существующее устройство по пользователю и IP
+        try:
+            device = UserDevice.objects.get(user=user, ip_address=ip_address)
+            # Обновляем существующее устройство
+            device.is_active = True
+            device.user_agent = user_agent
+            device.device_name = device_name
+            device.device_type = device_type
+            device.save()
+        except UserDevice.DoesNotExist:
+            # Создаем новое устройство
+            device = UserDevice.objects.create(
+                user=user,
+                ip_address=ip_address,
+                device_type=device_type,
+                device_name=device_name,
+                user_agent=user_agent,
+                city='Неизвестно',  # Можно добавить геолокацию позже
+                country='Неизвестно',
+                is_active=True,
+            )
+    
+    def _get_client_ip(self, request):
+        """Получает IP адрес клиента"""
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            ip = x_forwarded_for.split(',')[0]
+        else:
+            ip = request.META.get('REMOTE_ADDR')
+        return ip
+    
+    def _detect_device_type(self, user_agent):
+        """Определяет тип устройства по User-Agent"""
+        user_agent = user_agent.lower()
+        
+        if 'mobile' in user_agent or 'android' in user_agent or 'iphone' in user_agent:
+            return 'mobile'
+        elif 'tablet' in user_agent or 'ipad' in user_agent:
+            return 'tablet'
+        elif 'macintosh' in user_agent or 'mac os' in user_agent:
+            return 'laptop'
+        elif 'windows' in user_agent or 'linux' in user_agent:
+            return 'desktop'
+        else:
+            return 'desktop'  # По умолчанию
+    
+    def _get_device_name(self, user_agent, device_type):
+        """Получает название устройства по User-Agent"""
+        user_agent = user_agent.lower()
+        
+        if 'windows' in user_agent:
+            return 'Windows PC'
+        elif 'macintosh' in user_agent or 'mac os' in user_agent:
+            return 'Mac'
+        elif 'linux' in user_agent:
+            return 'Linux PC'
+        elif 'android' in user_agent:
+            return 'Android Device'
+        elif 'iphone' in user_agent:
+            return 'iPhone'
+        elif 'ipad' in user_agent:
+            return 'iPad'
+        else:
+            device_names = {
+                'mobile': 'Mobile Device',
+                'tablet': 'Tablet',
+                'laptop': 'Laptop',
+                'desktop': 'Desktop'
+            }
+            return device_names.get(device_type, 'Unknown Device')
 
 class ProtectedView(BaseAPIViewAuthMixin):
     @swagger_auto_schema(
         operation_description="Защищенное представление.",
         responses={
-            200: "Вы авторизованы.",
+            200: openapi.Response(
+                description="Данные авторизованного пользователя.",
+                schema=UserSerializer()
+            ),
             401: "Неавторизованный доступ."
         },
         security=[{'Bearer': []}]
     )
     def get(self, request):
+        # Обновляем последнюю активность текущего устройства
+        self._update_device_activity(request)
+        
+        # Создаем профиль если его нет
+        profile, created = UserProfile.objects.get_or_create(user=request.user)
+        
+        serializer = UserSerializer(request.user)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    def _update_device_activity(self, request):
+        """Обновляет последнюю активность устройства пользователя"""
+        try:
+            ip_address = self._get_client_ip(request)
+            device = UserDevice.objects.get(user=request.user, ip_address=ip_address, is_active=True)
+            device.save()  # Обновит last_activity благодаря auto_now=True
+        except UserDevice.DoesNotExist:
+            # Если устройство не найдено, создаем его
+            user_agent = request.META.get('HTTP_USER_AGENT', '')
+            device_type = self._detect_device_type(user_agent)
+            device_name = self._get_device_name(user_agent, device_type)
+            
+            UserDevice.objects.create(
+                user=request.user,
+                ip_address=ip_address,
+                device_type=device_type,
+                device_name=device_name,
+                user_agent=user_agent,
+                city='Неизвестно',
+                country='Неизвестно',
+                is_active=True,
+            )
+    
+    def _get_client_ip(self, request):
+        """Получает IP адрес клиента"""
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            ip = x_forwarded_for.split(',')[0]
+        else:
+            ip = request.META.get('REMOTE_ADDR')
+        return ip
+    
+    def _detect_device_type(self, user_agent):
+        """Определяет тип устройства по User-Agent"""
+        user_agent = user_agent.lower()
+        
+        if 'mobile' in user_agent or 'android' in user_agent or 'iphone' in user_agent:
+            return 'mobile'
+        elif 'tablet' in user_agent or 'ipad' in user_agent:
+            return 'tablet'
+        elif 'macintosh' in user_agent or 'mac os' in user_agent:
+            return 'laptop'
+        elif 'windows' in user_agent or 'linux' in user_agent:
+            return 'desktop'
+        else:
+            return 'desktop'  # По умолчанию
+    
+    def _get_device_name(self, user_agent, device_type):
+        """Получает название устройства по User-Agent"""
+        user_agent = user_agent.lower()
+        
+        if 'windows' in user_agent:
+            return 'Windows PC'
+        elif 'macintosh' in user_agent or 'mac os' in user_agent:
+            return 'Mac'
+        elif 'linux' in user_agent:
+            return 'Linux PC'
+        elif 'android' in user_agent:
+            return 'Android Device'
+        elif 'iphone' in user_agent:
+            return 'iPhone'
+        elif 'ipad' in user_agent:
+            return 'iPad'
+        else:
+            device_names = {
+                'mobile': 'Mobile Device',
+                'tablet': 'Tablet',
+                'laptop': 'Laptop',
+                'desktop': 'Desktop'
+            }
+            return device_names.get(device_type, 'Unknown Device')
+
+class ChangePasswordView(BaseAPIViewAuthMixin):
+    @swagger_auto_schema(
+        operation_description="Смена пароля пользователя.",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'current_password': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    format=openapi.FORMAT_PASSWORD,
+                    description='Текущий пароль'
+                ),
+                'new_password': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    format=openapi.FORMAT_PASSWORD,
+                    description='Новый пароль'
+                ),
+                'confirm_password': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    format=openapi.FORMAT_PASSWORD,
+                    description='Подтверждение нового пароля'
+                ),
+            },
+            required=['current_password', 'new_password', 'confirm_password'],
+        ),
+        responses={
+            200: "Пароль успешно изменён.",
+            400: "Ошибка валидации данных."
+        },
+        security=[{'Bearer': []}]
+    )
+    def post(self, request):
+        # Обновляем активность устройства
+        self._update_device_activity(request)
+        
+        serializer = ChangePasswordSerializer(data=request.data, context={'request': request})
+        
+        if serializer.is_valid():
+            user = request.user
+            user.set_password(serializer.validated_data['new_password'])
+            user.save()
+            
+            return Response(
+                {"message": "Пароль успешно изменён."}, 
+                status=status.HTTP_200_OK
+            )
+        
+        errors = parse_errors_to_dict(serializer.errors)
         return Response(
-            {"message": "Вы авторизованы."}, 
-            status=status.HTTP_200_OK
+            errors, 
+            status=status.HTTP_400_BAD_REQUEST
         )
+    
+    def _update_device_activity(self, request):
+        """Обновляет последнюю активность устройства пользователя"""
+        try:
+            ip_address = self._get_client_ip(request)
+            device = UserDevice.objects.get(user=request.user, ip_address=ip_address, is_active=True)
+            device.save()  # Обновит last_activity благодаря auto_now=True
+        except UserDevice.DoesNotExist:
+            pass  # Устройство будет создано при следующем входе
+    
+    def _get_client_ip(self, request):
+        """Получает IP адрес клиента"""
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            ip = x_forwarded_for.split(',')[0]
+        else:
+            ip = request.META.get('REMOTE_ADDR')
+        return ip
+
+class UserDevicesView(BaseAPIViewAuthMixin):
+    @swagger_auto_schema(
+        operation_description="Получение списка устройств пользователя.",
+        responses={
+            200: openapi.Response(
+                description="Список устройств пользователя.",
+                schema=UserDeviceSerializer(many=True)
+            ),
+        },
+        security=[{'Bearer': []}]
+    )
+    def get(self, request):
+        # Обновляем активность устройства
+        self._update_device_activity(request)
+        
+        devices = UserDevice.objects.filter(user=request.user).order_by('-last_activity')
+        serializer = UserDeviceSerializer(devices, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    def _update_device_activity(self, request):
+        """Обновляет последнюю активность устройства пользователя"""
+        try:
+            ip_address = self._get_client_ip(request)
+            device = UserDevice.objects.get(user=request.user, ip_address=ip_address, is_active=True)
+            device.save()  # Обновит last_activity благодаря auto_now=True
+        except UserDevice.DoesNotExist:
+            pass  # Устройство будет создано при следующем входе
+    
+    def _get_client_ip(self, request):
+        """Получает IP адрес клиента"""
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            ip = x_forwarded_for.split(',')[0]
+        else:
+            ip = request.META.get('REMOTE_ADDR')
+        return ip
+
+class UserDeviceDetailView(BaseAPIViewAuthMixin):
+    @swagger_auto_schema(
+        operation_description="Удаление устройства пользователя (завершение сессии).",
+        responses={
+            200: "Устройство успешно удалено.",
+            404: "Устройство не найдено."
+        },
+        security=[{'Bearer': []}]
+    )
+    def delete(self, request, device_id):
+        try:
+            device = UserDevice.objects.get(id=device_id, user=request.user)
+            device.delete()
+            return Response(
+                {"message": "Устройство успешно удалено."}, 
+                status=status.HTTP_200_OK
+            )
+        except UserDevice.DoesNotExist:
+            return Response(
+                {"error": "Устройство не найдено."}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+class UserProfileView(BaseAPIViewAuthMixin):
+    @swagger_auto_schema(
+        operation_description="Получение профиля текущего пользователя.",
+        responses={
+            200: openapi.Response(
+                description="Данные профиля пользователя.",
+                schema=UserSerializer()
+            ),
+        },
+        security=[{'Bearer': []}]
+    )
+    def get(self, request):
+        # Создаем профиль если его нет
+        profile, created = UserProfile.objects.get_or_create(user=request.user)
+        
+        serializer = UserSerializer(request.user)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    @swagger_auto_schema(
+        operation_description="Обновление профиля пользователя.",
+        request_body=UpdateUserProfileSerializer,
+        responses={
+            200: "Профиль успешно обновлен.",
+            400: "Ошибка валидации данных."
+        },
+        security=[{'Bearer': []}]
+    )
+    def put(self, request):
+        # Создаем профиль если его нет
+        profile, created = UserProfile.objects.get_or_create(user=request.user)
+        
+        serializer = UpdateUserProfileSerializer(profile, data=request.data, partial=True)
+        
+        if serializer.is_valid():
+            serializer.save()
+            
+            # Возвращаем обновленные данные
+            user_serializer = UserSerializer(request.user)
+            return Response(user_serializer.data, status=status.HTTP_200_OK)
+        
+        errors = parse_errors_to_dict(serializer.errors)
+        return Response(errors, status=status.HTTP_400_BAD_REQUEST)
+
+class UserSecuritySettingsView(BaseAPIViewAuthMixin):
+    @swagger_auto_schema(
+        operation_description="Получение настроек безопасности пользователя.",
+        responses={
+            200: openapi.Response(
+                description="Настройки безопасности.",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'two_factor_enabled': openapi.Schema(type=openapi.TYPE_BOOLEAN),
+                        'email_notifications': openapi.Schema(type=openapi.TYPE_BOOLEAN),
+                        'push_notifications': openapi.Schema(type=openapi.TYPE_BOOLEAN),
+                        'sms_notifications': openapi.Schema(type=openapi.TYPE_BOOLEAN),
+                        'profile_visibility': openapi.Schema(type=openapi.TYPE_STRING),
+                    }
+                )
+            ),
+        },
+        security=[{'Bearer': []}]
+    )
+    def get(self, request):
+        # Создаем профиль если его нет
+        profile, created = UserProfile.objects.get_or_create(user=request.user)
+        
+        security_data = {
+            'two_factor_enabled': profile.two_factor_enabled,
+            'email_notifications': profile.email_notifications,
+            'push_notifications': profile.push_notifications,
+            'sms_notifications': profile.sms_notifications,
+            'profile_visibility': profile.profile_visibility,
+        }
+        
+        return Response(security_data, status=status.HTTP_200_OK)
+    
+    @swagger_auto_schema(
+        operation_description="Обновление настроек безопасности.",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'two_factor_enabled': openapi.Schema(type=openapi.TYPE_BOOLEAN),
+                'email_notifications': openapi.Schema(type=openapi.TYPE_BOOLEAN),
+                'push_notifications': openapi.Schema(type=openapi.TYPE_BOOLEAN),
+                'sms_notifications': openapi.Schema(type=openapi.TYPE_BOOLEAN),
+                'profile_visibility': openapi.Schema(type=openapi.TYPE_STRING),
+            }
+        ),
+        responses={
+            200: "Настройки безопасности обновлены.",
+            400: "Ошибка валидации данных."
+        },
+        security=[{'Bearer': []}]
+    )
+    def put(self, request):
+        # Создаем профиль если его нет
+        profile, created = UserProfile.objects.get_or_create(user=request.user)
+        
+        # Обновляем только переданные поля
+        for field in ['two_factor_enabled', 'email_notifications', 'push_notifications', 
+                      'sms_notifications', 'profile_visibility']:
+            if field in request.data:
+                setattr(profile, field, request.data[field])
+        
+        profile.save()
+        
+        return Response({"message": "Настройки безопасности обновлены."}, status=status.HTTP_200_OK)

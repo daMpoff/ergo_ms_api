@@ -94,6 +94,7 @@ class AuditLogSerializer(serializers.ModelSerializer):
         default=None,
         read_only=True
     )
+    action = serializers.SerializerMethodField()
 
     class Meta:
         model = AuditLog
@@ -107,3 +108,6 @@ class AuditLogSerializer(serializers.ModelSerializer):
             'timestamp',
         ]
         read_only_fields = fields
+
+    def get_action(self, obj):
+        return obj.get_action_display()

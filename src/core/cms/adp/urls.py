@@ -12,7 +12,12 @@ from src.core.cms.adp.views import (
     UserAuthorizationView,
     SendConfirmationCodeView,
     VerifyConfirmationCodeView,
-    ProtectedView
+    ProtectedView,
+    ChangePasswordView,
+    UserDevicesView,
+    UserDeviceDetailView,
+    UserProfileView,
+    UserSecuritySettingsView,
 )
 
 urlpatterns = [
@@ -25,4 +30,13 @@ urlpatterns = [
 
     path('token-refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('protected/', ProtectedView.as_view(), name='protected'),
+    
+    # Security endpoints
+    path('change-password/', ChangePasswordView.as_view(), name='change_password'),
+    path('devices/', UserDevicesView.as_view(), name='user_devices'),
+    path('devices/<int:device_id>/', UserDeviceDetailView.as_view(), name='user_device_detail'),
+    
+    # Profile endpoints
+    path('profile/', UserProfileView.as_view(), name='user_profile'),
+    path('security-settings/', UserSecuritySettingsView.as_view(), name='user_security_settings'),
 ]
