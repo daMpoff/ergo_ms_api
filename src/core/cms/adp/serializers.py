@@ -107,8 +107,8 @@ class UserSerializer(ModelSerializer):
         read_only_fields = ['id', 'date_joined']
 
 class UpdateUserProfileSerializer(ModelSerializer):
-    first_name = CharField(source='user.first_name', required=False)
-    last_name = CharField(source='user.last_name', required=False)
+    first_name = CharField(source='user.first_name', required=False, allow_blank=True)
+    last_name = CharField(source='user.last_name', required=False, allow_blank=True)
     email = CharField(source='user.email', required=False)
     
     class Meta:
@@ -124,6 +124,11 @@ class UpdateUserProfileSerializer(ModelSerializer):
         user_data = validated_data.pop('user', {})
         if user_data:
             for attr, value in user_data.items():
+                # Для имени и фамилии разрешаем пустые строки
+                if attr in ['first_name', 'last_name']:
+                    # Обрабатываем пробелы как пустые строки
+                    if value and value.strip() == '':
+                        value = ''
                 setattr(instance.user, attr, value)
             instance.user.save()
         
