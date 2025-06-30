@@ -9,16 +9,141 @@ from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from datetime import datetime, timedelta
 from django.contrib.auth import get_user_model
-from .models import Project, ProjectMember, Task, TaskComment, TaskAttachment, TimeLog
+from .models import (
+    Project, ProjectMember, Task, TaskComment, TaskAttachment, TimeLog,
+    ProjectStatus, ProjectPriority, TaskStatus, TaskPriority
+)
 from .serializers import (
     ProjectSerializer, ProjectListSerializer, ProjectMemberSerializer,
     TaskSerializer, TaskListSerializer, TaskCalendarSerializer, TaskKanbanSerializer,
-    TaskCommentSerializer, TaskAttachmentSerializer, TimeLogSerializer, UserSerializer
+    TaskCommentSerializer, TaskAttachmentSerializer, TimeLogSerializer, UserSerializer,
+    ProjectStatusSerializer, ProjectPrioritySerializer, TaskStatusSerializer, TaskPrioritySerializer
 )
 
 User = get_user_model()
 
 # Создавайте свои представления здесь
+
+# ViewSets для управления статусами и приоритетами
+
+class ProjectStatusViewSet(viewsets.ModelViewSet):
+    """ViewSet для управления статусами проектов"""
+    queryset = ProjectStatus.objects.filter(is_active=True)
+    serializer_class = ProjectStatusSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['name', 'code', 'description']
+    ordering_fields = ['order', 'name', 'created_at']
+    ordering = ['order', 'name']
+    
+    @action(detail=False, methods=['get'])
+    def active(self, request):
+        """Получить только активные статусы"""
+        queryset = self.get_queryset().filter(is_active=True)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def default(self, request):
+        """Получить статус по умолчанию"""
+        try:
+            default_status = self.get_queryset().get(is_default=True)
+            serializer = self.get_serializer(default_status)
+            return Response(serializer.data)
+        except ProjectStatus.DoesNotExist:
+            return Response({'error': 'Статус по умолчанию не найден'}, status=status.HTTP_404_NOT_FOUND)
+
+
+class ProjectPriorityViewSet(viewsets.ModelViewSet):
+    """ViewSet для управления приоритетами проектов"""
+    queryset = ProjectPriority.objects.filter(is_active=True)
+    serializer_class = ProjectPrioritySerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['name', 'code', 'description']
+    ordering_fields = ['level', 'name', 'created_at']
+    ordering = ['level', 'name']
+    
+    @action(detail=False, methods=['get'])
+    def active(self, request):
+        """Получить только активные приоритеты"""
+        queryset = self.get_queryset().filter(is_active=True)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def default(self, request):
+        """Получить приоритет по умолчанию"""
+        try:
+            default_priority = self.get_queryset().get(is_default=True)
+            serializer = self.get_serializer(default_priority)
+            return Response(serializer.data)
+        except ProjectPriority.DoesNotExist:
+            return Response({'error': 'Приоритет по умолчанию не найден'}, status=status.HTTP_404_NOT_FOUND)
+
+
+class TaskStatusViewSet(viewsets.ModelViewSet):
+    """ViewSet для управления статусами задач"""
+    queryset = TaskStatus.objects.filter(is_active=True)
+    serializer_class = TaskStatusSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['name', 'code', 'description']
+    ordering_fields = ['order', 'name', 'created_at']
+    ordering = ['order', 'name']
+    
+    @action(detail=False, methods=['get'])
+    def active(self, request):
+        """Получить только активные статусы"""
+        queryset = self.get_queryset().filter(is_active=True)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def kanban_columns(self, request):
+        """Получить статусы для колонок канбан (все активные статусы)"""
+        queryset = self.get_queryset().filter(is_active=True)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def default(self, request):
+        """Получить статус по умолчанию"""
+        try:
+            default_status = self.get_queryset().get(is_default=True)
+            serializer = self.get_serializer(default_status)
+            return Response(serializer.data)
+        except TaskStatus.DoesNotExist:
+            return Response({'error': 'Статус по умолчанию не найден'}, status=status.HTTP_404_NOT_FOUND)
+
+
+class TaskPriorityViewSet(viewsets.ModelViewSet):
+    """ViewSet для управления приоритетами задач"""
+    queryset = TaskPriority.objects.filter(is_active=True)
+    serializer_class = TaskPrioritySerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['name', 'code', 'description']
+    ordering_fields = ['level', 'name', 'created_at']
+    ordering = ['level', 'name']
+    
+    @action(detail=False, methods=['get'])
+    def active(self, request):
+        """Получить только активные приоритеты"""
+        queryset = self.get_queryset().filter(is_active=True)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def default(self, request):
+        """Получить приоритет по умолчанию"""
+        try:
+            default_priority = self.get_queryset().get(is_default=True)
+            serializer = self.get_serializer(default_priority)
+            return Response(serializer.data)
+        except TaskPriority.DoesNotExist:
+            return Response({'error': 'Приоритет по умолчанию не найден'}, status=status.HTTP_404_NOT_FOUND)
+
 
 class ProjectViewSet(viewsets.ModelViewSet):
     """ViewSet для управления проектами"""
@@ -226,18 +351,30 @@ class TaskViewSet(viewsets.ModelViewSet):
         if project_id:
             queryset = queryset.filter(project_id=project_id)
         
-        # Группируем по статусам
-        kanban_data = {
-            'todo': [],
-            'in_progress': [],
-            'review': [],
-            'done': []
-        }
+        # Получаем все активные статусы задач
+        try:
+            # Используем все активные статусы
+            kanban_statuses = TaskStatus.objects.filter(is_active=True).order_by('order', 'name')
+        except Exception:
+            # Fallback: используем старые статусы
+            kanban_statuses = []
         
-        for status_key in kanban_data.keys():
-            tasks = queryset.filter(status=status_key).order_by('kanban_order', '-created_at')
-            serializer = TaskKanbanSerializer(tasks, many=True)
-            kanban_data[status_key] = serializer.data
+        # Группируем по статусам
+        kanban_data = {}
+        
+        if kanban_statuses:
+            # Используем динамические статусы
+            for status in kanban_statuses:
+                tasks = queryset.filter(status=status.code).order_by('kanban_order', '-created_at')
+                serializer = TaskKanbanSerializer(tasks, many=True)
+                kanban_data[status.code] = serializer.data
+        else:
+            # Fallback к старым жестко заданным статусам
+            fallback_statuses = ['todo', 'in_progress', 'review', 'done']
+            for status_key in fallback_statuses:
+                tasks = queryset.filter(status=status_key).order_by('kanban_order', '-created_at')
+                serializer = TaskKanbanSerializer(tasks, many=True)
+                kanban_data[status_key] = serializer.data
         
         return Response(kanban_data)
     
@@ -251,14 +388,31 @@ class TaskViewSet(viewsets.ModelViewSet):
         if new_order is not None:
             task.kanban_order = new_order
         
-        if new_status and new_status in dict(Task.TASK_STATUS_CHOICES):
-            task.status = new_status
-            
-            # Если задача помечена как выполненная
-            if new_status == 'done' and not task.completed_at:
-                task.completed_at = timezone.now()
-            elif new_status != 'done':
-                task.completed_at = None
+        if new_status:
+            # Проверяем существование статуса в новой системе
+            try:
+                status_obj = TaskStatus.objects.get(code=new_status, is_active=True)
+                task.status = new_status
+                task.status_ref = status_obj
+                
+                # Если задача помечена как выполненная
+                if status_obj.is_final and not task.completed_at:
+                    task.completed_at = timezone.now()
+                elif not status_obj.is_final:
+                    task.completed_at = None
+                
+            except TaskStatus.DoesNotExist:
+                # Fallback: проверяем по старым choices
+                if new_status in dict(Task.TASK_STATUS_CHOICES):
+                    task.status = new_status
+                    
+                    # Для обратной совместимости
+                    if new_status == 'done' and not task.completed_at:
+                        task.completed_at = timezone.now()
+                    elif new_status != 'done':
+                        task.completed_at = None
+                else:
+                    return Response({'error': f'Неверный статус: {new_status}'}, status=status.HTTP_400_BAD_REQUEST)
         
         task.save()
         return Response({'message': 'Порядок задач обновлен'})

@@ -1,10 +1,51 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from .models import Project, ProjectMember, Task, TaskComment, TaskAttachment, TimeLog
+from .models import (
+    Project, ProjectMember, Task, TaskComment, TaskAttachment, TimeLog,
+    ProjectStatus, ProjectPriority, TaskStatus, TaskPriority
+)
 
 User = get_user_model()
 
 # Создавайте свои сериализаторы здесь
+
+# Сериализаторы для статусов и приоритетов
+
+class ProjectStatusSerializer(serializers.ModelSerializer):
+    """Сериализатор статусов проектов"""
+    
+    class Meta:
+        model = ProjectStatus
+        fields = ['id', 'name', 'code', 'description', 'color', 'order', 'is_active', 'is_default', 'is_final', 'created_at', 'updated_at']
+        read_only_fields = ['created_at', 'updated_at']
+
+
+class ProjectPrioritySerializer(serializers.ModelSerializer):
+    """Сериализатор приоритетов проектов"""
+    
+    class Meta:
+        model = ProjectPriority
+        fields = ['id', 'name', 'code', 'description', 'color', 'level', 'is_active', 'is_default', 'created_at', 'updated_at']
+        read_only_fields = ['created_at', 'updated_at']
+
+
+class TaskStatusSerializer(serializers.ModelSerializer):
+    """Сериализатор статусов задач"""
+    
+    class Meta:
+        model = TaskStatus
+        fields = ['id', 'name', 'code', 'description', 'color', 'order', 'is_active', 'is_default', 'is_final', 'created_at', 'updated_at']
+        read_only_fields = ['created_at', 'updated_at']
+
+
+class TaskPrioritySerializer(serializers.ModelSerializer):
+    """Сериализатор приоритетов задач"""
+    
+    class Meta:
+        model = TaskPriority
+        fields = ['id', 'name', 'code', 'description', 'color', 'level', 'is_active', 'is_default', 'created_at', 'updated_at']
+        read_only_fields = ['created_at', 'updated_at']
+
 
 class UserSerializer(serializers.ModelSerializer):
     """Сериализатор пользователя"""
@@ -31,6 +72,19 @@ class ProjectSerializer(serializers.ModelSerializer):
     manager = UserSerializer(read_only=True)
     manager_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
     memberships = ProjectMemberSerializer(many=True, read_only=True)
+    
+    # Новые поля для статусов и приоритетов
+    status_ref = ProjectStatusSerializer(read_only=True)
+    priority_ref = ProjectPrioritySerializer(read_only=True)
+    status_ref_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    priority_ref_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    
+    # Дополнительные поля
+    current_status = serializers.CharField(read_only=True)
+    current_priority = serializers.CharField(read_only=True)
+    status_display = serializers.CharField(read_only=True)
+    priority_display = serializers.CharField(read_only=True)
+    
     task_count = serializers.SerializerMethodField()
     completed_task_count = serializers.SerializerMethodField()
     
@@ -39,7 +93,9 @@ class ProjectSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'description', 'owner', 'manager', 'manager_id',
             'memberships', 'status', 'priority', 'start_date', 'end_date',
-            'created_at', 'updated_at', 'color', 'task_count', 'completed_task_count'
+            'created_at', 'updated_at', 'color', 'task_count', 'completed_task_count',
+            'status_ref', 'priority_ref', 'status_ref_id', 'priority_ref_id',
+            'current_status', 'current_priority', 'status_display', 'priority_display'
         ]
     
     def get_task_count(self, obj):
@@ -57,6 +113,15 @@ class ProjectListSerializer(serializers.ModelSerializer):
     """Сериализатор списка проектов"""
     owner = UserSerializer(read_only=True)
     manager = UserSerializer(read_only=True)
+    
+    # Новые поля для статусов и приоритетов
+    status_ref = ProjectStatusSerializer(read_only=True)
+    priority_ref = ProjectPrioritySerializer(read_only=True)
+    current_status = serializers.CharField(read_only=True)
+    current_priority = serializers.CharField(read_only=True)
+    status_display = serializers.CharField(read_only=True)
+    priority_display = serializers.CharField(read_only=True)
+    
     task_count = serializers.SerializerMethodField()
     completed_task_count = serializers.SerializerMethodField()
     progress = serializers.SerializerMethodField()
@@ -66,7 +131,8 @@ class ProjectListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'description', 'owner', 'manager', 'status', 'priority',
             'start_date', 'end_date', 'created_at', 'color', 'task_count',
-            'completed_task_count', 'progress'
+            'completed_task_count', 'progress', 'status_ref', 'priority_ref',
+            'current_status', 'current_priority', 'status_display', 'priority_display'
         ]
     
     def get_task_count(self, obj):
@@ -129,6 +195,23 @@ class TaskSerializer(serializers.ModelSerializer):
     project = ProjectListSerializer(read_only=True)
     assignee_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
     project_id = serializers.IntegerField(write_only=True)
+    
+    # Новые поля для статусов и приоритетов
+    status_ref = TaskStatusSerializer(read_only=True)
+    priority_ref = TaskPrioritySerializer(read_only=True)
+    status_ref_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    priority_ref_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    
+    # Дополнительные поля
+    current_status = serializers.CharField(read_only=True)
+    current_priority = serializers.CharField(read_only=True)
+    status_display = serializers.CharField(read_only=True)
+    priority_display = serializers.CharField(read_only=True)
+    
+    # Поля дат с дополнительной обработкой
+    start_date = serializers.DateTimeField(required=False, allow_null=True)
+    due_date = serializers.DateTimeField(required=False, allow_null=True)
+    
     comments = TaskCommentSerializer(many=True, read_only=True)
     attachments = TaskAttachmentSerializer(many=True, read_only=True)
     time_logs = TimeLogSerializer(many=True, read_only=True)
@@ -140,11 +223,24 @@ class TaskSerializer(serializers.ModelSerializer):
             'id', 'title', 'description', 'project', 'project_id', 'assignee', 'assignee_id',
             'creator', 'status', 'priority', 'start_date', 'due_date', 'completed_at',
             'created_at', 'updated_at', 'estimated_hours', 'actual_hours', 'kanban_order',
-            'comments', 'attachments', 'time_logs', 'total_time'
+            'comments', 'attachments', 'time_logs', 'total_time',
+            'status_ref', 'priority_ref', 'status_ref_id', 'priority_ref_id',
+            'current_status', 'current_priority', 'status_display', 'priority_display'
         ]
     
     def get_total_time(self, obj):
         return sum(log.hours for log in obj.time_logs.all())
+    
+    def validate(self, data):
+        """Дополнительная валидация данных задачи"""
+        # Проверяем что дата окончания не раньше даты начала
+        if data.get('start_date') and data.get('due_date'):
+            if data['due_date'] < data['start_date']:
+                raise serializers.ValidationError(
+                    "Дата окончания не может быть раньше даты начала"
+                )
+        
+        return data
     
     def create(self, validated_data):
         validated_data['creator'] = self.context['request'].user
@@ -156,6 +252,15 @@ class TaskListSerializer(serializers.ModelSerializer):
     assignee = UserSerializer(read_only=True)
     creator = UserSerializer(read_only=True)
     project = ProjectListSerializer(read_only=True)
+    
+    # Новые поля для статусов и приоритетов
+    status_ref = TaskStatusSerializer(read_only=True)
+    priority_ref = TaskPrioritySerializer(read_only=True)
+    current_status = serializers.CharField(read_only=True)
+    current_priority = serializers.CharField(read_only=True)
+    status_display = serializers.CharField(read_only=True)
+    priority_display = serializers.CharField(read_only=True)
+    
     comment_count = serializers.SerializerMethodField()
     attachment_count = serializers.SerializerMethodField()
     
@@ -165,7 +270,9 @@ class TaskListSerializer(serializers.ModelSerializer):
             'id', 'title', 'description', 'project', 'assignee', 'creator',
             'status', 'priority', 'start_date', 'due_date', 'completed_at',
             'created_at', 'updated_at', 'estimated_hours', 'actual_hours',
-            'kanban_order', 'comment_count', 'attachment_count'
+            'kanban_order', 'comment_count', 'attachment_count',
+            'status_ref', 'priority_ref', 'current_status', 'current_priority',
+            'status_display', 'priority_display'
         ]
     
     def get_comment_count(self, obj):
