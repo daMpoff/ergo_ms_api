@@ -19,6 +19,7 @@ class ProjectStatus(models.Model):
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Дата обновления')
     
     class Meta:
+        app_label = 'crm'
         verbose_name = 'Статус проекта'
         verbose_name_plural = 'Статусы проектов'
         ordering = ['order', 'name']
@@ -40,6 +41,7 @@ class ProjectPriority(models.Model):
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Дата обновления')
     
     class Meta:
+        app_label = 'crm'
         verbose_name = 'Приоритет проекта'
         verbose_name_plural = 'Приоритеты проектов'
         ordering = ['level', 'name']
@@ -62,6 +64,7 @@ class TaskStatus(models.Model):
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Дата обновления')
     
     class Meta:
+        app_label = 'crm'
         verbose_name = 'Статус задачи'
         verbose_name_plural = 'Статусы задач'
         ordering = ['order', 'name']
@@ -83,6 +86,7 @@ class TaskPriority(models.Model):
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Дата обновления')
     
     class Meta:
+        app_label = 'crm'
         verbose_name = 'Приоритет задачи'
         verbose_name_plural = 'Приоритеты задач'
         ordering = ['level', 'name']
@@ -130,6 +134,7 @@ class Project(models.Model):
     color = models.CharField(max_length=7, default='#007bff', verbose_name='Цвет проекта')  # Для календаря
     
     class Meta:
+        app_label = 'crm'
         verbose_name = 'Проект'
         verbose_name_plural = 'Проекты'
         ordering = ['-created_at']
@@ -172,6 +177,7 @@ class ProjectMember(models.Model):
     joined_at = models.DateTimeField(auto_now_add=True, verbose_name='Дата присоединения')
     
     class Meta:
+        app_label = 'crm'
         verbose_name = 'Участник проекта'
         verbose_name_plural = 'Участники проектов'
         unique_together = ['project', 'user']
@@ -221,6 +227,7 @@ class Task(models.Model):
     kanban_order = models.IntegerField(default=0, verbose_name='Порядок в канбан')
     
     class Meta:
+        app_label = 'crm'
         verbose_name = 'Задача'
         verbose_name_plural = 'Задачи'
         ordering = ['kanban_order', '-created_at']
@@ -258,6 +265,7 @@ class TaskComment(models.Model):
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Дата обновления')
     
     class Meta:
+        app_label = 'crm'
         verbose_name = 'Комментарий к задаче'
         verbose_name_plural = 'Комментарии к задачам'
         ordering = ['created_at']
@@ -275,6 +283,7 @@ class TaskAttachment(models.Model):
     uploaded_at = models.DateTimeField(auto_now_add=True, verbose_name='Дата загрузки')
     
     class Meta:
+        app_label = 'crm'
         verbose_name = 'Прикрепленный файл'
         verbose_name_plural = 'Прикрепленные файлы'
         ordering = ['-uploaded_at']
@@ -293,6 +302,7 @@ class TimeLog(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Дата создания записи')
     
     class Meta:
+        app_label = 'crm'
         verbose_name = 'Учет времени'
         verbose_name_plural = 'Учет времени'
         ordering = ['-date', '-created_at']

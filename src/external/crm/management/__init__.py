@@ -1,1 +1,1 @@
- 
+# Пакет management commands 

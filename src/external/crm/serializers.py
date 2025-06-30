@@ -87,6 +87,7 @@ class ProjectSerializer(serializers.ModelSerializer):
     
     task_count = serializers.SerializerMethodField()
     completed_task_count = serializers.SerializerMethodField()
+    progress = serializers.SerializerMethodField()
     
     class Meta:
         model = Project
@@ -94,7 +95,7 @@ class ProjectSerializer(serializers.ModelSerializer):
             'id', 'name', 'description', 'owner', 'manager', 'manager_id',
             'memberships', 'status', 'priority', 'start_date', 'end_date',
             'created_at', 'updated_at', 'color', 'task_count', 'completed_task_count',
-            'status_ref', 'priority_ref', 'status_ref_id', 'priority_ref_id',
+            'progress', 'status_ref', 'priority_ref', 'status_ref_id', 'priority_ref_id',
             'current_status', 'current_priority', 'status_display', 'priority_display'
         ]
     
@@ -102,7 +103,25 @@ class ProjectSerializer(serializers.ModelSerializer):
         return obj.tasks.count()
     
     def get_completed_task_count(self, obj):
-        return obj.tasks.filter(status='done').count()
+        """Получить количество завершенных задач (учитываем новую и старую систему статусов)"""
+        from django.db.models import Q
+        
+        # Фильтр для новой системы статусов (status_ref.is_final = True)
+        new_system_filter = Q(status_ref__is_final=True, status_ref__is_active=True)
+        
+        # Фильтр для старой системы статусов (status = 'done')
+        old_system_filter = Q(status='done')
+        
+        return obj.tasks.filter(new_system_filter | old_system_filter).count()
+    
+    def get_progress(self, obj):
+        """Вычислить прогресс проекта в процентах"""
+        total = obj.tasks.count()
+        if total == 0:
+            return 0
+        
+        completed = self.get_completed_task_count(obj)
+        return round((completed / total) * 100)
     
     def create(self, validated_data):
         validated_data['owner'] = self.context['request'].user
@@ -139,13 +158,24 @@ class ProjectListSerializer(serializers.ModelSerializer):
         return obj.tasks.count()
     
     def get_completed_task_count(self, obj):
-        return obj.tasks.filter(status='done').count()
+        """Получить количество завершенных задач (учитываем новую и старую систему статусов)"""
+        from django.db.models import Q
+        
+        # Фильтр для новой системы статусов (status_ref.is_final = True)
+        new_system_filter = Q(status_ref__is_final=True, status_ref__is_active=True)
+        
+        # Фильтр для старой системы статусов (status = 'done')
+        old_system_filter = Q(status='done')
+        
+        return obj.tasks.filter(new_system_filter | old_system_filter).count()
     
     def get_progress(self, obj):
+        """Вычислить прогресс проекта в процентах"""
         total = obj.tasks.count()
         if total == 0:
             return 0
-        completed = obj.tasks.filter(status='done').count()
+        
+        completed = self.get_completed_task_count(obj)
         return round((completed / total) * 100)
 
 

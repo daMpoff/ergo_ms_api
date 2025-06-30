@@ -164,14 +164,19 @@ class ProjectViewSet(viewsets.ModelViewSet):
         queryset = super().get_queryset()
         user = self.request.user
         
-        # Фильтр "Мои проекты"
+        # По умолчанию показываем только проекты, в которых пользователь участвует
+        # Это включает: владельца, менеджера и участников команды
+        queryset = queryset.filter(
+            Q(owner=user) | 
+            Q(manager=user) | 
+            Q(team_members=user)
+        ).distinct()
+        
+        # Дополнительный фильтр "Мои проекты" (оставляем для совместимости)
         my_projects = self.request.query_params.get('my_projects', None)
-        if my_projects and my_projects.lower() == 'true':
-            queryset = queryset.filter(
-                Q(owner=user) | 
-                Q(manager=user) | 
-                Q(team_members=user)
-            ).distinct()
+        if my_projects and my_projects.lower() == 'false':
+            # Если явно указано false, показываем все доступные проекты
+            queryset = super().get_queryset()
         
         return queryset
     
@@ -182,8 +187,20 @@ class ProjectViewSet(viewsets.ModelViewSet):
         serializer = ProjectMemberSerializer(data=request.data)
         
         if serializer.is_valid():
-            serializer.save(project=project)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            try:
+                # Проверяем, не является ли пользователь уже участником
+                user_id = serializer.validated_data['user_id']
+                if ProjectMember.objects.filter(project=project, user_id=user_id).exists():
+                    return Response({'error': 'Пользователь уже является участником проекта'}, 
+                                  status=status.HTTP_400_BAD_REQUEST)
+                
+                member = serializer.save(project=project)
+                
+                # Возвращаем полные данные участника
+                response_serializer = ProjectMemberSerializer(member)
+                return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+            except Exception as e:
+                return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
     @action(detail=True, methods=['delete'])
@@ -213,11 +230,22 @@ class ProjectViewSet(viewsets.ModelViewSet):
         project = self.get_object()
         
         total_tasks = project.tasks.count()
-        completed_tasks = project.tasks.filter(status='done').count()
-        in_progress_tasks = project.tasks.filter(status='in_progress').count()
+        
+        # Завершенные задачи с учетом новой и старой системы статусов
+        completed_tasks = project.tasks.filter(
+            Q(status_ref__is_final=True, status_ref__is_active=True) | Q(status='done')
+        ).count()
+        
+        # Задачи в работе с учетом новой системы
+        in_progress_tasks = project.tasks.filter(
+            Q(status_ref__code='in_progress', status_ref__is_active=True) | Q(status='in_progress')
+        ).count()
+        
+        # Просроченные задачи - которые не завершены и срок прошел
         overdue_tasks = project.tasks.filter(
-            due_date__lt=timezone.now(),
-            status__in=['todo', 'in_progress']
+            due_date__lt=timezone.now()
+        ).exclude(
+            Q(status_ref__is_final=True, status_ref__is_active=True) | Q(status='done')
         ).count()
         
         return Response({
@@ -252,12 +280,23 @@ class TaskViewSet(viewsets.ModelViewSet):
         queryset = super().get_queryset()
         user = self.request.user
         
-        # Фильтр "Мои задачи"
+        # Параметр "Мои задачи" 
         my_tasks = self.request.query_params.get('my_tasks', None)
+        
         if my_tasks and my_tasks.lower() == 'true':
+            # Только мои задачи - только задачи, где я исполнитель
+            queryset = queryset.filter(assignee=user).distinct()
+        else:
+            # Показываем все задачи из проектов, в которых пользователь участвует
+            # Это включает: владельца проекта, менеджера проекта, участников команды, 
+            # исполнителей задач и создателей задач
             queryset = queryset.filter(
-                Q(assignee=user) | Q(creator=user)
-            )
+                Q(project__owner=user) |
+                Q(project__manager=user) |
+                Q(project__team_members=user) |
+                Q(assignee=user) |
+                Q(creator=user)
+            ).distinct()
         
         # Фильтр по дате для календаря
         start_date = self.request.query_params.get('start_date', None)
@@ -346,10 +385,38 @@ class TaskViewSet(viewsets.ModelViewSet):
     def kanban(self, request):
         """Получить задачи для канбан доски"""
         project_id = request.query_params.get('project_id')
+        priority = request.query_params.get('priority')
+        assignee = request.query_params.get('assignee')
+        ordering = request.query_params.get('ordering', 'kanban_order')
+        
         queryset = self.get_queryset()
         
+        # Применяем фильтры
         if project_id:
             queryset = queryset.filter(project_id=project_id)
+        
+        if priority:
+            queryset = queryset.filter(priority=priority)
+            
+        if assignee:
+            queryset = queryset.filter(assignee_id=assignee)
+        
+        # Применяем сортировку
+        ordering_fields = {
+            'kanban_order': ['kanban_order', '-created_at'],
+            '-created_at': ['-created_at'],
+            'created_at': ['created_at'],
+            'due_date': ['due_date', '-created_at'],
+            '-due_date': ['-due_date', '-created_at'],
+            'priority': ['priority_ref__level', 'priority', '-created_at'],
+            '-priority': ['-priority_ref__level', '-priority', '-created_at'],
+            'assignee': ['assignee__first_name', 'assignee__last_name', '-created_at'],
+            '-assignee': ['-assignee__first_name', '-assignee__last_name', '-created_at']
+        }
+        
+        # Применяем сортировку с fallback
+        ordering_list = ordering_fields.get(ordering, ['kanban_order', '-created_at'])
+        queryset = queryset.order_by(*ordering_list)
         
         # Получаем все активные статусы задач
         try:
@@ -365,14 +432,14 @@ class TaskViewSet(viewsets.ModelViewSet):
         if kanban_statuses:
             # Используем динамические статусы
             for status in kanban_statuses:
-                tasks = queryset.filter(status=status.code).order_by('kanban_order', '-created_at')
+                tasks = queryset.filter(status=status.code)
                 serializer = TaskKanbanSerializer(tasks, many=True)
                 kanban_data[status.code] = serializer.data
         else:
             # Fallback к старым жестко заданным статусам
             fallback_statuses = ['todo', 'in_progress', 'review', 'done']
             for status_key in fallback_statuses:
-                tasks = queryset.filter(status=status_key).order_by('kanban_order', '-created_at')
+                tasks = queryset.filter(status=status_key)
                 serializer = TaskKanbanSerializer(tasks, many=True)
                 kanban_data[status_key] = serializer.data
         

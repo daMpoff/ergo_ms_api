@@ -1,0 +1,1 @@
+python src/manage.py generate_crm_data --clear --user-id 1 --users 10 --projects 10 --tasks-per-project 5
