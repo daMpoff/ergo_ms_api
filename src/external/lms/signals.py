@@ -207,8 +207,10 @@ def validate_test_attempt(sender, instance, **kwargs):
 def validate_assignment_submission(sender, instance, **kwargs):
     """Валидировать сдачу задания"""
     if instance.pk is None:  # Новая сдача
-        # Проверить крайний срок
-        if not instance.assignment.allow_late_submissions and timezone.now().date() > instance.assignment.deadline:
+        # Проверить крайний срок, если он установлен
+        if (instance.assignment.deadline and 
+            not instance.assignment.allow_late_submissions and 
+            timezone.now().date() > instance.assignment.deadline):
             raise ValueError('Крайний срок сдачи задания истек')
 
 
@@ -217,10 +219,10 @@ def send_assignment_reminders():
     """Отправить напоминания о заданиях (должно вызываться периодически)"""
     tomorrow = timezone.now().date() + timedelta(days=1)
     
-    # Найти задания с крайним сроком завтра
+    # Найти задания с крайним сроком завтра (исключаем задания без deadline)
     assignments_due_tomorrow = Assignment.objects.filter(
         deadline=tomorrow
-    )
+    ).exclude(deadline__isnull=True)
     
     for assignment in assignments_due_tomorrow:
         # Найти студентов, которые еще не сдали задание

@@ -107,6 +107,48 @@ class EnrollmentSerializer(serializers.ModelSerializer):
         model = Enrollment
         fields = '__all__'
 
+class CreateEnrollmentSerializer(serializers.ModelSerializer):
+    """Сериализатор для создания записи на курс"""
+    
+    class Meta:
+        model = Enrollment
+        fields = ['subject', 'enrollment_key']
+    
+    enrollment_key = serializers.CharField(required=False, allow_blank=True)
+    
+    def validate(self, attrs):
+        user = self.context['request'].user
+        subject = attrs.get('subject')
+        enrollment_key = attrs.get('enrollment_key', '')
+        
+        # Проверяем, что пользователь еще не записан на курс
+        if Enrollment.objects.filter(student=user, subject=subject).exists():
+            raise serializers.ValidationError("Вы уже записаны на этот курс")
+        
+        # Проверяем ключ записи, если он требуется
+        if subject.enrollment_key and enrollment_key != subject.enrollment_key:
+            raise serializers.ValidationError("Неверный ключ записи")
+        
+        # Проверяем максимальное количество студентов
+        if subject.max_enrollment:
+            current_enrollments = Enrollment.objects.filter(
+                subject=subject, status='active'
+            ).count()
+            if current_enrollments >= subject.max_enrollment:
+                raise serializers.ValidationError("Превышено максимальное количество участников курса")
+        
+        return attrs
+    
+    def create(self, validated_data):
+        # Удаляем enrollment_key из данных, он не нужен в модели
+        validated_data.pop('enrollment_key', None)
+        
+        # Устанавливаем студента из запроса
+        validated_data['student'] = self.context['request'].user
+        validated_data['status'] = 'active'
+        
+        return super().create(validated_data)
+
 class GradeSerializer(serializers.ModelSerializer):
     subject = SubjectSerializer(read_only=True)
     student = LMSUserSerializer(read_only=True)
@@ -343,6 +385,73 @@ class SubmittedAssignmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = SubmittedAssignment
         fields = '__all__'
+
+class CreateSubmittedAssignmentSerializer(serializers.ModelSerializer):
+    """Сериализатор для создания сданного задания"""
+    
+    class Meta:
+        model = SubmittedAssignment
+        fields = ['assignment', 'submission_text', 'file', 'comment']
+    
+    file = serializers.FileField(required=False, source='submittedassignment')
+    
+    def validate_assignment(self, value):
+        """Проверяем что задание существует и доступно студенту"""
+        user = self.context['request'].user
+        
+        # Проверяем что студент записан на курс, содержащий это задание
+        enrolled_subjects = Enrollment.objects.filter(
+            student=user, status='active'
+        ).values_list('subject', flat=True)
+        
+        assignment_subjects = []
+        if value.subject:
+            assignment_subjects.append(value.subject.id)
+        elif value.theme:
+            assignment_subjects.append(value.theme.subject.id)
+        elif value.lesson:
+            assignment_subjects.append(value.lesson.theme.subject.id)
+        
+        if not any(subject_id in enrolled_subjects for subject_id in assignment_subjects):
+            raise serializers.ValidationError("У вас нет доступа к этому заданию")
+        
+        # Проверяем что задание еще не сдано этим студентом
+        if SubmittedAssignment.objects.filter(assignment=value, student=user).exists():
+            raise serializers.ValidationError("Это задание уже было сдано")
+        
+        return value
+    
+    def validate(self, attrs):
+        """Валидация данных формы"""
+        assignment = attrs.get('assignment')
+        submission_text = attrs.get('submission_text', '')
+        file = attrs.get('submittedassignment')
+        
+        if not assignment:
+            raise serializers.ValidationError({'assignment': 'Поле assignment обязательно'})
+        
+        # Проверяем что данные соответствуют типу сдачи задания
+        if assignment.submission_type == 'file' and not file:
+            raise serializers.ValidationError({'file': 'Для этого задания требуется загрузить файл'})
+        elif assignment.submission_type == 'text' and not submission_text.strip():
+            raise serializers.ValidationError({'submission_text': 'Для этого задания требуется текстовый ответ'})
+        elif assignment.submission_type == 'both' and not file and not submission_text.strip():
+            raise serializers.ValidationError('Для этого задания требуется файл или текстовый ответ')
+        
+        return attrs
+    
+    def create(self, validated_data):
+        """Создание сданного задания с автоматической установкой студента"""
+        validated_data['student'] = self.context['request'].user
+        
+        # Обрабатываем файл
+        file_data = validated_data.pop('submittedassignment', None)
+        if file_data:
+            # Читаем файл в бинарном виде
+            file_content = file_data.read()
+            validated_data['submittedassignment'] = file_content
+        
+        return super().create(validated_data)
 
 # Специальные сериализаторы для создания и обновления
 class CreateTestSerializer(serializers.ModelSerializer):

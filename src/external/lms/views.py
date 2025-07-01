@@ -27,8 +27,8 @@ from .serializers import (
     StudentSerializer, TeacherSerializer, StudentGroupSerializer,
     SubjectSerializer, GradeSerializer, ThemeSerializer,
     LessonSerializer, TestSerializer, TestAttemptSerializer,
-    SubmittedAssignmentSerializer, UserProfileSerializer,
-    CourseCategorySerializer, CourseFormatSerializer, EnrollmentSerializer,
+    SubmittedAssignmentSerializer, CreateSubmittedAssignmentSerializer, UserProfileSerializer,
+    CourseCategorySerializer, CourseFormatSerializer, EnrollmentSerializer, CreateEnrollmentSerializer,
     CourseFileSerializer, ResourceSerializer, CreateResourceSerializer, UpdateResourceSerializer,
     ForumSerializer, ForumDiscussionSerializer,
     ForumPostSerializer, CalendarEventSerializer, BadgeSerializer,
@@ -393,6 +393,12 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         return Enrollment.objects.filter(student=self.request.user)
+    
+    def get_serializer_class(self):
+        """Используем разные сериализаторы для разных действий"""
+        if self.action == 'create':
+            return CreateEnrollmentSerializer
+        return EnrollmentSerializer
 
 class ThemeViewSet(SubjectRelatedViewSet, ToggleVisibilityMixin, OrderingMixin):
     """ViewSet для тем курсов"""
@@ -992,13 +998,24 @@ class SubmittedAssignmentViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         user = self.request.user
-        if hasattr(user, 'teacher'):
+        user_roles = user.roles.values_list('role', flat=True)
+        
+        if 'admin' in user_roles:
+            return SubmittedAssignment.objects.all()
+        elif 'teacher' in user_roles:
             # Преподаватели видят все сданные задания по своим курсам
             return SubmittedAssignment.objects.filter(
-                assignment__lesson__theme__subject__teacher=user
-            )
+                Q(assignment__subject__teacher=user) |
+                Q(assignment__theme__subject__teacher=user) |
+                Q(assignment__lesson__theme__subject__teacher=user)
+            ).distinct()
         else:
             return SubmittedAssignment.objects.filter(student=user)
+    
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return CreateSubmittedAssignmentSerializer
+        return SubmittedAssignmentSerializer
 
 class CalendarEventViewSet(viewsets.ModelViewSet):
     """ViewSet для событий календаря"""

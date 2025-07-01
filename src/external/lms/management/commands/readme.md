@@ -1,0 +1,1 @@
+python src/manage.py generate_lms_data --courses 15 --users 30 --clear

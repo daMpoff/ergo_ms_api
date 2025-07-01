@@ -354,16 +354,18 @@ class CalendarService:
     @staticmethod
     def create_assignment_deadline_event(assignment: Assignment):
         """Создать событие календаря для крайнего срока задания"""
-        CalendarEvent.objects.create(
-            subject=assignment.lesson.theme.subject,
-            title=f'Крайний срок: {assignment.title}',
-            description=f'Крайний срок сдачи задания "{assignment.title}"',
-            event_type='deadline',
-            start_date=timezone.make_aware(
-                timezone.datetime.combine(assignment.deadline, timezone.datetime.min.time())
-            ),
-            created_by=assignment.lesson.theme.subject.teacher
-        )
+        # Создаем событие только если у задания есть deadline
+        if assignment.deadline:
+            CalendarEvent.objects.create(
+                subject=assignment.lesson.theme.subject,
+                title=f'Крайний срок: {assignment.title}',
+                description=f'Крайний срок сдачи задания "{assignment.title}"',
+                event_type='deadline',
+                start_date=timezone.make_aware(
+                    timezone.datetime.combine(assignment.deadline, timezone.datetime.min.time())
+                ),
+                created_by=assignment.lesson.theme.subject.teacher
+            )
     
     @staticmethod
     def create_test_availability_events(test: Test):

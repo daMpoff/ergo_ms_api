@@ -21,6 +21,7 @@ class UserRole(models.Model):
     is_active = models.BooleanField(default=True)
     
     class Meta:
+        app_label = 'lms'
         unique_together = ['user', 'role']
 
 # Профиль пользователя с расширенной информацией
@@ -37,12 +38,18 @@ class UserProfile(models.Model):
     date_of_birth = models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        app_label = 'lms'
 
 class Teacher(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, primary_key=True)
     department = models.CharField(max_length=200, blank=True)
     academic_degree = models.CharField(max_length=100, blank=True)
     office_hours = models.TextField(blank=True)
+
+    class Meta:
+        app_label = 'lms'
     
 class StudentGroup(models.Model):
     name = models.CharField(max_length=255, default='')
@@ -51,11 +58,17 @@ class StudentGroup(models.Model):
     year_of_study = models.IntegerField(default=1)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        app_label = 'lms'
+
 class Student(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, primary_key=True)
     group = models.ForeignKey(StudentGroup, on_delete=models.CASCADE)
     student_id = models.CharField(max_length=20, unique=True)
     enrollment_date = models.DateField(default=timezone.now)
+
+    class Meta:
+        app_label = 'lms'
 
 # Категории курсов
 class CourseCategory(models.Model):
@@ -70,6 +83,7 @@ class CourseCategory(models.Model):
         return self.name
     
     class Meta:
+        app_label = 'lms'
         verbose_name_plural = "Course Categories"
         ordering = ['sort_order', 'name']
 
@@ -85,6 +99,7 @@ class CourseFormat(models.Model):
         return self.name
     
     class Meta:
+        app_label = 'lms'
         verbose_name_plural = "Course Formats"
         ordering = ['name']
 
@@ -114,6 +129,7 @@ class Subject(models.Model):
         return self.name
 
     class Meta:
+        app_label = 'lms'
         ordering = ['-creationdate']
 
 # Записи на курс
@@ -133,6 +149,7 @@ class Enrollment(models.Model):
     progress_percentage = models.IntegerField(default=0, validators=[MinValueValidator(0), MaxValueValidator(100)])
     
     class Meta:
+        app_label = 'lms'
         unique_together = ['student', 'subject']
 
 class Grade(models.Model):
@@ -147,6 +164,9 @@ class Grade(models.Model):
     feedback = models.TextField(blank=True)
     grade_type = models.CharField(max_length=50, default='manual')  # manual, automatic, peer
 
+    class Meta:
+        app_label = 'lms'
+
 class Theme(models.Model):
     name = models.CharField(max_length=100, default='')
     description = models.TextField(default='')
@@ -158,6 +178,9 @@ class Theme(models.Model):
     sort_order = models.IntegerField(default=0)
     is_visible = models.BooleanField(default=True)
     completion_required = models.BooleanField(default=False)
+
+    class Meta:
+        app_label = 'lms'
 
 class Lesson(models.Model):
     class LessonType(models.TextChoices):
@@ -185,6 +208,9 @@ class Lesson(models.Model):
     sort_order = models.IntegerField(default=0)
     is_visible = models.BooleanField(default=True)
 
+    class Meta:
+        app_label = 'lms'
+
 # Ресурсы (файлы) - могут принадлежать курсу, теме или уроку
 class Resource(models.Model):
     name = models.CharField(max_length=255)
@@ -205,8 +231,9 @@ class Resource(models.Model):
     
     def __str__(self):
         return self.name
-    
+
     class Meta:
+        app_label = 'lms'
         ordering = ['sort_order', 'name']
 
 # Файлы и ресурсы курса (оставляем для обратной совместимости)
@@ -222,6 +249,9 @@ class CourseFile(models.Model):
     uploaded_at = models.DateTimeField(auto_now_add=True)
     download_count = models.IntegerField(default=0)
     is_visible = models.BooleanField(default=True)
+
+    class Meta:
+        app_label = 'lms'
 
 # Форумы
 class Forum(models.Model):
@@ -248,6 +278,9 @@ class Forum(models.Model):
     
     def __str__(self):
         return self.name
+    
+    class Meta:
+        app_label = 'lms'
 
 # Дискуссии форума
 class ForumDiscussion(models.Model):
@@ -262,6 +295,9 @@ class ForumDiscussion(models.Model):
     
     def __str__(self):
         return self.name
+    
+    class Meta:
+        app_label = 'lms'
 
 # Посты в дискуссиях
 class ForumPost(models.Model):
@@ -275,6 +311,10 @@ class ForumPost(models.Model):
     
     def __str__(self):
         return f"Post by {self.author.username} in {self.discussion.name}"
+    
+    class Meta:
+        app_label = 'lms'
+
 
 # Календарь событий
 class CalendarEvent(models.Model):
@@ -300,6 +340,9 @@ class CalendarEvent(models.Model):
     
     def __str__(self):
         return self.title
+    
+    class Meta:
+        app_label = 'lms'
 
 # Значки и достижения
 class Badge(models.Model):
@@ -323,6 +366,9 @@ class Badge(models.Model):
     
     def __str__(self):
         return self.name
+    
+    class Meta:
+        app_label = 'lms'
 
 # Выданные значки
 class UserBadge(models.Model):
@@ -333,6 +379,9 @@ class UserBadge(models.Model):
     
     class Meta:
         unique_together = ['user', 'badge']
+
+    class Meta:
+        app_label = 'lms'
 
 # Оставшиеся модели остаются без изменений
 class TestBank(models.Model):
@@ -345,6 +394,9 @@ class TestBank(models.Model):
 
     def __str__(self):
         return self.name
+    
+    class Meta:
+        app_label = 'lms'
 
 class Test(models.Model):
     name = models.CharField(max_length=100, default='')
@@ -380,6 +432,7 @@ class Test(models.Model):
     
     class Meta:
         ordering = ['sort_order', 'creationdate']
+        app_label = 'lms'
 
 class Question(models.Model):
     text = models.TextField(default='')
@@ -402,6 +455,9 @@ class Question(models.Model):
     explanation = models.TextField(blank=True)
     difficulty = models.CharField(max_length=20, choices=[('easy', 'Легкий'), ('medium', 'Средний'), ('hard', 'Сложный')], default='medium')
 
+    class Meta:
+        app_label = 'lms'
+
 class Answer(models.Model):
     question = models.ForeignKey(Question, on_delete=models.CASCADE, related_name='answers')
     text = models.TextField()
@@ -411,6 +467,9 @@ class Answer(models.Model):
 
     def __str__(self):
         return f"{self.text[:50]}..."
+
+    class Meta:
+        app_label = 'lms'
 
 class TestAttempt(models.Model):
     test = models.ForeignKey(Test, on_delete=models.CASCADE, related_name='attempts')
@@ -441,6 +500,9 @@ class TestAttempt(models.Model):
             return (earned_points / total_points) * 100
         return 0
 
+    class Meta:
+        app_label = 'lms'
+
 class StudentAnswer(models.Model):
     attempt = models.ForeignKey(TestAttempt, on_delete=models.CASCADE, related_name='answers')
     question = models.ForeignKey(Question, on_delete=models.CASCADE)
@@ -466,6 +528,9 @@ class StudentAnswer(models.Model):
             self.is_correct = self.text_answer.strip().lower() == self.question.correctanswer.strip().lower()
         self.save()
 
+    class Meta:
+        app_label = 'lms'
+
 class StudentAnswerSelection(models.Model):
     student_answer = models.ForeignKey(StudentAnswer, on_delete=models.CASCADE, related_name='selections')
     answer = models.ForeignKey(Answer, on_delete=models.CASCADE)
@@ -474,12 +539,15 @@ class StudentAnswerSelection(models.Model):
     def __str__(self):
         return f"Selection for {self.answer.text[:50]}..."
 
+    class Meta:
+        app_label = 'lms'
+
 # UserAnswer модель удалена, используем StudentAnswer вместо неё
 
 class Assignment(models.Model):
     title = models.CharField(max_length=255, default='')
     description = models.TextField(default='')
-    deadline = models.DateField(default=timezone.now)
+    deadline = models.DateField(null=True, blank=True)
     creationdate = models.DateField(default=timezone.now)
     lastupdate = models.DateTimeField(default=timezone.now)
     
@@ -501,6 +569,7 @@ class Assignment(models.Model):
     
     class Meta:
         ordering = ['sort_order', 'deadline']
+        app_label = 'lms'
 
 class SubmittedAssignment(models.Model):
     submittedassignment = models.BinaryField(default=b'\x08')
@@ -515,6 +584,9 @@ class SubmittedAssignment(models.Model):
     feedback = models.TextField(blank=True)
     graded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='graded_assignments')
     graded_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        app_label = 'lms'
 
 # Система уведомлений
 class Notification(models.Model):
@@ -538,6 +610,9 @@ class Notification(models.Model):
     
     def __str__(self):
         return f"{self.title} - {self.recipient.username}"
+    
+    class Meta:
+        app_label = 'lms'
 
 # Личные сообщения
 class PrivateMessage(models.Model):
@@ -551,7 +626,9 @@ class PrivateMessage(models.Model):
     
     def __str__(self):
         return f"{self.subject} - {self.sender} to {self.recipient}"
-
+    
+    class Meta:
+        app_label = 'lms'
 
 # Унифицированная модель для элементов урока (тесты, задания, ресурсы)
 class LessonItem(models.Model):
@@ -575,6 +652,7 @@ class LessonItem(models.Model):
     
     class Meta:
         ordering = ['sort_order', 'created_at']
+        app_label = 'lms'
         unique_together = [
             ['lesson', 'test'],
             ['lesson', 'assignment'], 
