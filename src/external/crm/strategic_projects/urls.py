@@ -6,7 +6,9 @@ from .views import (
     StrategicProjectViewSet,
     ProjectStageViewSet,
     ProjectReportViewSet,
-    StageResultViewSet
+    StageResultViewSet,
+    UserProjectRoleViewSet,
+    EmployeeWorkloadViewSet
 )
 
 router = DefaultRouter()
@@ -16,6 +18,8 @@ router.register(r'strategic-projects', StrategicProjectViewSet, basename='strate
 router.register(r'project-stages', ProjectStageViewSet, basename='project-stage')
 router.register(r'project-reports', ProjectReportViewSet, basename='project-report')
 router.register(r'stage-results', StageResultViewSet, basename='stage-result')
+router.register(r'user-roles', UserProjectRoleViewSet, basename='user-role')
+router.register(r'employee-workload', EmployeeWorkloadViewSet, basename='employee-workload')
 
 urlpatterns = [
     path('', include(router.urls)),

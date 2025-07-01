@@ -18,6 +18,7 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument('--clear', action='store_true', help='Очистить существующие данные')
+        parser.add_argument('--preserve-users', action='store_true', help='Сохранить всех пользователей при очистке (не удалять)')
         parser.add_argument('--users', type=int, default=15, help='Количество пользователей')
         parser.add_argument('--projects', type=int, default=10, help='Количество проектов')
         parser.add_argument('--tasks-per-project', type=int, default=8, help='Количество задач на проект')
@@ -27,7 +28,7 @@ class Command(BaseCommand):
         user_id = options['user_id']
         
         if options['clear']:
-            self.clear_data(user_id)
+            self.clear_data(user_id, preserve_users=options['preserve_users'])
         
         # Убеждаемся, что указанный пользователь существует
         creator_user = self.ensure_creator_user(user_id)
@@ -51,7 +52,7 @@ class Command(BaseCommand):
             )
         )
 
-    def clear_data(self, preserve_user_id):
+    def clear_data(self, preserve_user_id, preserve_users=False):
         """Очистка существующих данных"""
         self.stdout.write('Очистка существующих данных')
         
@@ -61,8 +62,12 @@ class Command(BaseCommand):
         ProjectMember.objects.all().delete()
         Project.objects.all().delete()
         
-        # Удаляем пользователей кроме суперпользователей и указанного пользователя
-        User.objects.filter(is_superuser=False).exclude(id=preserve_user_id).delete()
+        if not preserve_users:
+            # Удаляем пользователей кроме суперпользователей и указанного пользователя
+            User.objects.filter(is_superuser=False).exclude(id=preserve_user_id).delete()
+            self.stdout.write('  - Пользователи удалены (кроме суперпользователей и ID {})'.format(preserve_user_id))
+        else:
+            self.stdout.write('  - Пользователи сохранены (использован параметр --preserve-users)')
         
         self.stdout.write(self.style.SUCCESS('Данные очищены'))
 

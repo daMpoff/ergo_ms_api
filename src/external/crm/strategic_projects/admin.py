@@ -2,7 +2,7 @@ from django.contrib import admin
 from .models import (
     DevelopmentProgram, ProgramTopic, StrategicProject,
     ProjectStage, StageExecutor, ProjectReport,
-    StageResult, ProjectHistory
+    StageResult, ProjectHistory, UserProjectRole, EmployeeWorkload
 )
 
 
@@ -91,4 +91,40 @@ class ProjectHistoryAdmin(admin.ModelAdmin):
     list_filter = ['action', 'created_at']
     search_fields = ['project__name', 'project__code', 'action', 'description']
     raw_id_fields = ['project', 'user']
-    readonly_fields = ['created_at'] 
+    readonly_fields = ['created_at']
+
+
+@admin.register(UserProjectRole)
+class UserProjectRoleAdmin(admin.ModelAdmin):
+    list_display = ['user', 'role', 'created_at', 'created_by']
+    list_filter = ['role', 'created_at']
+    search_fields = ['user__username', 'user__first_name', 'user__last_name']
+    raw_id_fields = ['user', 'created_by']
+    readonly_fields = ['created_at']
+    
+    fieldsets = (
+        ('Основная информация', {
+            'fields': ('user', 'role')
+        }),
+        ('Служебная информация', {
+            'fields': ('created_at', 'created_by'),
+            'classes': ('collapse',)
+        })
+    )
+
+
+@admin.register(EmployeeWorkload)
+class EmployeeWorkloadAdmin(admin.ModelAdmin):
+    list_display = ['user', 'project', 'role_in_project', 'workload_percentage', 'start_date', 'end_date']
+    list_filter = ['workload_percentage', 'start_date', 'end_date']
+    search_fields = ['user__username', 'user__first_name', 'user__last_name', 'project__name', 'project__code']
+    raw_id_fields = ['user', 'project']
+    
+    fieldsets = (
+        ('Основная информация', {
+            'fields': ('user', 'project', 'role_in_project')
+        }),
+        ('Загруженность', {
+            'fields': ('workload_percentage', 'start_date', 'end_date')
+        })
+    ) 

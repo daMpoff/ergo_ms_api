@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 from .models import (
     DevelopmentProgram, ProgramTopic, StrategicProject,
     ProjectStage, StageExecutor, ProjectReport,
-    StageResult, ProjectHistory
+    StageResult, ProjectHistory, UserProjectRole, EmployeeWorkload
 )
 
 User = get_user_model()
@@ -173,4 +173,34 @@ class ImportProgramSerializer(serializers.Serializer):
     """Сериализатор для импорта программы развития"""
     file = serializers.FileField()
     year = serializers.IntegerField()
-    name = serializers.CharField(max_length=255) 
+    name = serializers.CharField(max_length=255)
+
+
+class UserProjectRoleSerializer(serializers.ModelSerializer):
+    """Сериализатор для ролей пользователей в стратегических проектах"""
+    user_info = UserSerializer(source='user', read_only=True)
+    role_display = serializers.CharField(source='get_role_display', read_only=True)
+    created_by_info = UserSerializer(source='created_by', read_only=True)
+    
+    class Meta:
+        model = UserProjectRole
+        fields = '__all__'
+        read_only_fields = ['created_at', 'created_by']
+
+
+class EmployeeWorkloadSerializer(serializers.ModelSerializer):
+    """Сериализатор для загруженности сотрудников"""
+    user_info = UserSerializer(source='user', read_only=True)
+    project_info = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = EmployeeWorkload
+        fields = '__all__'
+    
+    def get_project_info(self, obj):
+        return {
+            'id': obj.project.id,
+            'code': obj.project.code,
+            'name': obj.project.name,
+            'status': obj.project.status
+        } 

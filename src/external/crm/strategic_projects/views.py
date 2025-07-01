@@ -3,6 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
+from django.db.models import Sum, Q
 from django.utils import timezone
 from django.contrib.auth import get_user_model
 import csv
@@ -10,7 +11,7 @@ import codecs
 from .models import (
     DevelopmentProgram, ProgramTopic, StrategicProject,
     ProjectStage, StageExecutor, ProjectReport,
-    StageResult, ProjectHistory
+    StageResult, ProjectHistory, UserProjectRole, EmployeeWorkload
 )
 from .serializers import (
     DevelopmentProgramSerializer, ProgramTopicSerializer,
@@ -18,7 +19,8 @@ from .serializers import (
     ProjectStageSerializer, StageExecutorSerializer,
     ProjectReportSerializer, StageResultSerializer,
     ProjectHistorySerializer, CreateProjectFromTopicSerializer,
-    ImportProgramSerializer
+    ImportProgramSerializer, UserProjectRoleSerializer,
+    EmployeeWorkloadSerializer
 )
 
 User = get_user_model()
@@ -439,4 +441,155 @@ class StageResultViewSet(viewsets.ModelViewSet):
         stage_id = self.request.query_params.get('stage_id', None)
         if stage_id:
             queryset = queryset.filter(stage_id=stage_id)
-        return queryset 
+        return queryset
+
+
+class UserProjectRoleViewSet(viewsets.ModelViewSet):
+    """ViewSet для управления ролями пользователей в стратегических проектах"""
+    queryset = UserProjectRole.objects.all()
+    serializer_class = UserProjectRoleSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        # Фильтр по пользователю
+        user_id = self.request.query_params.get('user_id', None)
+        if user_id:
+            queryset = queryset.filter(user_id=user_id)
+        # Фильтр по роли
+        role = self.request.query_params.get('role', None)
+        if role:
+            queryset = queryset.filter(role=role)
+        return queryset
+    
+    @action(detail=False, methods=['get'])
+    def my_role(self, request):
+        """Получение роли текущего пользователя"""
+        try:
+            role = UserProjectRole.objects.get(user=request.user)
+            serializer = self.get_serializer(role)
+            return Response(serializer.data)
+        except UserProjectRole.DoesNotExist:
+            return Response({
+                'role': None,
+                'message': 'Роль не назначена'
+            })
+    
+    @action(detail=False, methods=['post'])
+    def assign_role(self, request):
+        """Назначение роли пользователю (только для администраторов)"""
+        # Проверяем, что текущий пользователь - администратор
+        try:
+            current_role = UserProjectRole.objects.get(user=request.user)
+            if current_role.role != 'admin':
+                return Response({
+                    'error': 'Только администратор может назначать роли'
+                }, status=status.HTTP_403_FORBIDDEN)
+        except UserProjectRole.DoesNotExist:
+            return Response({
+                'error': 'У вас нет прав для назначения ролей'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        user_id = request.data.get('user_id')
+        role = request.data.get('role')
+        
+        if not user_id or not role:
+            return Response({
+                'error': 'Необходимо указать user_id и role'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            user = User.objects.get(id=user_id)
+            user_role, created = UserProjectRole.objects.update_or_create(
+                user=user,
+                defaults={
+                    'role': role,
+                    'created_by': request.user
+                }
+            )
+            
+            action = 'назначена' if created else 'обновлена'
+            return Response({
+                'message': f'Роль {action} успешно',
+                'data': UserProjectRoleSerializer(user_role).data
+            })
+        except User.DoesNotExist:
+            return Response({
+                'error': 'Пользователь не найден'
+            }, status=status.HTTP_404_NOT_FOUND)
+
+
+class EmployeeWorkloadViewSet(viewsets.ModelViewSet):
+    """ViewSet для управления загруженностью сотрудников"""
+    queryset = EmployeeWorkload.objects.all()
+    serializer_class = EmployeeWorkloadSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        # Фильтр по пользователю
+        user_id = self.request.query_params.get('user_id', None)
+        if user_id:
+            queryset = queryset.filter(user_id=user_id)
+        # Фильтр по проекту
+        project_id = self.request.query_params.get('project_id', None)
+        if project_id:
+            queryset = queryset.filter(project_id=project_id)
+        return queryset
+    
+    @action(detail=False, methods=['get'])
+    def workload_summary(self, request):
+        """Получение сводки по загруженности всех сотрудников"""
+        # Получаем текущую дату
+        today = timezone.now().date()
+        
+        # Агрегируем загруженность по пользователям
+        workload_data = EmployeeWorkload.objects.filter(
+            Q(end_date__isnull=True) | Q(end_date__gte=today),
+            start_date__lte=today
+        ).values('user__id', 'user__first_name', 'user__last_name').annotate(
+            total_workload=Sum('workload_percentage')
+        )
+        
+        # Формируем ответ
+        summary = []
+        for data in workload_data:
+            summary.append({
+                'user_id': data['user__id'],
+                'user_name': f"{data['user__first_name']} {data['user__last_name']}",
+                'total_workload': data['total_workload'] or 0,
+                'status': self._get_workload_status(data['total_workload'] or 0)
+            })
+        
+        return Response({
+            'count': len(summary),
+            'data': summary
+        })
+    
+    def _get_workload_status(self, workload):
+        """Определение статуса загруженности"""
+        if workload < 70:
+            return 'underloaded'
+        elif workload <= 100:
+            return 'optimal'
+        else:
+            return 'overloaded'
+    
+    @action(detail=False, methods=['get'])
+    def my_workload(self, request):
+        """Получение загруженности текущего пользователя"""
+        today = timezone.now().date()
+        workload = EmployeeWorkload.objects.filter(
+            user=request.user
+        ).filter(
+            Q(end_date__isnull=True) | Q(end_date__gte=today)
+        )
+        
+        total_workload = sum(w.workload_percentage for w in workload)
+        
+        serializer = self.get_serializer(workload, many=True)
+        return Response({
+            'total_workload': total_workload,
+            'status': self._get_workload_status(total_workload),
+            'projects': serializer.data
+        }) 

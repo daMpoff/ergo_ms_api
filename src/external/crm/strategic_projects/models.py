@@ -224,4 +224,46 @@ class ProjectHistory(models.Model):
         ordering = ['-created_at']
     
     def __str__(self):
-        return f"{self.project.code} - {self.action} - {self.created_at}" 
+        return f"{self.project.code} - {self.action} - {self.created_at}"
+
+
+class UserProjectRole(models.Model):
+    """Роли пользователей в модуле стратегических проектов"""
+    ROLE_CHOICES = [
+        ('admin', 'Администратор СтрПр'),
+        ('curator_sp', 'Куратор СтрПр'),
+        ('expert_group', 'Экспертная группа'),
+        ('expert_lead', 'Руководитель ЭГ'),
+        ('project_lead', 'Руководитель проекта'),
+        ('customer', 'Заказчик проекта'),
+    ]
+    
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='strategic_project_roles')
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, verbose_name='Роль')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Дата назначения')
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='assigned_roles')
+    
+    class Meta:
+        verbose_name = 'Роль пользователя в СтрПр'
+        verbose_name_plural = 'Роли пользователей в СтрПр'
+        unique_together = ['user', 'role']
+    
+    def __str__(self):
+        return f"{self.user.get_full_name()} - {self.get_role_display()}"
+
+
+class EmployeeWorkload(models.Model):
+    """Загруженность сотрудников в проектах"""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='strategic_workload')
+    project = models.ForeignKey(StrategicProject, on_delete=models.CASCADE, related_name='employee_workload')
+    role_in_project = models.CharField(max_length=50, verbose_name='Роль в проекте')
+    workload_percentage = models.IntegerField(default=0, verbose_name='Процент загрузки')
+    start_date = models.DateField(verbose_name='Дата начала участия')
+    end_date = models.DateField(null=True, blank=True, verbose_name='Дата окончания участия')
+    
+    class Meta:
+        verbose_name = 'Загруженность сотрудника'
+        verbose_name_plural = 'Загруженность сотрудников'
+    
+    def __str__(self):
+        return f"{self.user.get_full_name()} - {self.project.code} ({self.workload_percentage}%)" 

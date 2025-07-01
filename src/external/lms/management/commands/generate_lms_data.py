@@ -71,13 +71,18 @@ class Command(BaseCommand):
             action='store_true',
             help='Очистить существующие данные перед генерацией'
         )
+        parser.add_argument(
+            '--preserve-users', 
+            action='store_true', 
+            help='Сохранить всех пользователей при очистке (не удалять)'
+        )
 
     def handle(self, *args, **options):
         self.stdout.write('Команда для генерации данных LMS системы')
 
         if options['clear']:
             self.stdout.write('Очистка существующих данных...')
-            self.clear_data()
+            self.clear_data(preserve_users=options['preserve_users'])
 
         self.stdout.write('Создание категорий курсов...')
         categories = self.create_categories()
@@ -119,7 +124,7 @@ class Command(BaseCommand):
             )
         )
 
-    def clear_data(self):
+    def clear_data(self, preserve_users=False):
         """Очистка существующих данных"""
         models = self.get_models()
         
@@ -165,7 +170,11 @@ class Command(BaseCommand):
         models['UserProfile'].objects.all().delete()
         models['UserRole'].objects.all().delete()
         
-        User.objects.filter(is_superuser=False).delete()
+        if not preserve_users:
+            User.objects.filter(is_superuser=False).delete()
+            self.stdout.write('  - Пользователи удалены (кроме суперпользователей)')
+        else:
+            self.stdout.write('  - Пользователи сохранены (использован параметр --preserve-users)')
         
         self.stdout.write('  - Удаление категорий и форматов...')
         models['CourseCategory'].objects.all().delete()
