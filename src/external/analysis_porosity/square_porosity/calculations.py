@@ -3,17 +3,16 @@
 """
 import numpy as np
 import pandas as pd
-
 from typing import List, Dict, Any, Optional, Tuple
 
 from scipy.spatial.distance import pdist, squareform
 from scipy.stats import circmean, circstd
 from sklearn.cluster import DBSCAN
 
-from src.external.porosity_analysis.scripts.config import (
+from src.external.analysis_porosity.square_porosity.config import (
     SIZE_ANALYSIS, CLUSTERING, ORIENTATION_ANALYSIS, SHAPE_ANALYSIS
 )
-from src.external.porosity_analysis.scripts.utils import (
+from src.external.analysis_porosity.square_porosity.utils import (
     vectorized_equivalent_diameter, batch_process_properties, safe_divide
 )
 

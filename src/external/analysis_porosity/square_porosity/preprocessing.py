@@ -11,7 +11,7 @@ from skimage.morphology import disk, dilation
 
 from scipy.ndimage import label
 
-from src.external.porosity_analysis.scripts.config import ANOMALY_DETECTION, SCALE_DETECTION, FILES, MESSAGES
+from src.external.analysis_porosity.square_porosity.config import ANOMALY_DETECTION, SCALE_DETECTION, FILES, MESSAGES
 
 class ImagePreprocessor:
     """Класс для предобработки изображений микроскопии"""
@@ -300,6 +300,9 @@ class ScaleDetector:
         save_directory: str
     ) -> None:
         """Сохраняет область линейки"""
+        print(f"_save_scale_bar_results получил save_directory: {save_directory}")
+        print(f"Абсолютный путь: {os.path.abspath(save_directory)}")
+        
         x, y, w, h = scale_bar
         height, width = gray.shape
         
@@ -312,7 +315,14 @@ class ScaleDetector:
         # Извлечение и сохранение области
         text_roi = gray[text_roi_y_min:text_roi_y_max, text_roi_x_min:text_roi_x_max]
         scale_bar_filename = FILES['SCALE_BAR_FILENAME']
-        cv2.imwrite(os.path.join(save_directory, scale_bar_filename), text_roi)
+        output_path = os.path.join(save_directory, scale_bar_filename)
+        print(f"Сохраняем scale_bar в: {output_path}")
+        cv2.imwrite(output_path, text_roi)
+        
+        if os.path.exists(output_path):
+            print(f"Scale bar успешно сохранен: {output_path}")
+        else:
+            print(f"ОШИБКА: Scale bar не сохранен: {output_path}")
 
 
 # Функции обратной совместимости для сохранения интерфейса
@@ -324,5 +334,7 @@ def detect_and_exclude_anomalies(image, threshold_factor=2.0, scale_factor=0.3):
 
 def detect_scale_bar(image_path, scale_value, save_directory, scale_region_padding=10):
     """Функция обратной совместимости для обнаружения шкалы"""
+    print(f"detect_scale_bar получил save_directory: {save_directory}")
+    print(f"Абсолютный путь: {os.path.abspath(save_directory)}")
     detector = ScaleDetector()
     return detector.detect_scale_bar(image_path, scale_value, save_directory, scale_region_padding) 

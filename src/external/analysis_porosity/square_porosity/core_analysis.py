@@ -12,9 +12,9 @@ from scipy import ndimage as ndi
 
 from sklearn.cluster import KMeans
 
-from src.external.porosity_analysis.scripts.utils import batch_process_properties
-from src.external.porosity_analysis.scripts.preprocessing import detect_and_exclude_anomalies
-from src.external.porosity_analysis.scripts.ml_line_detector import MLLineDetector, create_sample_training_data
+from src.external.analysis_porosity.square_porosity.utils import batch_process_properties
+from src.external.analysis_porosity.square_porosity.preprocessing import detect_and_exclude_anomalies
+from src.external.analysis_porosity.square_porosity.ml_line_detector import MLLineDetector, create_sample_training_data
 
 import os
 
@@ -57,7 +57,14 @@ def advanced_porosity_analysis(image_path, pixels_per_micron, scale_region, save
     # Получаем директорию с данными анализа для поиска модели
     if save_directory is None:
         save_directory = os.path.dirname(image_path)
-    model_path = os.path.join(save_directory, "ml_line_detector.pkl")
+    
+    print(f"core_analysis получил save_directory: {save_directory}")
+    print(f"Абсолютный путь: {os.path.abspath(save_directory)}")
+    
+    # Путь к папке trained_models в корне проекта
+    trained_models_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))), "trained_models")
+    os.makedirs(trained_models_dir, exist_ok=True)
+    model_path = os.path.join(trained_models_dir, "ml_line_detector.pkl")
     
     try:
         # Пытаемся загрузить существующую модель

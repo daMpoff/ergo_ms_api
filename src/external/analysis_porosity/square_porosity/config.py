@@ -90,23 +90,87 @@ VISUALIZATION = {
     'HISTOGRAM_ALPHA': 0.7,
 }
 
-# Пути к файлам
+# Настройки файлов
 FILES = {
-    'ML_MODEL_FILENAME': 'ml_line_detector.pkl',
-    'SCALE_BAR_FILENAME': 'scale_bar.png',
     'IMAGE_WITH_SCALE_FILENAME': 'image_with_scale_bar.png',
+    'SCALE_BAR_FILENAME': 'scale_bar.png',
+    'CONTRAST_STAGES_FILENAME': 'figure1_contrast.png',
+    'EXCLUDED_AREAS_FILENAME': 'figure2_excluded_areas.png',
+    'TEXTURE_CLUSTERS_FILENAME': 'figure3_texture_clusters.png',
+    'MASK_RESULT_FILENAME': 'figure4_mask_result.png',
+    'OVERLAY_FILENAME': 'figure5_overlay.png',
+    'PORE_SIZE_DISTRIBUTION_FILENAME': 'pore_size_distribution.png',
+    'INTERPORE_DISTANCES_FILENAME': 'interpore_distances.png',
+    'PORE_ORIENTATION_ROSE_FILENAME': 'pore_orientation_rose.png',
+    'PORE_ORIENTATION_HISTOGRAM_FILENAME': 'pore_orientation_histogram.png',
+    'PORE_SHAPES_ANALYSIS_FILENAME': 'pore_shapes_analysis.png',
+    'CIRCULARITY_DISTRIBUTION_FILENAME': 'circularity_distribution.png',
+    'ELLIPTICITY_VS_AREA_FILENAME': 'ellipticity_vs_area.png',
 }
 
 # Сообщения для логирования
 MESSAGES = {
-    'SCALE_DETECTED': "Определен масштаб:",
+    'SCALE_DETECTED': '✓ Масштабная линейка обнаружена',
     'ANOMALIES_DETECTION': "Обнаружение аномалий для исключения...",
     'LINES_DETECTION': "Обнаружение линий с помощью ML детектора...",
     'ML_MODEL_LOADED': "Загружена предобученная модель:",
     'ML_MODEL_CREATED': "Создание и обучение новой ML модели...",
     'ML_MODEL_APPLIED': "ML детектор успешно применен",
     'ML_MODEL_ERROR': "Ошибка ML детектора:",
-    'CALCULATIONS_START': "Выполнение дополнительных расчетов...",
-    'VISUALIZATIONS_START': "Создание визуализаций...",
-    'VISUALIZATIONS_COMPLETE': "Визуализации созданы и сохранены.",
-} 
+    'CALCULATIONS_START': '📊 Выполняются дополнительные расчеты...',
+    'VISUALIZATIONS_START': '🎨 Создание визуализаций...',
+    'VISUALIZATIONS_COMPLETE': '✓ Все визуализации созданы',
+}
+
+# Параметры анализа
+ANALYSIS_PARAMS = {
+    'MIN_PORE_SIZE': 10,  # минимальный размер поры в пикселях
+    'MAX_PORE_SIZE': 1000,  # максимальный размер поры в пикселях
+    'CONTRAST_THRESHOLD': 0.5,  # порог контраста
+    'TEXTURE_SENSITIVITY': 0.3,  # чувствительность текстуры
+    'SCALE_DETECTION_CONFIDENCE': 0.8,  # уверенность в детекции шкалы
+}
+
+# Настройки визуализации
+VISUALIZATION_PARAMS = {
+    'FIGURE_SIZE': (12, 8),
+    'DPI': 300,
+    'COLOR_MAP': 'viridis',
+    'FONT_SIZE': 12,
+    'LINE_WIDTH': 2,
+}
+
+# Настройки экспорта
+EXPORT_PARAMS = {
+    'IMAGE_FORMAT': 'png',
+    'COMPRESSION': 95,
+    'METADATA': True,
+}
+
+# Ограничения
+LIMITS = {
+    'MAX_IMAGE_SIZE': 50 * 1024 * 1024,  # 50 МБ
+    'MAX_IMAGE_DIMENSION': 10000,  # максимальный размер изображения
+    'MIN_SCALE_VALUE': 0.1,  # минимальное значение шкалы
+    'MAX_SCALE_VALUE': 10000,  # максимальное значение шкалы
+    'MAX_BATCH_FILES': 20,  # максимальное количество файлов в пакете
+}
+
+# Поддерживаемые форматы
+SUPPORTED_FORMATS = [
+    'image/jpeg',
+    'image/png', 
+    'image/bmp',
+    'image/tiff',
+    'image/tif'
+]
+
+# Расширения файлов
+SUPPORTED_EXTENSIONS = [
+    '.jpg',
+    '.jpeg',
+    '.png',
+    '.bmp',
+    '.tiff',
+    '.tif'
+] 
