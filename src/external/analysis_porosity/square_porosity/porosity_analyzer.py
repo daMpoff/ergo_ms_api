@@ -8,23 +8,23 @@ from typing import Dict, Any, Optional
 
 import numpy as np
 
-from src.external.porosity_analysis.scripts.preprocessing import detect_scale_bar
-from src.external.porosity_analysis.scripts.core_analysis import advanced_porosity_analysis
-from src.external.porosity_analysis.scripts.calculations import (
+from .preprocessing import detect_scale_bar
+from .core_analysis import advanced_porosity_analysis
+from .calculations import (
     calculate_pore_size_distribution,
     calculate_interpore_distances,
     calculate_pore_orientation,
     calculate_pore_shapes
 )
-from src.external.porosity_analysis.scripts.visualization import (
+from .visualization import (
     visualize_porosity_analysis_stages,
     visualize_pore_size_distribution,
     visualize_interpore_distances,
     visualize_pore_orientation,
     visualize_pore_shapes
 )
-from src.external.porosity_analysis.scripts.config import FILES, MESSAGES
-from src.external.porosity_analysis.scripts.utils import calculate_basic_pore_statistics
+from .config import FILES, MESSAGES
+from .utils import calculate_basic_pore_statistics
 
 
 class PorosityAnalyzer:

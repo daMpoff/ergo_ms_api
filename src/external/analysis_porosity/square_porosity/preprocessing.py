@@ -11,7 +11,7 @@ from skimage.morphology import disk, dilation
 
 from scipy.ndimage import label
 
-from src.external.porosity_analysis.scripts.config import ANOMALY_DETECTION, SCALE_DETECTION, FILES, MESSAGES
+from src.microscope.square_porosity.config import ANOMALY_DETECTION, SCALE_DETECTION, FILES, MESSAGES
 
 class ImagePreprocessor:
     """Класс для предобработки изображений микроскопии"""

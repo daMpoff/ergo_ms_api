@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from src.external.porosity_analysis.scripts.porosity_analyzer import PorosityAnalyzer
+from src.microscope.square_porosity.porosity_analyzer import PorosityAnalyzer
 
 
 class PorosityAnalysisApp:
@@ -145,7 +145,7 @@ def main():
         # Запуск анализа с параметрами по умолчанию
         # Можно изменить параметры здесь:
         success = app.run_analysis(
-            save_directory="analysed_data_1",  # Путь к папке с файлами
+            save_directory="data",  # Путь к папке с файлами
             image_filename="image.png",        # Имя файла изображения
             scale_value=100                    # Значение шкалы в микрометрах
         )

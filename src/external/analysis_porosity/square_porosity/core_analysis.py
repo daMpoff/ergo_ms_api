@@ -12,9 +12,9 @@ from scipy import ndimage as ndi
 
 from sklearn.cluster import KMeans
 
-from src.external.porosity_analysis.scripts.utils import batch_process_properties
-from src.external.porosity_analysis.scripts.preprocessing import detect_and_exclude_anomalies
-from src.external.porosity_analysis.scripts.ml_line_detector import MLLineDetector, create_sample_training_data
+from src.microscope.square_porosity.utils import batch_process_properties
+from src.microscope.square_porosity.preprocessing import detect_and_exclude_anomalies
+from src.microscope.square_porosity.ml_line_detector import MLLineDetector, create_sample_training_data
 
 import os
 
