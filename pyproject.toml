@@ -46,6 +46,8 @@ yfinance = "^0.2.63"
 feedparser = "^6.0.11"
 python-slugify = "^8.0.4"
 faker = "^37.4.0"
+opencv-python = "^4.11.0.86"
+scikit-image = "^0.25.2"
 
 [tool.poetry.scripts]
 cmd = "commands.__main__:main"

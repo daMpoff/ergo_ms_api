@@ -6,25 +6,29 @@ import cv2
 import traceback
 from typing import Dict, Any, Optional
 
+# Настройка Matplotlib для работы без GUI (для фоновых процессов)
+import matplotlib
+matplotlib.use('Agg')
+
 import numpy as np
 
-from .preprocessing import detect_scale_bar
-from .core_analysis import advanced_porosity_analysis
-from .calculations import (
+from src.external.analysis_porosity.square_porosity.preprocessing import detect_scale_bar
+from src.external.analysis_porosity.square_porosity.core_analysis import advanced_porosity_analysis
+from src.external.analysis_porosity.square_porosity.calculations import (
     calculate_pore_size_distribution,
     calculate_interpore_distances,
     calculate_pore_orientation,
     calculate_pore_shapes
 )
-from .visualization import (
+from src.external.analysis_porosity.square_porosity.visualization import (
     visualize_porosity_analysis_stages,
     visualize_pore_size_distribution,
     visualize_interpore_distances,
     visualize_pore_orientation,
     visualize_pore_shapes
 )
-from .config import FILES, MESSAGES
-from .utils import calculate_basic_pore_statistics
+from src.external.analysis_porosity.square_porosity.config import FILES, MESSAGES
+from src.external.analysis_porosity.square_porosity.utils import calculate_basic_pore_statistics
 
 
 class PorosityAnalyzer:
@@ -34,6 +38,71 @@ class PorosityAnalyzer:
         self.config_files = FILES
         self.messages = MESSAGES
     
+    def analyze_porosity(
+        self, 
+        image_path: str, 
+        scale_value: float, 
+        output_dir: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Анализ пористости для использования в задачах Celery
+        
+        Args:
+            image_path: Путь к изображению
+            scale_value: Значение шкалы в микрометрах
+            output_dir: Директория для сохранения результатов
+            
+        Returns:
+            Результаты анализа в формате для сохранения в БД или None в случае ошибки
+        """
+        try:
+            print(f"analyze_porosity получил output_dir: {output_dir}")
+            print(f"Абсолютный путь: {os.path.abspath(output_dir)}")
+            print(f"Текущая рабочая директория: {os.getcwd()}")
+            print(f"Переменная окружения TMPDIR: {os.environ.get('TMPDIR', 'Не установлена')}")
+            print(f"Переменная окружения TEMP: {os.environ.get('TEMP', 'Не установлена')}")
+            # Выполняем интегрированный анализ
+            results = self.integrated_analysis(image_path, scale_value, output_dir)
+            
+            if results is None:
+                return None
+            
+            # Преобразуем результаты в формат для сохранения в БД
+            db_results = {
+                'porosity_percentage': results.get('porosity_percentage', 0.0),
+                'relative_pore_area': results.get('relative_pore_area', 0.0),
+                'number_of_pores': results.get('number_of_pores', 0),
+                'mean_pore_size_microns': results.get('mean_pore_size_microns', 0.0),
+                'median_pore_size_microns': results.get('median_pore_size_microns', 0.0),
+                'mean_pore_diameter_microns': results.get('mean_pore_diameter_microns', 0.0),
+                'median_pore_diameter_microns': results.get('median_pore_diameter_microns', 0.0),
+                'pixels_per_micron': results.get('pixels_per_micron', 0.0),
+                'scale_region_x': results.get('scale_region', (0, 0, 0, 0))[0],
+                'scale_region_y': results.get('scale_region', (0, 0, 0, 0))[1],
+                'scale_region_width': results.get('scale_region', (0, 0, 0, 0))[2],
+                'scale_region_height': results.get('scale_region', (0, 0, 0, 0))[3],
+                'total_pixels': results.get('total_pixels', 0),
+                'scale_excluded_pixels': results.get('scale_excluded_pixels', 0),
+                'lines_excluded_pixels': results.get('lines_excluded_pixels', 0),
+                'anomalies_excluded_pixels': results.get('anomalies_excluded_pixels', 0),
+                'total_excluded_pixels': results.get('total_excluded_pixels', 0),
+                'extended_metrics': {
+                    'pore_size_distribution': results.get('pore_size_distribution', {}),
+                    'interpore_distances': results.get('interpore_distances', {}),
+                    'pore_orientation': results.get('pore_orientation', {}),
+                    'pore_shapes': results.get('pore_shapes', {}),
+                    'pore_centers': results.get('pore_centers', [])
+                }
+            }
+            
+            return db_results
+            
+        except Exception as e:
+            print(f"Ошибка при анализе пористости: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+
     def integrated_analysis(
         self, 
         image_path: str, 
@@ -52,6 +121,8 @@ class PorosityAnalyzer:
             Результаты анализа или None в случае ошибки
         """
         try:
+            print(f"Анализатор получил директорию для сохранения: {save_directory}")
+            print(f"Абсолютный путь: {os.path.abspath(save_directory)}")
             # 1. Определение масштаба по линейке
             scale_results = self._detect_scale(image_path, scale_value, save_directory)
             pixels_per_micron, scale_result, scale_region = scale_results
@@ -106,7 +177,14 @@ class PorosityAnalyzer:
     def _save_scale_image(self, scale_result: np.ndarray, save_directory: str) -> None:
         """Сохраняет изображение с обнаруженной линейкой"""
         filename = self.config_files['IMAGE_WITH_SCALE_FILENAME']
-        cv2.imwrite(os.path.join(save_directory, filename), scale_result)
+        output_path = os.path.join(save_directory, filename)
+        print(f"Сохраняем изображение с линейкой в: {output_path}")
+        cv2.imwrite(output_path, scale_result)
+        
+        if os.path.exists(output_path):
+            print(f"Изображение с линейкой успешно сохранено: {output_path}")
+        else:
+            print(f"ОШИБКА: Изображение с линейкой не сохранено: {output_path}")
     
     def _perform_additional_calculations(
         self, 
@@ -171,14 +249,39 @@ class PorosityAnalyzer:
         """Создает все визуализации"""
         print(f"\n{self.messages['VISUALIZATIONS_START']}")
         
-        # Создаем задачи визуализации
-        visualization_tasks = self._create_visualization_tasks(results, save_directory)
-        
-        # Выполняем все визуализации
-        for task in visualization_tasks:
-            task()
-        
-        print(self.messages['VISUALIZATIONS_COMPLETE'])
+        try:
+            print(f"Начинаем создание визуализаций в директории: {save_directory}")
+            print(f"Абсолютный путь: {os.path.abspath(save_directory)}")
+            
+            # Проверяем существование директории
+            if not os.path.exists(save_directory):
+                print(f"Создаем директорию для сохранения: {save_directory}")
+                os.makedirs(save_directory, exist_ok=True)
+            
+            print(f"Директория для сохранения: {save_directory}")
+            
+            # Создаем задачи визуализации
+            visualization_tasks = self._create_visualization_tasks(results, save_directory)
+            
+            print(f"Создано {len(visualization_tasks)} задач визуализации")
+            
+            # Выполняем все визуализации
+            for i, task in enumerate(visualization_tasks):
+                try:
+                    print(f"Выполняем визуализацию {i+1}/{len(visualization_tasks)}")
+                    task()
+                    print(f"Визуализация {i+1} завершена успешно")
+                except Exception as e:
+                    print(f"Ошибка при выполнении визуализации {i+1}: {str(e)}")
+                    import traceback
+                    traceback.print_exc()
+            
+            print(self.messages['VISUALIZATIONS_COMPLETE'])
+            
+        except Exception as e:
+            print(f"Ошибка при создании визуализаций: {str(e)}")
+            import traceback
+            traceback.print_exc()
     
     def _create_visualization_tasks(
         self, 

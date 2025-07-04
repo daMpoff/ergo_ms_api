@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from src.microscope.square_porosity.porosity_analyzer import PorosityAnalyzer
+from src.external.analysis_porosity.square_porosity.porosity_analyzer import PorosityAnalyzer
 
 
 class PorosityAnalysisApp:

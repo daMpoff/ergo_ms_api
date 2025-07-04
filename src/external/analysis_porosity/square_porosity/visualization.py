@@ -1,4 +1,7 @@
 import os
+import matplotlib
+# Настройка Matplotlib для работы без GUI (для фоновых процессов)
+matplotlib.use('Agg')
 
 import numpy as np
 
@@ -15,19 +18,35 @@ from skimage import color
 def visualize_pore_size_distribution(df, save_directory):
     """Создает визуализацию распределения пор по размерам."""
     if df.empty:
+        print("DataFrame пуст, пропускаем визуализацию распределения пор")
         return
     
-    fig, ax = plt.subplots(figsize=(12, 6))
-    ax.bar(df['Интервал диаметров (мкм)'], df['Количество пор'], color='skyblue', edgecolor='black')
-    ax.set_title('Распределение пор по размерам')
-    ax.set_xlabel('Диаметр поры (мкм)')
-    ax.set_ylabel('Количество пор')
-    plt.xticks(rotation=45)
-    plt.tight_layout()
-    
-    output_path = os.path.join(save_directory, 'pore_size_distribution.png')
-    plt.savefig(output_path, dpi=300)
-    plt.close(fig)
+    try:
+        print(f"Создаем визуализацию распределения пор по размерам в {save_directory}")
+        
+        fig, ax = plt.subplots(figsize=(12, 6))
+        ax.bar(df['Интервал диаметров (мкм)'], df['Количество пор'], color='skyblue', edgecolor='black')
+        ax.set_title('Распределение пор по размерам')
+        ax.set_xlabel('Диаметр поры (мкм)')
+        ax.set_ylabel('Количество пор')
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        
+        output_path = os.path.join(save_directory, 'pore_size_distribution.png')
+        print(f"Сохраняем файл: {output_path}")
+        plt.savefig(output_path, dpi=300)
+        plt.close(fig)
+        
+        # Проверяем, что файл создался
+        if os.path.exists(output_path):
+            print(f"Файл успешно создан: {output_path}")
+        else:
+            print(f"ОШИБКА: Файл не создан: {output_path}")
+            
+    except Exception as e:
+        print(f"Ошибка при создании визуализации распределения пор: {str(e)}")
+        import traceback
+        traceback.print_exc()
 
 def visualize_interpore_distances(min_distances_microns, centers, microns_per_pixel, save_directory):
     """Создает визуализацию межпоровых расстояний."""
@@ -268,156 +287,166 @@ def visualize_porosity_analysis_stages(gray, enhanced, texture, segmented, clean
                                      exclude_mask, lines_exclude_mask, anomalies_exclude_mask, 
                                      scale_exclude_mask, save_directory):
     """Создает визуализацию этапов анализа пористости с исключенными областями."""
-    fig_params = {
-        'figsize': (12, 6),
-        'tight_layout': {'pad': 1.0, 'h_pad': 0.5, 'w_pad': 0.5},
-        'subplot_adjust': {'bottom': 0.05, 'top': 0.95}
-    }
+    try:
+        print(f"Создаем визуализацию этапов анализа в {save_directory}")
+        
+        fig_params = {
+            'figsize': (12, 6),
+            'tight_layout': {'pad': 1.0, 'h_pad': 0.5, 'w_pad': 0.5},
+            'subplot_adjust': {'bottom': 0.05, 'top': 0.95}
+        }
 
-    # Первый рисунок: исходное изображение и улучшенный контраст
-    plt.figure(figsize=fig_params['figsize'])
+        # Первый рисунок: исходное изображение и улучшенный контраст
+        plt.figure(figsize=fig_params['figsize'])
 
-    plt.subplot(1, 2, 1)
-    plt.imshow(gray, cmap='gray')
-    plt.title('Исходное изображение', pad=5)
-    if scale_region:
-        sx, sy, sw, sh = scale_region
-        rect = plt.Rectangle((sx, sy), sw, sh, 
-                            linewidth=2, edgecolor='r', facecolor='none')
-        plt.gca().add_patch(rect)
-    plt.axis('off')
+        plt.subplot(1, 2, 1)
+        plt.imshow(gray, cmap='gray')
+        plt.title('Исходное изображение', pad=5)
+        if scale_region:
+            sx, sy, sw, sh = scale_region
+            rect = plt.Rectangle((sx, sy), sw, sh, 
+                                linewidth=2, edgecolor='r', facecolor='none')
+            plt.gca().add_patch(rect)
+        plt.axis('off')
 
-    plt.subplot(1, 2, 2)
-    plt.imshow(enhanced, cmap='gray')
-    plt.title('Улучшение контраста', pad=5)
-    plt.axis('off')
+        plt.subplot(1, 2, 2)
+        plt.imshow(enhanced, cmap='gray')
+        plt.title('Улучшение контраста', pad=5)
+        plt.axis('off')
 
-    plt.subplots_adjust(**fig_params['subplot_adjust'])
-    plt.tight_layout(**fig_params['tight_layout'])
-    plt.savefig(os.path.join(save_directory, 'figure1_contrast.png'), dpi=300, bbox_inches='tight')
-    plt.close()
+        plt.subplots_adjust(**fig_params['subplot_adjust'])
+        plt.tight_layout(**fig_params['tight_layout'])
+        plt.savefig(os.path.join(save_directory, 'figure1_contrast.png'), dpi=300, bbox_inches='tight')
+        plt.close()
 
-    # Второй рисунок: исключенные области
-    plt.figure(figsize=(18, 6))
+        # Второй рисунок: исключенные области
+        plt.figure(figsize=(18, 6))
 
-    plt.subplot(1, 3, 1)
-    # Улучшенная визуализация исключенных линий
-    excluded_lines_viz = gray.copy()
-    excluded_lines_viz[~lines_exclude_mask] = 255  # Белым показываем исключенные линии
-    plt.imshow(excluded_lines_viz, cmap='gray')
-    plt.title(f'Исключенные линии\n({np.sum(~lines_exclude_mask)} пикселей, {(np.sum(~lines_exclude_mask)/gray.size)*100:.2f}%)', pad=5)
-    plt.axis('off')
+        plt.subplot(1, 3, 1)
+        # Улучшенная визуализация исключенных линий
+        excluded_lines_viz = gray.copy()
+        excluded_lines_viz[~lines_exclude_mask] = 255  # Белым показываем исключенные линии
+        plt.imshow(excluded_lines_viz, cmap='gray')
+        plt.title(f'Исключенные линии\n({np.sum(~lines_exclude_mask)} пикселей, {(np.sum(~lines_exclude_mask)/gray.size)*100:.2f}%)', pad=5)
+        plt.axis('off')
 
-    plt.subplot(1, 3, 2)
-    excluded_anomalies_viz = gray.copy()
-    excluded_anomalies_viz[~anomalies_exclude_mask] = 255
-    plt.imshow(excluded_anomalies_viz, cmap='gray')
-    plt.title(f'Исключенные аномалии\n({np.sum(~anomalies_exclude_mask)} пикселей, {(np.sum(~anomalies_exclude_mask)/gray.size)*100:.2f}%)', pad=5)
-    plt.axis('off')
+        plt.subplot(1, 3, 2)
+        excluded_anomalies_viz = gray.copy()
+        excluded_anomalies_viz[~anomalies_exclude_mask] = 255
+        plt.imshow(excluded_anomalies_viz, cmap='gray')
+        plt.title(f'Исключенные аномалии\n({np.sum(~anomalies_exclude_mask)} пикселей, {(np.sum(~anomalies_exclude_mask)/gray.size)*100:.2f}%)', pad=5)
+        plt.axis('off')
 
-    plt.subplot(1, 3, 3)
-    # Более контрастная комбинированная визуализация всех исключений
-    combined_exclusion = np.zeros((gray.shape[0], gray.shape[1], 3), dtype=np.uint8)
-    
-    # Базовое изображение в оттенках серого
-    gray_normalized = ((gray - gray.min()) / (gray.max() - gray.min()) * 255).astype(np.uint8)
-    combined_exclusion[:, :, 0] = gray_normalized
-    combined_exclusion[:, :, 1] = gray_normalized  
-    combined_exclusion[:, :, 2] = gray_normalized
-    
-    # Ярко-красным отмечаем исключенные линии
-    lines_mask = ~lines_exclude_mask
-    combined_exclusion[lines_mask, 0] = 255
-    combined_exclusion[lines_mask, 1] = 0
-    combined_exclusion[lines_mask, 2] = 0
-    
-    # Ярко-синим отмечаем исключенные аномалии (только там где нет линий)
-    anomalies_only_mask = (~anomalies_exclude_mask) & lines_exclude_mask
-    combined_exclusion[anomalies_only_mask, 0] = 0
-    combined_exclusion[anomalies_only_mask, 1] = 100
-    combined_exclusion[anomalies_only_mask, 2] = 255
-    
-    # Желтым отмечаем область шкалы (только там где нет линий и аномалий)
-    scale_only_mask = (~scale_exclude_mask) & lines_exclude_mask & anomalies_exclude_mask
-    combined_exclusion[scale_only_mask, 0] = 255
-    combined_exclusion[scale_only_mask, 1] = 255
-    combined_exclusion[scale_only_mask, 2] = 0
-    
-    plt.imshow(combined_exclusion)
-    total_excluded = np.sum(~exclude_mask)
-    plt.title(f'Все исключенные области\n(красный=линии, синий=аномалии, желтый=шкала)\nВсего: {total_excluded} пикселей ({(total_excluded/gray.size)*100:.2f}%)', pad=5)
-    plt.axis('off')
+        plt.subplot(1, 3, 3)
+        # Более контрастная комбинированная визуализация всех исключений
+        combined_exclusion = np.zeros((gray.shape[0], gray.shape[1], 3), dtype=np.uint8)
+        
+        # Базовое изображение в оттенках серого
+        gray_normalized = ((gray - gray.min()) / (gray.max() - gray.min()) * 255).astype(np.uint8)
+        combined_exclusion[:, :, 0] = gray_normalized
+        combined_exclusion[:, :, 1] = gray_normalized  
+        combined_exclusion[:, :, 2] = gray_normalized
+        
+        # Ярко-красным отмечаем исключенные линии
+        lines_mask = ~lines_exclude_mask
+        combined_exclusion[lines_mask, 0] = 255
+        combined_exclusion[lines_mask, 1] = 0
+        combined_exclusion[lines_mask, 2] = 0
+        
+        # Ярко-синим отмечаем исключенные аномалии (только там где нет линий)
+        anomalies_only_mask = (~anomalies_exclude_mask) & lines_exclude_mask
+        combined_exclusion[anomalies_only_mask, 0] = 0
+        combined_exclusion[anomalies_only_mask, 1] = 100
+        combined_exclusion[anomalies_only_mask, 2] = 255
+        
+        # Желтым отмечаем область шкалы (только там где нет линий и аномалий)
+        scale_only_mask = (~scale_exclude_mask) & lines_exclude_mask & anomalies_exclude_mask
+        combined_exclusion[scale_only_mask, 0] = 255
+        combined_exclusion[scale_only_mask, 1] = 255
+        combined_exclusion[scale_only_mask, 2] = 0
+        
+        plt.imshow(combined_exclusion)
+        total_excluded = np.sum(~exclude_mask)
+        plt.title(f'Все исключенные области\n(красный=линии, синий=аномалии, желтый=шкала)\nВсего: {total_excluded} пикселей ({(total_excluded/gray.size)*100:.2f}%)', pad=5)
+        plt.axis('off')
 
-    plt.subplots_adjust(**fig_params['subplot_adjust'])
-    plt.tight_layout(**fig_params['tight_layout'])
-    plt.savefig(os.path.join(save_directory, 'figure2_excluded_areas.png'), dpi=300, bbox_inches='tight')
-    plt.close()
+        plt.subplots_adjust(**fig_params['subplot_adjust'])
+        plt.tight_layout(**fig_params['tight_layout'])
+        plt.savefig(os.path.join(save_directory, 'figure2_excluded_areas.png'), dpi=300, bbox_inches='tight')
+        plt.close()
 
-    # Третий рисунок: текстурный признак и кластеризация
-    plt.figure(figsize=fig_params['figsize'])
+        # Третий рисунок: текстурный признак и кластеризация
+        plt.figure(figsize=fig_params['figsize'])
 
-    plt.subplot(1, 2, 1)
-    texture_viz = texture.copy()
-    texture_viz[~exclude_mask] = texture_viz.min()  # Затемняем исключенные области
-    plt.imshow(texture_viz, cmap='viridis')
-    plt.title('Текстурный признак (энтропия)', pad=5)
-    plt.axis('off')
+        plt.subplot(1, 2, 1)
+        texture_viz = texture.copy()
+        texture_viz[~exclude_mask] = texture_viz.min()  # Затемняем исключенные области
+        plt.imshow(texture_viz, cmap='viridis')
+        plt.title('Текстурный признак (энтропия)', pad=5)
+        plt.axis('off')
 
-    plt.subplot(1, 2, 2)
-    K = len(np.unique(segmented))
-    cluster_img = np.zeros_like(segmented, dtype=np.uint8)
-    for i in range(K):
-        cluster_img[(segmented == i) & exclude_mask] = 85 * i
-    plt.imshow(cluster_img, cmap='viridis')
-    plt.title('Результат кластеризации', pad=5)
-    plt.axis('off')
+        plt.subplot(1, 2, 2)
+        K = len(np.unique(segmented))
+        cluster_img = np.zeros_like(segmented, dtype=np.uint8)
+        for i in range(K):
+            cluster_img[(segmented == i) & exclude_mask] = 85 * i
+        plt.imshow(cluster_img, cmap='viridis')
+        plt.title('Результат кластеризации', pad=5)
+        plt.axis('off')
 
-    plt.subplots_adjust(**fig_params['subplot_adjust'])
-    plt.tight_layout(**fig_params['tight_layout'])
-    plt.savefig(os.path.join(save_directory, 'figure3_texture_clusters.png'), dpi=300, bbox_inches='tight')
-    plt.close()
+        plt.subplots_adjust(**fig_params['subplot_adjust'])
+        plt.tight_layout(**fig_params['tight_layout'])
+        plt.savefig(os.path.join(save_directory, 'figure3_texture_clusters.png'), dpi=300, bbox_inches='tight')
+        plt.close()
 
-    # Четвертый рисунок: бинарная маска и финальный результат
-    plt.figure(figsize=fig_params['figsize'])
+        # Четвертый рисунок: бинарная маска и финальный результат
+        plt.figure(figsize=fig_params['figsize'])
 
-    plt.subplot(1, 2, 1)
-    plt.imshow(cleaned_mask, cmap='gray')
-    plt.title('Бинарная маска пор', pad=5)
-    plt.axis('off')
+        plt.subplot(1, 2, 1)
+        plt.imshow(cleaned_mask, cmap='gray')
+        plt.title('Бинарная маска пор', pad=5)
+        plt.axis('off')
 
-    plt.subplot(1, 2, 2)
-    labeled_viz = color.label2rgb(labeled_pores, bg_label=0)
-    plt.imshow(labeled_viz)
-    plt.title(f'Определенные поры: {num_pores}, Пористость: {porosity:.2f}%', pad=5)
-    plt.axis('off')
+        plt.subplot(1, 2, 2)
+        labeled_viz = color.label2rgb(labeled_pores, bg_label=0)
+        plt.imshow(labeled_viz)
+        plt.title(f'Определенные поры: {num_pores}, Пористость: {porosity:.2f}%', pad=5)
+        plt.axis('off')
 
-    plt.subplots_adjust(**fig_params['subplot_adjust'])
-    plt.tight_layout(**fig_params['tight_layout'])
-    plt.savefig(os.path.join(save_directory, 'figure4_mask_result.png'), dpi=300, bbox_inches='tight')
-    plt.close()
+        plt.subplots_adjust(**fig_params['subplot_adjust'])
+        plt.tight_layout(**fig_params['tight_layout'])
+        plt.savefig(os.path.join(save_directory, 'figure4_mask_result.png'), dpi=300, bbox_inches='tight')
+        plt.close()
 
-    # Пятый рисунок: наложение
-    plt.figure(figsize=fig_params['figsize'])
+        # Пятый рисунок: наложение
+        plt.figure(figsize=fig_params['figsize'])
 
-    plt.subplot(1, 2, 1)
-    plt.imshow(gray, cmap='gray')
-    plt.title('Исходное изображение', pad=5)
-    plt.axis('off')
+        plt.subplot(1, 2, 1)
+        plt.imshow(gray, cmap='gray')
+        plt.title('Исходное изображение', pad=5)
+        plt.axis('off')
 
-    plt.subplot(1, 2, 2)
-    overlay = np.dstack([gray, gray, gray])
-    overlay[labeled_pores > 0, 0] = 255
-    overlay[labeled_pores > 0, 1] = 0
-    overlay[labeled_pores > 0, 2] = 0
-    
-    # Отмечаем исключенные области полупрозрачным синим
-    overlay[~exclude_mask, 2] = np.minimum(overlay[~exclude_mask, 2] + 100, 255)
-    
-    plt.imshow(overlay)
-    plt.title(f'Наложение пор (красное) и исключений (синеватое): {porosity:.2f}%', pad=5)
-    plt.axis('off')
+        plt.subplot(1, 2, 2)
+        overlay = np.dstack([gray, gray, gray])
+        overlay[labeled_pores > 0, 0] = 255
+        overlay[labeled_pores > 0, 1] = 0
+        overlay[labeled_pores > 0, 2] = 0
+        
+        # Отмечаем исключенные области полупрозрачным синим
+        overlay[~exclude_mask, 2] = np.minimum(overlay[~exclude_mask, 2] + 100, 255)
+        
+        plt.imshow(overlay)
+        plt.title(f'Наложение пор (красное) и исключений (синеватое): {porosity:.2f}%', pad=5)
+        plt.axis('off')
 
-    plt.subplots_adjust(**fig_params['subplot_adjust'])
-    plt.tight_layout(**fig_params['tight_layout'])
-    plt.savefig(os.path.join(save_directory, 'figure5_overlay.png'), dpi=300, bbox_inches='tight')
-    plt.close() 
+        plt.subplots_adjust(**fig_params['subplot_adjust'])
+        plt.tight_layout(**fig_params['tight_layout'])
+        plt.savefig(os.path.join(save_directory, 'figure5_overlay.png'), dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        print("Все визуализации этапов анализа созданы успешно")
+        
+    except Exception as e:
+        print(f"Ошибка при создании визуализации этапов анализа: {str(e)}")
+        import traceback
+        traceback.print_exc() 

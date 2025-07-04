@@ -335,7 +335,7 @@ class MLLineDetector:
         # Сохранение модели
         if save_path:
             self.save_model(save_path)
-            print(f"Модель сохранена в {save_path}")
+            print(f"Модель сохранена в: {save_path}")
         
         return {
             'train_score': train_score,
@@ -577,17 +577,22 @@ class MLLineDetector:
         return results
 
 
-def create_sample_training_data(image_paths=None, save_path="line_detector_model.pkl"):
+def create_sample_training_data(image_paths=None, save_path=None):
     """
     Создает и обучает модель на примерных данных
     
     Args:
         image_paths (list, optional): Пути к изображениям для обучения
-        save_path (str): Путь для сохранения модели
+        save_path (str, optional): Путь для сохранения модели
         
     Returns:
         MLLineDetector: Обученный детектор
     """
+    # Если путь не указан, используем папку trained_models
+    if save_path is None:
+        trained_models_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))), "trained_models")
+        os.makedirs(trained_models_dir, exist_ok=True)
+        save_path = os.path.join(trained_models_dir, "ml_line_detector.pkl")
     detector = MLLineDetector()
     
     if image_paths is None:
@@ -625,12 +630,13 @@ def create_sample_training_data(image_paths=None, save_path="line_detector_model
             else:
                 print(f"  Предупреждение: не удалось загрузить изображение {path}")
     
-    # Обучаем модель
-    if training_images:
-        print(f"Обучение на {len(training_images)} изображениях...")
-        detector.train_model(training_images, save_path=save_path)
-    else:
-        print("Ошибка: нет доступных изображений для обучения")
+            # Обучаем модель
+        if training_images:
+            print(f"Обучение на {len(training_images)} изображениях...")
+            detector.train_model(training_images, save_path=save_path)
+            print(f"Модель сохранена в: {save_path}")
+        else:
+            print("Ошибка: нет доступных изображений для обучения")
     
     return detector
 
