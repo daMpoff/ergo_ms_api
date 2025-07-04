@@ -3,7 +3,8 @@ from django.contrib.auth import get_user_model
 from .models import (
     DevelopmentProgram, ProgramTopic, StrategicProject,
     ProjectStage, StageExecutor, ProjectReport,
-    StageResult, ProjectHistory, UserProjectRole, EmployeeWorkload
+    StageResult, ProjectHistory, UserProjectRole, EmployeeWorkload,
+    ProjectComment, ProjectNotification
 )
 
 User = get_user_model()
@@ -203,4 +204,31 @@ class EmployeeWorkloadSerializer(serializers.ModelSerializer):
             'code': obj.project.code,
             'name': obj.project.name,
             'status': obj.project.status
-        } 
+        }
+
+
+class ProjectNotificationSerializer(serializers.ModelSerializer):
+    """Сериализатор для уведомлений проектов"""
+    project_name = serializers.CharField(source='project.name', read_only=True)
+    project_code = serializers.CharField(source='project.code', read_only=True)
+    recipient_name = serializers.CharField(source='recipient.get_full_name', read_only=True)
+    notification_type_display = serializers.CharField(source='get_notification_type_display', read_only=True)
+    
+    class Meta:
+        model = ProjectNotification
+        fields = [
+            'id', 
+            'project', 
+            'project_name',
+            'project_code',
+            'recipient',
+            'recipient_name',
+            'notification_type',
+            'notification_type_display',
+            'title',
+            'message',
+            'is_read',
+            'created_at',
+            'read_at'
+        ]
+        read_only_fields = ['id', 'created_at'] 

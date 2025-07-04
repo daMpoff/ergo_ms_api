@@ -266,4 +266,145 @@ class EmployeeWorkload(models.Model):
         verbose_name_plural = 'Загруженность сотрудников'
     
     def __str__(self):
-        return f"{self.user.get_full_name()} - {self.project.code} ({self.workload_percentage}%)" 
+        return f"{self.user.get_full_name()} - {self.project.code} ({self.workload_percentage}%)"
+
+
+class ProjectNotification(models.Model):
+    """Модель уведомлений по стратегическим проектам"""
+    
+    NOTIFICATION_TYPES = [
+        ('status_change', 'Изменение статуса'),
+        ('approval_required', 'Требуется утверждение'),
+        ('project_approved', 'Проект утвержден'),
+        ('project_rejected', 'Проект отклонен'),
+        ('deadline_approaching', 'Приближается срок'),
+        ('task_assigned', 'Назначена задача'),
+        ('stage_completed', 'Этап завершен'),
+        ('comment_added', 'Добавлен комментарий'),
+        ('project_started', 'Проект запущен'),
+        ('project_completed', 'Проект завершен'),
+    ]
+    
+    project = models.ForeignKey(
+        StrategicProject,
+        on_delete=models.CASCADE,
+        related_name='notifications',
+        verbose_name='Проект'
+    )
+    recipient = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='project_notifications',
+        verbose_name='Получатель'
+    )
+    notification_type = models.CharField(
+        max_length=50,
+        choices=NOTIFICATION_TYPES,
+        verbose_name='Тип уведомления'
+    )
+    title = models.CharField(
+        max_length=255,
+        verbose_name='Заголовок'
+    )
+    message = models.TextField(
+        verbose_name='Сообщение'
+    )
+    is_read = models.BooleanField(
+        default=False,
+        verbose_name='Прочитано'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name='Дата создания'
+    )
+    read_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Дата прочтения'
+    )
+    
+    class Meta:
+        verbose_name = 'Уведомление проекта'
+        verbose_name_plural = 'Уведомления проектов'
+        ordering = ['-created_at']
+        
+    def __str__(self):
+        return f'{self.title} - {self.recipient.get_full_name()}'
+    
+    def mark_as_read(self):
+        """Отметить уведомление как прочитанное"""
+        if not self.is_read:
+            self.is_read = True
+            self.read_at = timezone.now()
+            self.save()
+    
+    @classmethod
+    def create_notification(cls, project, recipient, notification_type, title, message):
+        """Создать уведомление"""
+        return cls.objects.create(
+            project=project,
+            recipient=recipient,
+            notification_type=notification_type,
+            title=title,
+            message=message
+        )
+    
+    @classmethod
+    def notify_status_change(cls, project, old_status, new_status):
+        """Уведомление об изменении статуса проекта"""
+        recipients = []
+        
+        # Уведомляем руководителя проекта
+        if project.leader:
+            recipients.append(project.leader)
+        
+        # Уведомляем куратора
+        if project.curator:
+            recipients.append(project.curator)
+        
+        # Уведомляем заказчика
+        if project.customer:
+            recipients.append(project.customer)
+        
+        # Если проект отправлен на утверждение, уведомляем экспертную группу
+        if new_status == 'on_approval':
+            expert_roles = UserProjectRole.objects.filter(
+                role__in=['expert_group', 'expert_lead']
+            )
+            for role in expert_roles:
+                recipients.append(role.user)
+        
+        status_labels = {
+            'draft': 'Черновик',
+            'on_approval': 'На утверждении',
+            'rejected': 'Отклонен',
+            'approved': 'Утвержден',
+            'in_progress': 'В работе',
+            'completed': 'Завершен',
+            'archived': 'Архив'
+        }
+        
+        for recipient in set(recipients):
+            cls.create_notification(
+                project=project,
+                recipient=recipient,
+                notification_type='status_change',
+                title=f'Изменение статуса проекта "{project.name}"',
+                message=f'Статус проекта изменен с "{status_labels.get(old_status, old_status)}" на "{status_labels.get(new_status, new_status)}"'
+            )
+    
+    @classmethod
+    def notify_deadline_approaching(cls, project, days_remaining):
+        """Уведомление о приближающемся сроке"""
+        recipients = [project.leader]
+        if project.curator:
+            recipients.append(project.curator)
+        
+        for recipient in set(recipients):
+            cls.create_notification(
+                project=project,
+                recipient=recipient,
+                notification_type='deadline_approaching',
+                title=f'Приближается срок завершения проекта "{project.name}"',
+                message=f'До завершения проекта осталось {days_remaining} дней. Плановая дата окончания: {project.planned_end_date}'
+            ) 

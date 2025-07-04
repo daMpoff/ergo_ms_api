@@ -44,7 +44,7 @@ def create_default_data(apps, schema_editor):
         print(f"Ошибка при чтении core-routes-config.json: {e}")
 
     # Обрабатываем menu-config.json
-    menu_config_path = os.path.join(base_path, 'menu-config.json')
+    menu_config_path = os.path.join(base_path, 'routes-config.json')
     try:
         with open(menu_config_path, 'r', encoding='utf-8') as file:
             menu_config = json.load(file)
