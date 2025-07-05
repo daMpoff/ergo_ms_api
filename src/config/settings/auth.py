@@ -59,9 +59,6 @@ if not hasattr(settings, 'REST_FRAMEWORK'):
 ACCESS_TOKEN_LIFETIME = env.int('API_ACCESS_TOKEN_LIFETIME', default=30)
 REFRESH_TOKEN_LIFETIME = env.int('API_REFRESH_TOKEN_LIFETIME', default=1440)
 
-print(ACCESS_TOKEN_LIFETIME)
-print(REFRESH_TOKEN_LIFETIME)
-
 # Конфигурация JWT-аутентификации.
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=ACCESS_TOKEN_LIFETIME),

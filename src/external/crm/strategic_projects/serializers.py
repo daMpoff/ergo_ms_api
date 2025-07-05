@@ -4,7 +4,7 @@ from .models import (
     DevelopmentProgram, ProgramTopic, StrategicProject,
     ProjectStage, StageExecutor, ProjectReport,
     StageResult, ProjectHistory, UserProjectRole, EmployeeWorkload,
-    ProjectComment, ProjectNotification
+    ProjectNotification
 )
 
 User = get_user_model()
