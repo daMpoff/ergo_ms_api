@@ -109,4 +109,13 @@ MESSAGES = {
     'CALCULATIONS_START': "Выполнение дополнительных расчетов...",
     'VISUALIZATIONS_START': "Создание визуализаций...",
     'VISUALIZATIONS_COMPLETE': "Визуализации созданы и сохранены.",
-} 
+}
+
+class AnalysisConfig:
+    """Класс конфигурации для анализа пористости"""
+    
+    def __init__(self, input_image_path, output_directory, scale_value, pixels_per_micron=None):
+        self.input_image_path = input_image_path
+        self.output_directory = output_directory
+        self.scale_value = scale_value
+        self.pixels_per_micron = pixels_per_micron 

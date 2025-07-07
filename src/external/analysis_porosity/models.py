@@ -78,3 +78,45 @@ class PorosityAnalysis(models.Model):
             'initial_photo',
             f"{self.original_image_uuid}.png"
         )
+    
+    def get_result_files(self):
+        """Возвращает список файлов результатов анализа"""
+        print(f"Checking results directory: {self.results_directory}")
+        print(f"Directory exists: {os.path.exists(self.results_directory)}")
+        
+        if not os.path.exists(self.results_directory):
+            print(f"Results directory does not exist: {self.results_directory}")
+            return []
+        
+        result_files = []
+        expected_files = [
+            ('image_with_scale_bar.png', 'Изображение с обнаруженной шкалой'),
+            ('scale_bar.png', 'Область шкалы'),
+            ('figure1_contrast.png', 'Этапы обработки контраста'),
+            ('figure2_excluded_areas.png', 'Исключенные области'),
+            ('figure3_texture_clusters.png', 'Текстурный анализ'),
+            ('figure4_mask_result.png', 'Бинарная маска и результат'),
+            ('figure5_overlay.png', 'Наложение результатов'),
+            ('pore_size_distribution.png', 'Распределение размеров пор'),
+            ('interpore_distances.png', 'Межпоровые расстояния'),
+            ('pore_orientation_rose.png', 'Роза направлений'),
+            ('pore_orientation_histogram.png', 'Гистограмма ориентации'),
+            ('pore_shapes_analysis.png', 'Анализ форм пор'),
+            ('circularity_distribution.png', 'Распределение кругового фактора'),
+            ('ellipticity_vs_area.png', 'Эллиптичность vs площадь')
+        ]
+        
+        for filename, description in expected_files:
+            file_path = os.path.join(self.results_directory, filename)
+            print(f"Checking file: {file_path}, exists: {os.path.exists(file_path)}")
+            if os.path.exists(file_path):
+                file_size = os.path.getsize(file_path)
+                result_files.append({
+                    'name': filename,
+                    'description': description,
+                    'path': file_path,
+                    'size_mb': file_size / (1024 * 1024)
+                })
+        
+        print(f"Found {len(result_files)} result files")
+        return result_files

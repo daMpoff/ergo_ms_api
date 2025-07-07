@@ -9,8 +9,10 @@
 """
 
 import os
+from datetime import timedelta
 
 from celery import Celery
+from celery.schedules import crontab
 
 from django.conf import settings
 
@@ -25,9 +27,30 @@ celery_app = Celery('src')
 celery_app.config_from_object('django.conf:settings', namespace='CELERY')
 celery_app.autodiscover_tasks(lambda: settings.INSTALLED_APPS)
 
-# Настройка пути к файлу состояния планировщика
+# Настройка пути к файлу состояния планировщика и периодических задач
 celery_app.conf.update(
     beat_schedule_filename="celery/celerybeat-schedule",
     broker_url='sqla+sqlite:///celerydb.sqlite',
     result_backend='db+sqlite:///results.sqlite',
+    task_routes={
+        'external.analysis_porosity.tasks.*': {'queue': 'porosity_analysis'},
+    },
+    task_default_queue='default',
+    task_queues={
+        'default': {},
+        'porosity_analysis': {
+            'exchange': 'porosity_analysis',
+            'routing_key': 'porosity_analysis',
+        },
+    },
+    # Настройки для ограничения количества одновременных задач
+    task_annotations={
+        'external.analysis_porosity.tasks.run_porosity_analysis': {
+            'rate_limit': '5/m',  # Максимум 5 задач в минуту
+            'time_limit': 1800,   # Таймаут 30 минут
+            'soft_time_limit': 1500,  # Мягкий таймаут 25 минут
+        },
+    },
+    # Настройки воркеров для очереди анализа пористости
+    task_acks_late=True,  # Подтверждаем задачи только после выполнения
 )

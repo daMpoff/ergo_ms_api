@@ -1,5 +1,9 @@
 import os
 
+# Настройка Matplotlib для работы в фоновом режиме (без GUI)
+import matplotlib
+matplotlib.use('Agg')  # Используем non-interactive backend
+
 import numpy as np
 
 import matplotlib.pyplot as plt

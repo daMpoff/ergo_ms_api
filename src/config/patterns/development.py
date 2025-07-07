@@ -15,7 +15,7 @@ DEBUG = True
 
 CELERY_BEAT_SCHEDULE = {
     'sync-every-5-minutes': {
-        'task': 'external.bi_analysis.tasks.sync_data_from_sources',
+        'task': 'src.external.bi_analysis.tasks.sync_data_from_sources',
         'schedule': crontab(minute='*/5'),
     },
 }

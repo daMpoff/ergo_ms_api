@@ -192,6 +192,24 @@ def advanced_porosity_analysis(image_path, pixels_per_micron, scale_region, save
     pore_area = np.sum(cleaned_mask)
     porosity = (pore_area / total_area) * 100
     
+    # Расчет дополнительных метрик
+    if pore_sizes_microns:
+        max_pore_size_microns = max(pore_sizes_microns)
+        min_pore_size_microns = min(pore_sizes_microns)
+        pore_density = num_pores / (total_area * microns_per_pixel * microns_per_pixel)  # пор/мкм²
+    else:
+        max_pore_size_microns = 0
+        min_pore_size_microns = 0
+        pore_density = 0
+    
+    # Расчет среднего межпорового расстояния
+    if len(pore_properties) >= 2:
+        from .calculations import calculate_interpore_distances
+        interpore_distances, _ = calculate_interpore_distances(pore_properties, microns_per_pixel)
+        average_interpore_distance = np.mean(interpore_distances) if interpore_distances is not None else 0
+    else:
+        average_interpore_distance = 0
+    
     # Формирование результатов
     results = {
         'porosity_percentage': porosity,
@@ -200,8 +218,12 @@ def advanced_porosity_analysis(image_path, pixels_per_micron, scale_region, save
         'mean_pore_size_pixels': mean_pore_size_pixels,
         'mean_pore_size_microns': mean_pore_size_microns,
         'median_pore_size_microns': median_pore_size_microns,
+        'max_pore_size_microns': max_pore_size_microns,
+        'min_pore_size_microns': min_pore_size_microns,
         'mean_pore_diameter_microns': mean_pore_diameter_microns,
         'median_pore_diameter_microns': median_pore_diameter_microns,
+        'pore_density': pore_density,
+        'average_interpore_distance': average_interpore_distance,
         'pore_sizes_pixels': pore_sizes_pixels,
         'pore_sizes_microns': pore_sizes_microns,
         'pore_diameters_microns': pore_diameters_microns,

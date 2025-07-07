@@ -10,10 +10,60 @@
 import os
 import sys
 
+# Настройка Matplotlib для работы в фоновом режиме (без GUI)
+# ДОЛЖНО БЫТЬ ДО ИМПОРТА matplotlib
+import matplotlib
+matplotlib.use('Agg')  # Используем non-interactive backend
+
 from pathlib import Path
 from typing import Optional
 
 from src.external.analysis_porosity.scripts.porosity_analyzer import PorosityAnalyzer
+
+
+def run_analysis(config):
+    """
+    Функция для запуска анализа пористости с конфигурацией
+    
+    Args:
+        config: Объект конфигурации с параметрами анализа
+        
+    Returns:
+        dict: Результаты анализа или None в случае ошибки
+    """
+    try:
+        app = PorosityAnalysisApp()
+        
+        # Запускаем анализ с параметрами из конфигурации
+        results = app.run_analysis(
+            save_directory=config.output_directory,
+            image_path=config.input_image_path,  # Передаем полный путь к изображению
+            scale_value=config.scale_value
+        )
+        
+        if results:
+            # Логируем исходные результаты для отладки
+            print(f"Исходные результаты анализа: {results}")
+            
+            # Возвращаем результаты анализа
+            final_results = {
+                'porosity_percentage': results.get('porosity_percentage', 0.0),
+                'number_of_pores': results.get('number_of_pores', 0),
+                'mean_pore_size_microns': results.get('mean_pore_size_microns', 0.0),
+                'max_pore_size_microns': results.get('max_pore_size_microns', 0.0),
+                'min_pore_size_microns': results.get('min_pore_size_microns', 0.0),
+                'pore_density': results.get('pore_density', 0.0),
+                'average_interpore_distance': results.get('average_interpore_distance', 0.0)
+            }
+            
+            print(f"Финальные результаты: {final_results}")
+            return final_results
+        else:
+            return None
+            
+    except Exception as e:
+        print(f"Ошибка при выполнении анализа: {e}")
+        return None
 
 
 class PorosityAnalysisApp:
@@ -23,14 +73,14 @@ class PorosityAnalysisApp:
         self.analyzer = PorosityAnalyzer()
         self.default_config = {
             'save_directory': "data",
-            'image_filename': "image.png",
+            'image_path': "image.png",
             'scale_value': 100,  # микрометры
         }
     
     def run_analysis(
         self, 
         save_directory: Optional[str] = None,
-        image_filename: Optional[str] = None,
+        image_path: Optional[str] = None,
         scale_value: Optional[float] = None
     ) -> bool:
         """
@@ -38,7 +88,7 @@ class PorosityAnalysisApp:
         
         Args:
             save_directory: Путь к папке с файлами
-            image_filename: Имя файла изображения
+            image_path: Полный путь к изображению
             scale_value: Значение шкалы в микрометрах
             
         Returns:
@@ -47,12 +97,10 @@ class PorosityAnalysisApp:
         # Использование значений по умолчанию
         if save_directory is None:
             save_directory = self.default_config['save_directory']
-        if image_filename is None:
-            image_filename = self.default_config['image_filename']
+        if image_path is None:
+            image_path = self.default_config['image_path']
         if scale_value is None:
             scale_value = self.default_config['scale_value']
-        
-        image_path = os.path.join(save_directory, image_filename)
         
         # Вывод информации о запуске
         self._print_startup_info(image_path, scale_value, save_directory)
@@ -67,7 +115,7 @@ class PorosityAnalysisApp:
         
         # Обработка результатов
         success = self._handle_results(results, save_directory)
-        return success
+        return results if success else None
     
     def _print_startup_info(self, image_path: str, scale_value: float, save_directory: str) -> None:
         """Выводит информацию о запуске анализа"""
@@ -146,7 +194,7 @@ def main():
         # Можно изменить параметры здесь:
         success = app.run_analysis(
             save_directory="data",  # Путь к папке с файлами
-            image_filename="image.png",        # Имя файла изображения
+            image_path="image.png",        # Имя файла изображения
             scale_value=100                    # Значение шкалы в микрометрах
         )
         

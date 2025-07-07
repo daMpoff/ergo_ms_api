@@ -6,6 +6,11 @@ import cv2
 import traceback
 from typing import Dict, Any, Optional
 
+# Настройка Matplotlib для работы в фоновом режиме (без GUI)
+# ДОЛЖНО БЫТЬ ДО ИМПОРТА matplotlib
+import matplotlib
+matplotlib.use('Agg')  # Используем non-interactive backend
+
 import numpy as np
 
 from src.external.analysis_porosity.scripts.preprocessing import detect_scale_bar
@@ -33,6 +38,7 @@ class PorosityAnalyzer:
     def __init__(self):
         self.config_files = FILES
         self.messages = MESSAGES
+        self.last_results = None
     
     def integrated_analysis(
         self, 
@@ -82,6 +88,9 @@ class PorosityAnalyzer:
             
             # 6. Вывод итоговых результатов
             self._log_final_results(results)
+            
+            # Сохраняем результаты для последующего доступа
+            self.last_results = results
             
             return results
             
@@ -251,6 +260,10 @@ class PorosityAnalyzer:
         print(f"Аномальные области: {anomalies_excluded} пикселей ({(anomalies_excluded/total_pixels)*100:.2f}%)")
         print(f"Общая исключенная область: {total_excluded} пикселей ({(total_excluded/total_pixels)*100:.2f}%)")
         print(f"Область анализа: {total_pixels - total_excluded} пикселей ({((total_pixels - total_excluded)/total_pixels)*100:.2f}%)")
+    
+    def get_last_results(self):
+        """Возвращает результаты последнего анализа"""
+        return self.last_results
 
 
 # Функция обратной совместимости

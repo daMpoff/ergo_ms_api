@@ -200,9 +200,26 @@ class ScaleDetector:
     
     def _load_image(self, image_path: str) -> np.ndarray:
         """Загружает изображение с проверкой"""
+        import os
+        
+        # Проверяем существование файла
+        if not os.path.exists(image_path):
+            raise ValueError(f"Файл не существует: {image_path}")
+        
+        # Проверяем размер файла
+        file_size = os.path.getsize(image_path)
+        if file_size == 0:
+            raise ValueError(f"Файл пустой: {image_path}")
+        
+        # Пробуем загрузить изображение
         img = cv2.imread(image_path)
         if img is None:
-            raise ValueError(f"Не удалось загрузить изображение: {image_path}")
+            raise ValueError(f"Не удалось загрузить изображение (размер файла: {file_size} байт): {image_path}")
+        
+        # Проверяем, что изображение не пустое
+        if img.size == 0:
+            raise ValueError(f"Загруженное изображение пустое: {image_path}")
+        
         return img
     
     def _find_scale_bar(self, gray: np.ndarray) -> Tuple[int, int, int, int]:
