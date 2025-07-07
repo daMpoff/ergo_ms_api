@@ -11,6 +11,10 @@ from django.http import FileResponse, HttpResponse
 import os
 import zipfile
 import io
+import logging
+
+# Настраиваем логгер
+logger = logging.getLogger('celery.task.porosity_analysis')
 
 from src.external.analysis_porosity.models import PorosityAnalysis
 from src.external.analysis_porosity.serializers import (
@@ -68,16 +72,7 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
             # Сохраняем изображение
             save_uploaded_image(image_file, analysis.original_image_uuid)
             
-            # Проверяем лимит одновременных анализов
-            if not check_concurrent_analyses_limit():
-                max_concurrent = PorosityAnalysisConfig.get_max_concurrent_analyses()
-                current_processing = PorosityAnalysis.objects.filter(status='processing').count()
-                
-                return Response({
-                    'error': f'Достигнут лимит одновременных анализов ({current_processing}/{max_concurrent}). Попробуйте позже.',
-                    'current_processing': current_processing,
-                    'max_concurrent': max_concurrent
-                }, status=status.HTTP_429_TOO_MANY_REQUESTS)
+            # Убрана проверка лимита одновременных анализов
             
             # Запускаем анализ только после успешной загрузки изображения
             analysis.status = 'pending'
@@ -98,31 +93,76 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def restart(self, request, pk=None):
         """Перезапуск анализа"""
-        analysis = self.get_object()
-        
-        # Проверяем лимит одновременных анализов
-        if not check_concurrent_analyses_limit():
-            max_concurrent = PorosityAnalysisConfig.get_max_concurrent_analyses()
-            current_processing = PorosityAnalysis.objects.filter(status='processing').count()
+        try:
+            analysis = self.get_object()
+            
+            # Проверяем, что у анализа есть изображение
+            if not analysis.original_image_uuid:
+                return Response({
+                    'error': 'Невозможно перезапустить анализ без изображения'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Проверяем, что изображение существует
+            image_path = analysis.original_image_path
+            if not image_path or not os.path.exists(image_path):
+                return Response({
+                    'error': 'Исходное изображение не найдено'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Проверяем, что изображение не пустое
+            if os.path.getsize(image_path) == 0:
+                return Response({
+                    'error': 'Исходное изображение пустое'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Очищаем старые результаты если они есть
+            if analysis.results_directory and os.path.exists(analysis.results_directory):
+                try:
+                    import shutil
+                    shutil.rmtree(analysis.results_directory)
+                    logger.info(f"Удалена старая директория результатов для анализа {analysis.id}")
+                except Exception as e:
+                    logger.warning(f"Не удалось удалить старую директорию результатов: {e}")
+            
+            # Удаляем старый архив, если он есть
+            zip_path = os.path.join(analysis.results_directory or '', f"analysis_{analysis.id}_results.zip")
+            if os.path.exists(zip_path):
+                try:
+                    os.remove(zip_path)
+                    logger.info(f"Удален старый архив для анализа {analysis.id}")
+                except Exception as e:
+                    logger.warning(f"Не удалось удалить старый архив: {e}")
+            
+            # Сбрасываем статус и ошибки
+            analysis.status = 'pending'
+            analysis.error_message = ''
+            analysis.porosity_percentage = None
+            analysis.number_of_pores = None
+            analysis.average_pore_size = None
+            analysis.max_pore_size = None
+            analysis.min_pore_size = None
+            analysis.pore_density = None
+            analysis.average_interpore_distance = None
+            analysis.save()
+            
+            # Запускаем асинхронную задачу
+            run_porosity_analysis.delay(analysis.id)
+            
+            logger.info(f"Анализ {analysis.id} перезапущен успешно")
             
             return Response({
-                'error': f'Достигнут лимит одновременных анализов ({current_processing}/{max_concurrent}). Попробуйте позже.',
-                'current_processing': current_processing,
-                'max_concurrent': max_concurrent
-            }, status=status.HTTP_429_TOO_MANY_REQUESTS)
-        
-        # Сбрасываем статус и ошибки
-        analysis.status = 'pending'
-        analysis.error_message = ''
-        analysis.save()
-        
-        # Запускаем асинхронную задачу
-        run_porosity_analysis.delay(analysis.id)
-        
-        return Response({
-            'message': 'Анализ перезапущен',
-            'analysis_id': analysis.id
-        }, status=status.HTTP_200_OK)
+                'success': True,
+                'message': 'Анализ перезапущен',
+                'analysis_id': analysis.id,
+                'status': 'pending'
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Ошибка при перезапуске анализа {pk}: {e}")
+            return Response({
+                'success': False,
+                'error': f'Ошибка при перезапуске анализа: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     @action(detail=True, methods=['get'])
     def status(self, request, pk=None):
@@ -154,7 +194,7 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
     
     @action(detail=True, methods=['get'])
     def download_results(self, request, pk=None):
-        """Скачивание результатов анализа в виде ZIP архива"""
+        """Скачивание результатов анализа в виде ZIP архива (с кэшированием)"""
         analysis = self.get_object()
         
         if analysis.status != 'completed':
@@ -176,35 +216,37 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
                 'error': 'Директория результатов не найдена'
             }, status=status.HTTP_404_NOT_FOUND)
         
+        # Путь к архиву
+        zip_path = os.path.join(analysis.results_directory, f"analysis_{analysis.id}_results.zip")
+        
         try:
-            # Добавляем отладочную информацию
-            print(f"Creating ZIP archive for analysis {analysis.id}")
-            print(f"Results directory: {analysis.results_directory}")
-            print(f"Number of files to archive: {len(result_files)}")
+            # Если архив уже существует и не пустой, просто отдаем его
+            if os.path.exists(zip_path) and os.path.getsize(zip_path) > 0:
+                logger.info(f"Using cached ZIP archive for analysis {analysis.id}")
+                with open(zip_path, 'rb') as f:
+                    response = HttpResponse(f.read(), content_type='application/zip')
+                    response['Content-Disposition'] = f'attachment; filename="analysis_{analysis.id}_results.zip"'
+                    return response
             
-            # Создаем ZIP архив в памяти
-            zip_buffer = io.BytesIO()
-            
-            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            # Иначе создаем архив и сохраняем на диск
+            logger.info(f"Creating new ZIP archive for analysis {analysis.id}")
+            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zip_file:
                 for file_path in result_files:
                     if os.path.exists(file_path) and os.path.isfile(file_path):
-                        # Добавляем файл в архив с относительным путем
                         relative_path = os.path.relpath(file_path, analysis.results_directory)
-                        print(f"Adding file to archive: {file_path} -> {relative_path}")
+                        logger.info(f"Adding file to archive: {file_path} -> {relative_path}")
                         zip_file.write(file_path, relative_path)
                     else:
-                        print(f"File not found or not a file: {file_path}")
+                        logger.warning(f"File not found or not a file: {file_path}")
             
-            # Перемещаем указатель в начало буфера
-            zip_buffer.seek(0)
-            
-            # Создаем HTTP ответ с ZIP архивом
-            response = HttpResponse(zip_buffer.getvalue(), content_type='application/zip')
-            response['Content-Disposition'] = f'attachment; filename="analysis_{analysis.id}_results.zip"'
-            
-            return response
-            
+            # Отдаем только что созданный архив
+            with open(zip_path, 'rb') as f:
+                response = HttpResponse(f.read(), content_type='application/zip')
+                response['Content-Disposition'] = f'attachment; filename="analysis_{analysis.id}_results.zip"'
+                return response
+                
         except Exception as e:
+            logger.error(f"Error creating ZIP archive for analysis {analysis.id}: {e}")
             return Response({
                 'error': f'Ошибка при создании архива: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -336,16 +378,257 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
             'success_rate': (completed / total * 100) if total > 0 else 0
         })
     
-    @action(detail=False, methods=['get'])
-    def limits(self, request):
-        """Получение информации о лимитах и текущем состоянии"""
-        max_concurrent = PorosityAnalysisConfig.get_max_concurrent_analyses()
-        current_processing = PorosityAnalysis.objects.filter(status='processing').count()
-        can_start_new = check_concurrent_analyses_limit()
+    @action(detail=False, methods=['post'])
+    def restart_multiple(self, request):
+        """Массовый перезапуск анализов"""
+        try:
+            analysis_ids = request.data.get('analysis_ids', [])
+            status_filter = request.data.get('status', None)
+            
+            if not analysis_ids and not status_filter:
+                return Response({
+                    'error': 'Необходимо указать ID анализов или статус для фильтрации'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Получаем анализы для перезапуска
+            if analysis_ids:
+                analyses = self.queryset.filter(id__in=analysis_ids)
+            elif status_filter:
+                analyses = self.queryset.filter(status=status_filter)
+            else:
+                analyses = self.queryset.none()
+            
+            if not analyses.exists():
+                return Response({
+                    'error': 'Не найдено анализов для перезапуска'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            restarted_count = 0
+            failed_count = 0
+            errors = []
+            
+            for analysis in analyses:
+                try:
+                    # Проверяем, что у анализа есть изображение
+                    if not analysis.original_image_uuid:
+                        errors.append(f"Анализ {analysis.id}: нет изображения")
+                        failed_count += 1
+                        continue
+                    
+                    # Проверяем, что изображение существует
+                    image_path = analysis.original_image_path
+                    if not image_path or not os.path.exists(image_path):
+                        errors.append(f"Анализ {analysis.id}: изображение не найдено")
+                        failed_count += 1
+                        continue
+                    
+                    # Очищаем старые результаты
+                    if analysis.results_directory and os.path.exists(analysis.results_directory):
+                        try:
+                            import shutil
+                            shutil.rmtree(analysis.results_directory)
+                        except Exception as e:
+                            logger.warning(f"Не удалось удалить старую директорию результатов для анализа {analysis.id}: {e}")
+                    
+                    # Сбрасываем статус и результаты
+                    analysis.status = 'pending'
+                    analysis.error_message = ''
+                    analysis.porosity_percentage = None
+                    analysis.number_of_pores = None
+                    analysis.average_pore_size = None
+                    analysis.max_pore_size = None
+                    analysis.min_pore_size = None
+                    analysis.pore_density = None
+                    analysis.average_interpore_distance = None
+                    analysis.save()
+                    
+                    # Запускаем асинхронную задачу
+                    run_porosity_analysis.delay(analysis.id)
+                    restarted_count += 1
+                    
+                except Exception as e:
+                    errors.append(f"Анализ {analysis.id}: {str(e)}")
+                    failed_count += 1
+            
+            logger.info(f"Массовый перезапуск завершен: {restarted_count} успешно, {failed_count} с ошибками")
+            
+            return Response({
+                'success': True,
+                'message': f'Перезапущено {restarted_count} анализов',
+                'restarted_count': restarted_count,
+                'failed_count': failed_count,
+                'errors': errors if errors else None
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Ошибка при массовом перезапуске: {e}")
+            return Response({
+                'success': False,
+                'error': f'Ошибка при массовом перезапуске: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    # Убран эндпоинт limits, так как ограничения сняты
+    
+    @action(detail=True, methods=['get'])
+    def generate_report(self, request, pk=None):
+        """Генерация отчетов в форматах DOCX и PDF"""
+        analysis = self.get_object()
         
-        return Response({
-            'max_concurrent_analyses': max_concurrent,
-            'current_processing': current_processing,
-            'can_start_new': can_start_new,
-            'available_slots': max(0, max_concurrent - current_processing)
-        })
+        if analysis.status != 'completed':
+            return Response({
+                'error': 'Анализ еще не завершен',
+                'status': analysis.status
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            from .report_generator import PorosityReportGenerator
+            
+            report_generator = PorosityReportGenerator(analysis)
+            reports = report_generator.generate_reports()
+            
+            if not reports:
+                return Response({
+                    'error': 'Не удалось сгенерировать отчеты'
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+            # Возвращаем информацию о созданных отчетах
+            report_info = []
+            for report_type, path in reports.items():
+                filename = os.path.basename(path)
+                report_info.append({
+                    'type': report_type,
+                    'filename': filename,
+                    'size': os.path.getsize(path) if os.path.exists(path) else 0
+                })
+            
+            return Response({
+                'message': 'Отчеты успешно сгенерированы',
+                'reports': report_info
+            })
+            
+        except Exception as e:
+            return Response({
+                'error': f'Ошибка при генерации отчетов: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=True, methods=['get'])
+    def download_report(self, request, pk=None):
+        """Скачивание сгенерированного отчета"""
+        analysis = self.get_object()
+        report_type = request.query_params.get('type', 'pdf')  # По умолчанию PDF
+        
+        print(f"Download report called for analysis {analysis.id}, type: {report_type}")
+        
+        if analysis.status != 'completed':
+            return Response({
+                'error': 'Анализ еще не завершен'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Путь к директории отчетов
+        reports_dir = os.path.join(analysis.results_directory, 'reports')
+        print(f"Reports directory: {reports_dir}")
+        print(f"Directory exists: {os.path.exists(reports_dir)}")
+        
+        # Если отчеты еще не созданы, создаем их
+        if not os.path.exists(reports_dir) or not os.listdir(reports_dir):
+            print("Reports directory does not exist or is empty, generating reports...")
+            try:
+                from .report_generator import PorosityReportGenerator
+                report_generator = PorosityReportGenerator(analysis)
+                reports = report_generator.generate_reports()
+                print(f"Generated reports: {reports}")
+                
+                # Проверяем, что отчеты действительно созданы
+                if not reports:
+                    return Response({
+                        'error': 'Не удалось сгенерировать отчеты'
+                    }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                    
+            except Exception as e:
+                print(f"Error generating reports: {str(e)}")
+                return Response({
+                    'error': f'Ошибка при генерации отчетов: {str(e)}'
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        # Ищем файл отчета
+        report_files = []
+        if os.path.exists(reports_dir):
+            print(f"Scanning directory: {reports_dir}")
+            for filename in os.listdir(reports_dir):
+                print(f"Found file: {filename}")
+                if filename.endswith(f'.{report_type}'):
+                    report_files.append(filename)
+                    print(f"Added report file: {filename}")
+        
+        print(f"Found {len(report_files)} report files for type {report_type}")
+        
+        if not report_files:
+            # Попробуем сгенерировать отчеты еще раз
+            print("No report files found, trying to generate reports again...")
+            try:
+                from .report_generator import PorosityReportGenerator
+                report_generator = PorosityReportGenerator(analysis)
+                reports = report_generator.generate_reports()
+                print(f"Regenerated reports: {reports}")
+                
+                # Проверяем снова
+                if os.path.exists(reports_dir):
+                    for filename in os.listdir(reports_dir):
+                        if filename.endswith(f'.{report_type}'):
+                            report_files.append(filename)
+                            print(f"Found regenerated report file: {filename}")
+            except Exception as e:
+                print(f"Error regenerating reports: {str(e)}")
+            
+            if not report_files:
+                return Response({
+                    'error': f'Отчет в формате {report_type} не найден и не может быть сгенерирован',
+                    'reports_dir': reports_dir,
+                    'dir_exists': os.path.exists(reports_dir),
+                    'available_files': os.listdir(reports_dir) if os.path.exists(reports_dir) else []
+                }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Берем самый последний файл
+        report_files.sort(reverse=True)
+        latest_report = report_files[0]
+        file_path = os.path.join(reports_dir, latest_report)
+        
+        print(f"Selected file: {file_path}")
+        print(f"File exists: {os.path.exists(file_path)}")
+        
+        if not os.path.exists(file_path):
+            return Response({
+                'error': f'Файл отчета не найден: {file_path}'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Проверяем размер файла
+        file_size = os.path.getsize(file_path)
+        if file_size == 0:
+            return Response({
+                'error': f'Файл отчета пустой: {file_path}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        try:
+            # Определяем content type
+            content_type = {
+                'pdf': 'application/pdf',
+                'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            }.get(report_type, 'application/octet-stream')
+            
+            print(f"Content type: {content_type}")
+            print(f"File size: {file_size} bytes")
+            
+            # Отправляем файл
+            with open(file_path, 'rb') as f:
+                file_content = f.read()
+                
+                response = HttpResponse(file_content, content_type=content_type)
+                response['Content-Disposition'] = f'attachment; filename="porosity_analysis_{analysis.id}_{analysis.created_at.strftime("%Y%m%d")}.{report_type}"'
+                response['Content-Length'] = len(file_content)
+                return response
+            
+        except Exception as e:
+            print(f"Error reading file: {str(e)}")
+            return Response({
+                'error': f'Ошибка при скачивании отчета: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

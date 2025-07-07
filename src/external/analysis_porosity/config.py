@@ -6,23 +6,18 @@
 import os
 from django.conf import settings
 
-# Настройки для ограничения количества одновременных анализов
-MAX_CONCURRENT_ANALYSES = getattr(settings, 'POROSITY_MAX_CONCURRENT_ANALYSES', 3)
-ANALYSIS_TIMEOUT_SECONDS = getattr(settings, 'POROSITY_ANALYSIS_TIMEOUT', 1800)  # 30 минут
-ANALYSIS_RETRY_DELAY_SECONDS = getattr(settings, 'POROSITY_RETRY_DELAY', 60)
-
-# Настройки очереди
-POROSITY_QUEUE_NAME = 'porosity_analysis'
-POROSITY_QUEUE_CONCURRENCY = getattr(settings, 'POROSITY_QUEUE_CONCURRENCY', 2)
+# Настройки для модуля анализа пористости
+MAX_CONCURRENT_ANALYSES = 5  # Максимальное количество одновременных анализов
+ANALYSIS_TIMEOUT_SECONDS = 1800  # Таймаут анализа в секундах (30 минут)
+ANALYSIS_RETRY_DELAY_SECONDS = 60  # Задержка между повторными попытками в секундах
+POROSITY_QUEUE_CONCURRENCY = 5  # Количество воркеров для очереди анализа пористости
+CLEANUP_FAILED_ANALYSES_DAYS = 7  # Количество дней для очистки неудачных анализов
+VALIDATE_FILES_INTERVAL_HOURS = 24  # Интервал проверки файлов в часах
 
 # Настройки файловой системы
 MEDIA_ROOT = getattr(settings, 'MEDIA_ROOT', 'media')
 POROSITY_UPLOAD_DIR = os.path.join(MEDIA_ROOT, 'porosity_analysis', 'initial_photo')
 POROSITY_RESULTS_DIR = os.path.join(MEDIA_ROOT, 'porosity_analysis', 'results')
-
-# Настройки очистки
-CLEANUP_FAILED_ANALYSES_DAYS = getattr(settings, 'POROSITY_CLEANUP_DAYS', 7)
-VALIDATE_FILES_INTERVAL_HOURS = getattr(settings, 'POROSITY_VALIDATE_INTERVAL', 24)
 
 class PorosityAnalysisConfig:
     """Класс для управления конфигурацией анализа пористости"""
@@ -41,11 +36,6 @@ class PorosityAnalysisConfig:
     def get_retry_delay(cls):
         """Возвращает задержку между повторными попытками в секундах"""
         return ANALYSIS_RETRY_DELAY_SECONDS
-    
-    @classmethod
-    def get_queue_name(cls):
-        """Возвращает имя очереди для анализа пористости"""
-        return POROSITY_QUEUE_NAME
     
     @classmethod
     def get_queue_concurrency(cls):

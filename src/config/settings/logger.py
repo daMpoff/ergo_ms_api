@@ -61,6 +61,47 @@ LOGGING = {
             'class': 'logging.StreamHandler',
             'formatter': 'simple',
         },
+        
+        # Обработчики для Celery
+        'celery_file': {
+            'level': 'DEBUG',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': os.path.join(LOGS_ROOT, 'celery.log'),
+            'formatter': 'verbose',
+            'encoding': 'utf-8',
+            'maxBytes': 10*1024*1024,  # 10MB
+            'backupCount': 5,
+        },
+        
+        'celery_worker_file': {
+            'level': 'DEBUG',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': os.path.join(LOGS_ROOT, 'celery_worker.log'),
+            'formatter': 'verbose',
+            'encoding': 'utf-8',
+            'maxBytes': 10*1024*1024,  # 10MB
+            'backupCount': 5,
+        },
+        
+        'celery_beat_file': {
+            'level': 'DEBUG',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': os.path.join(LOGS_ROOT, 'celery_beat.log'),
+            'formatter': 'verbose',
+            'encoding': 'utf-8',
+            'maxBytes': 10*1024*1024,  # 10MB
+            'backupCount': 5,
+        },
+        
+        'celery_tasks_file': {
+            'level': 'DEBUG',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': os.path.join(LOGS_ROOT, 'celery_tasks.log'),
+            'formatter': 'verbose',
+            'encoding': 'utf-8',
+            'maxBytes': 10*1024*1024,  # 10MB
+            'backupCount': 5,
+        },
     },
 
     # Логгеры для различных частей приложения.
@@ -103,6 +144,43 @@ LOGGING = {
         },
         'core.utils.server': {
             'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        
+        # Логгеры для Celery
+        'celery': {
+            'handlers': ['celery_file', 'console'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+        
+        'celery.worker': {
+            'handlers': ['celery_worker_file', 'console'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+        
+        'celery.beat': {
+            'handlers': ['celery_beat_file', 'console'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+        
+        'celery.task': {
+            'handlers': ['celery_tasks_file', 'console'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+        
+        'celery.task.porosity_analysis': {
+            'handlers': ['celery_tasks_file', 'console'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+        
+        'kombu': {
+            'handlers': ['celery_file', 'console'],
             'level': 'INFO',
             'propagate': False,
         },

@@ -47,11 +47,3 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware'
 ]
-
-# Настройки для модуля анализа пористости
-POROSITY_MAX_CONCURRENT_ANALYSES = 5  # Максимальное количество одновременных анализов
-POROSITY_ANALYSIS_TIMEOUT = 1800  # Таймаут анализа в секундах (30 минут)
-POROSITY_RETRY_DELAY = 60  # Задержка между повторными попытками в секундах
-POROSITY_QUEUE_CONCURRENCY = 5  # Количество воркеров для очереди анализа пористости
-POROSITY_CLEANUP_DAYS = 7  # Количество дней для очистки неудачных анализов
-POROSITY_VALIDATE_INTERVAL = 24  # Интервал проверки файлов в часах

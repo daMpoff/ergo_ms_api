@@ -13,20 +13,15 @@ from django.utils import timezone
 from src.external.analysis_porosity.models import PorosityAnalysis
 from src.external.analysis_porosity.config import PorosityAnalysisConfig
 
-logger = logging.getLogger(__name__)
+# Настраиваем логгер для задач анализа пористости
+logger = logging.getLogger('celery.task.porosity_analysis')
 
 
 def check_concurrent_analyses_limit():
     """
     Проверяет, не превышено ли максимальное количество одновременных анализов
     """
-    max_concurrent = PorosityAnalysisConfig.get_max_concurrent_analyses()
-    current_processing = PorosityAnalysis.objects.filter(status='processing').count()
-    
-    if current_processing >= max_concurrent:
-        logger.warning(f"Достигнут лимит одновременных анализов: {current_processing}/{max_concurrent}")
-        return False
-    
+    # Убрана проверка лимитов - всегда возвращаем True
     return True
 
 
@@ -39,11 +34,7 @@ def run_porosity_analysis(self, analysis_id):
         analysis_id (int): ID анализа в базе данных
     """
     try:
-        # Проверяем лимит одновременных анализов
-        if not check_concurrent_analyses_limit():
-            # Если лимит превышен, откладываем задачу на 5 минут
-            logger.info(f"Лимит одновременных анализов превышен, откладываем задачу {analysis_id}")
-            raise self.retry(countdown=300, max_retries=10)
+        # Убрана проверка лимита одновременных анализов
         
         # Получаем объект анализа
         analysis = PorosityAnalysis.objects.get(id=analysis_id)
@@ -115,6 +106,16 @@ def run_porosity_analysis(self, analysis_id):
         analysis.average_interpore_distance = average_interpore_distance
         analysis.status = 'completed'
         analysis.save()
+        
+        # Генерируем отчеты
+        try:
+            from .report_generator import PorosityReportGenerator
+            report_generator = PorosityReportGenerator(analysis)
+            reports = report_generator.generate_reports()
+            logger.info(f"Отчеты сгенерированы: {reports}")
+        except Exception as e:
+            logger.error(f"Ошибка при генерации отчетов для анализа {analysis_id}: {e}")
+            # Не прерываем процесс, если отчеты не удалось создать
         
         logger.info(f"Анализ пористости завершен успешно для ID: {analysis_id}")
         
