@@ -7,6 +7,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.renderers import JSONRenderer
+from rest_framework.pagination import PageNumberPagination
 from django.http import FileResponse, HttpResponse
 import os
 import zipfile
@@ -32,7 +33,6 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
     """
     ViewSet для управления анализами пористости
     """
-    queryset = PorosityAnalysis.objects.all()
     serializer_class = PorosityAnalysisSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
@@ -40,6 +40,11 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
     search_fields = ['name', 'description']
     ordering_fields = ['created_at', 'name', 'porosity_percentage']
     ordering = ['-created_at']
+    pagination_class = PageNumberPagination
+    
+    def get_queryset(self):
+        """Возвращаем queryset с явной сортировкой для консистентной пагинации"""
+        return PorosityAnalysis.objects.all().order_by('-created_at', 'id')
     
     def get_serializer_class(self):
         """Выбор сериализатора в зависимости от действия"""
@@ -50,6 +55,16 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
         elif self.action == 'results':
             return PorosityAnalysisResultsSerializer
         return PorosityAnalysisSerializer
+    
+    def list(self, request, *args, **kwargs):
+        """Переопределяем метод list для обеспечения пагинации"""
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
     
     def perform_create(self, serializer):
         """Создание анализа (задача запускается только после загрузки изображения)"""
@@ -334,40 +349,57 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
     
     @action(detail=False, methods=['get'])
     def pending(self, request):
-        """Получение списка ожидающих анализов"""
-        pending_analyses = self.queryset.filter(status='pending')
-        serializer = PorosityAnalysisStatusSerializer(pending_analyses, many=True)
+        """Получить ожидающие анализы"""
+        queryset = self.get_queryset().filter(status='pending')
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
     
     @action(detail=False, methods=['get'])
     def processing(self, request):
-        """Получение списка обрабатываемых анализов"""
-        processing_analyses = self.queryset.filter(status='processing')
-        serializer = PorosityAnalysisStatusSerializer(processing_analyses, many=True)
+        """Получить обрабатываемые анализы"""
+        queryset = self.get_queryset().filter(status='processing')
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
     
     @action(detail=False, methods=['get'])
     def completed(self, request):
-        """Получение списка завершенных анализов"""
-        completed_analyses = self.queryset.filter(status='completed')
-        serializer = PorosityAnalysisResultsSerializer(completed_analyses, many=True)
+        """Получить завершенные анализы"""
+        queryset = self.get_queryset().filter(status='completed')
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
     
     @action(detail=False, methods=['get'])
     def failed(self, request):
-        """Получение списка неудачных анализов"""
-        failed_analyses = self.queryset.filter(status='failed')
-        serializer = PorosityAnalysisStatusSerializer(failed_analyses, many=True)
+        """Получить анализы с ошибками"""
+        queryset = self.get_queryset().filter(status='failed')
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
     
     @action(detail=False, methods=['get'])
     def statistics(self, request):
         """Получение статистики анализов"""
-        total = self.queryset.count()
-        pending = self.queryset.filter(status='pending').count()
-        processing = self.queryset.filter(status='processing').count()
-        completed = self.queryset.filter(status='completed').count()
-        failed = self.queryset.filter(status='failed').count()
+        queryset = self.get_queryset()
+        total = queryset.count()
+        pending = queryset.filter(status='pending').count()
+        processing = queryset.filter(status='processing').count()
+        completed = queryset.filter(status='completed').count()
+        failed = queryset.filter(status='failed').count()
         
         return Response({
             'total': total,
@@ -391,12 +423,13 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
                 }, status=status.HTTP_400_BAD_REQUEST)
             
             # Получаем анализы для перезапуска
+            queryset = self.get_queryset()
             if analysis_ids:
-                analyses = self.queryset.filter(id__in=analysis_ids)
+                analyses = queryset.filter(id__in=analysis_ids)
             elif status_filter:
-                analyses = self.queryset.filter(status=status_filter)
+                analyses = queryset.filter(status=status_filter)
             else:
-                analyses = self.queryset.none()
+                analyses = queryset.none()
             
             if not analyses.exists():
                 return Response({
