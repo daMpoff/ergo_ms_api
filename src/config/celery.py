@@ -147,7 +147,7 @@ celery_app.conf.update(
     broker_url='sqla+sqlite:///celerydb.sqlite',
     result_backend='db+sqlite:///results.sqlite',
     task_routes={
-        'external.analysis_porosity.tasks.*': {'queue': 'porosity_analysis'},
+        'modules.analysis_porosity.tasks.*': {'queue': 'porosity_analysis'},
     },
     task_default_queue='default',
     task_queues={
@@ -159,7 +159,7 @@ celery_app.conf.update(
     },
     # Настройки для задач анализа пористости (ограничения сняты)
     task_annotations={
-        'external.analysis_porosity.tasks.run_porosity_analysis': {
+        'modules.analysis_porosity.tasks.run_porosity_analysis': {
             'time_limit': 3600,   # Увеличен таймаут до 1 часа
             'soft_time_limit': 3300,  # Мягкий таймаут 55 минут
         },

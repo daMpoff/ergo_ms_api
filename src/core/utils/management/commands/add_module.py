@@ -1,5 +1,5 @@
 """
-Файл для создания новых модулей Django в директории src/external.
+Файл для создания новых модулей Django в директории src/modules.
 
 Этот файл включает в себя реализацию Django команды для создания новых модулей
 с предустановленной структурой файлов и директорий.
@@ -8,7 +8,7 @@
     python src/manage.py add_module my_new_module
 
 Создает следующую структуру:
-    src/external/my_new_module/
+    src/modules/my_new_module/
     ├── __init__.py
     ├── apps.py
     ├── models.py
@@ -96,7 +96,7 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.ERROR(error_message))
                 return
 
-        external_modules_directory = getattr(settings, 'EXTERNAL_MODULES_DIR', None)
+        modules_directory = getattr(settings, 'MODULES_DIR', None)
         core_modules_directory = getattr(settings, 'CORE_DIR', None)
 
         # Формирование названия модуля в формате camel
@@ -109,7 +109,7 @@ class Command(BaseCommand):
         standard_module_name = standard_module_name.rstrip('_')
         
         # Создаем иерархию директорий на основе переданных имен
-        module_directory = os.path.normpath(os.path.join(external_modules_directory, *module_names))
+        module_directory = os.path.normpath(os.path.join(modules_directory, *module_names))
         
         # Форматируем путь для вывода (заменяем обратные слэши на прямые)
         formatted_path = module_directory.replace("\\", "/")
@@ -117,7 +117,7 @@ class Command(BaseCommand):
         # Проверка конфликта имен для конфига
         if (
            os.path.exists(module_directory) or 
-           check_app_config_name(external_modules_directory, camel_module_name) or 
+           check_app_config_name(modules_directory, camel_module_name) or 
            check_app_config_name(core_modules_directory, camel_module_name)
            ):
             if len(module_names) == 1:
@@ -132,7 +132,7 @@ class Command(BaseCommand):
 
         # Проверка на существование родительских модулей
         if len(module_names) > 1:
-            parent_module_path = os.path.normpath(os.path.join(external_modules_directory, *module_names[:-1]))
+            parent_module_path = os.path.normpath(os.path.join(modules_directory, *module_names[:-1]))
             if not os.path.exists(parent_module_path):
                 error_message = f'Родительский модуль {module_names[-2]} не существует. Создайте сначала его.'
                 logger.error(error_message)
@@ -157,7 +157,7 @@ class Command(BaseCommand):
 
                     class {camel_module_name}Config(AppConfig):
                         default_auto_field = 'django.db.models.BigAutoField'
-                        name = 'src.external.{".".join(module_names)}'
+                        name = 'src.modules.{".".join(module_names)}'
                         label = '{standard_module_name}'
                 """),
                 'urls.py': dedent("""

@@ -80,7 +80,7 @@ def discover_installed_app_urls(apps_dir: str, prefix: str = None) -> List[str]:
 
     Аргументы:
         apps_dir (str): Базовая директория, в которой находятся приложения.
-        prefix (str): Префикс для импорта модулей (например, "src.external").
+        prefix (str): Префикс для импорта модулей (например, "src.modules").
 
     Возвращает:
         list: Список URL-конфигураций для установленных приложений.

@@ -4,20 +4,18 @@
 Он использует функцию `path` из `django.urls` для определения маршрутов и функцию `include`
 для включения URL-конфигураций из других модулей. Также используется функция
 `discover_installed_app_urls` для автоматического обнаружения и включения URL-конфигураций
-из внешних модулей, находящихся в директории `EXTERNAL_MODULES_DIR`.
+из модулей, находящихся в директории `MODULES_DIR`.
 """
 
 from src.core.utils.auto_api.auto_config import discover_installed_app_urls
-from src.config.settings.apps import EXTERNAL_MODULES_DIR, CORE_DIR
+from src.config.settings.apps import CORE_DIR, MODULES_DIR
 
 urlpatterns = []
 
-# Добавляем URL-конфигурации из ядра, автоматически 
-# обнаруженные в директории CORE_DIR
-core_modules_urlpatterns = discover_installed_app_urls(CORE_DIR, prefix='src.core')
-urlpatterns += core_modules_urlpatterns
+core_urlpatterns = discover_installed_app_urls(CORE_DIR, prefix='src.core')
+urlpatterns += core_urlpatterns
 
-# Добавляем URL-конфигурации из внешних модулей, автоматически 
-# обнаруженные в директории EXTERNAL_MODULES_DIR
-external_modules_urlpatterns = discover_installed_app_urls(EXTERNAL_MODULES_DIR, prefix='src.external')
-urlpatterns += external_modules_urlpatterns
+# Добавляем URL-конфигурации модулей, автоматически 
+# обнаруженные в директории MODULES_DIR
+modules_urlpatterns = discover_installed_app_urls(MODULES_DIR, prefix='src.modules')
+urlpatterns += modules_urlpatterns

@@ -1,4 +1,5 @@
-from src.external.crm.models import Section,Task
+from src.modules.crm.models import Section,Task
+
 def get_users(user_id: int):
     return tuple(
         [

@@ -13,16 +13,16 @@ from src.core.utils.auto_api.auto_config import discover_installed_apps
 
 # Определяем директории для основных и внешних модулей
 CORE_DIR = 'src/core'
-EXTERNAL_MODULES_DIR = 'src/external'
+MODULES_DIR = 'src/modules'
 
 # Обнаруживаем и устанавливаем основные и сторонние модули
-CORE_APPS = discover_installed_apps(CORE_DIR)
-EXTERNAL_MODULES_APPS = discover_installed_apps(EXTERNAL_MODULES_DIR)
+CORE = discover_installed_apps(CORE_DIR)
+MODULES = discover_installed_apps(MODULES_DIR)
 
-DEVELOPED_APPS = CORE_APPS + EXTERNAL_MODULES_APPS
+ALL_MODULES = CORE + MODULES
 
 # Определяем список установленных приложений
-INSTALLED_APPS = DEVELOPED_APPS + [
+INSTALLED_APPS = ALL_MODULES + [
     'daphne',
     'django.contrib.auth',
     'django.contrib.contenttypes',

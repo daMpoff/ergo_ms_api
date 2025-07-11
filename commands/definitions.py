@@ -164,7 +164,6 @@ class StopCeleryWorkerCommand(PoetryCommand):
     poetry_command_name = 'stop_celery_worker'
     django_command_name = 'stop_celery_worker'
 
-
     def __init__(self):
         super().__init__(self.django_command_name)
 
