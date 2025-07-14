@@ -281,3 +281,13 @@ class AnalyzePorosityCommand(PoetryCommand):
 
     def __init__(self):
         super().__init__(self.django_command_name)
+
+class UpdateADPRoutesCommand(PoetryCommand):
+    """
+    Команда для обновления маршрутов в БД.
+    """
+    poetry_command_name = "update_adp_routes"
+    django_command_name = "update_adp_routes"
+
+    def __init__(self):
+        super().__init__(self.django_command_name)
