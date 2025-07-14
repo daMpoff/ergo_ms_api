@@ -10,7 +10,7 @@ from .models import (
 User = get_user_model()
 
 
-class UserSerializer(serializers.ModelSerializer):
+class StrategicProjectUserSerializer(serializers.ModelSerializer):
     """Сериализатор для пользователей"""
     full_name = serializers.CharField(source='get_full_name', read_only=True)
     
@@ -48,7 +48,7 @@ class DevelopmentProgramSerializer(serializers.ModelSerializer):
 
 class StageExecutorSerializer(serializers.ModelSerializer):
     """Сериализатор для исполнителей этапа"""
-    user_info = UserSerializer(source='user', read_only=True)
+    user_info = StrategicProjectUserSerializer(source='user', read_only=True)
     
     class Meta:
         model = StageExecutor
@@ -103,7 +103,7 @@ class ProjectReportSerializer(serializers.ModelSerializer):
 
 class ProjectHistorySerializer(serializers.ModelSerializer):
     """Сериализатор для истории изменений"""
-    user_info = UserSerializer(source='user', read_only=True)
+    user_info = StrategicProjectUserSerializer(source='user', read_only=True)
     
     class Meta:
         model = ProjectHistory
@@ -114,9 +114,9 @@ class ProjectHistorySerializer(serializers.ModelSerializer):
 class StrategicProjectSerializer(serializers.ModelSerializer):
     """Сериализатор для стратегических проектов"""
     topic_info = ProgramTopicSerializer(source='topic', read_only=True)
-    leader_info = UserSerializer(source='leader', read_only=True)
-    curator_info = UserSerializer(source='curator', read_only=True)
-    customer_info = UserSerializer(source='customer', read_only=True)
+    leader_info = StrategicProjectUserSerializer(source='leader', read_only=True)
+    curator_info = StrategicProjectUserSerializer(source='curator', read_only=True)
+    customer_info = StrategicProjectUserSerializer(source='customer', read_only=True)
     stages = ProjectStageSerializer(many=True, read_only=True)
     reports = ProjectReportSerializer(many=True, read_only=True)
     completion_percentage = serializers.SerializerMethodField()
@@ -179,9 +179,9 @@ class ImportProgramSerializer(serializers.Serializer):
 
 class UserProjectRoleSerializer(serializers.ModelSerializer):
     """Сериализатор для ролей пользователей в стратегических проектах"""
-    user_info = UserSerializer(source='user', read_only=True)
+    user_info = StrategicProjectUserSerializer(source='user', read_only=True)
     role_display = serializers.CharField(source='get_role_display', read_only=True)
-    created_by_info = UserSerializer(source='created_by', read_only=True)
+    created_by_info = StrategicProjectUserSerializer(source='created_by', read_only=True)
     
     class Meta:
         model = UserProjectRole
@@ -191,7 +191,7 @@ class UserProjectRoleSerializer(serializers.ModelSerializer):
 
 class EmployeeWorkloadSerializer(serializers.ModelSerializer):
     """Сериализатор для загруженности сотрудников"""
-    user_info = UserSerializer(source='user', read_only=True)
+    user_info = StrategicProjectUserSerializer(source='user', read_only=True)
     project_info = serializers.SerializerMethodField()
     
     class Meta:

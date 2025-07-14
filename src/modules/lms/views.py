@@ -9,6 +9,7 @@ from django.utils import timezone
 from django.http import HttpResponse
 from datetime import timedelta
 from django.db import models
+from src.core.utils.mixins import SwaggerSafeMixin
 
 from .base_views import (
     BaseLMSViewSet, UserOwnedViewSet, SubjectRelatedViewSet, 
@@ -28,7 +29,7 @@ from .serializers import (
     StudentSerializer, TeacherSerializer, StudentGroupSerializer,
     SubjectSerializer, GradeSerializer, ThemeSerializer,
     LessonSerializer, TestSerializer, TestAttemptSerializer,
-    SubmittedAssignmentSerializer, CreateSubmittedAssignmentSerializer, UserProfileSerializer,
+    SubmittedAssignmentSerializer, CreateSubmittedAssignmentSerializer, LMSUserProfileSerializer,
     CourseCategorySerializer, CourseFormatSerializer, EnrollmentSerializer, CreateEnrollmentSerializer,
     CourseFileSerializer, ResourceSerializer, CreateResourceSerializer, UpdateResourceSerializer,
     ForumSerializer, ForumDiscussionSerializer,
@@ -42,10 +43,10 @@ from .serializers import (
     CreateQuestionSerializer, CreateAnswerSerializer, LessonItemSerializer, LessonItemReorderSerializer
 )
 
-class UserProfileViewSet(UserOwnedViewSet):
+class UserProfileViewSet(SwaggerSafeMixin, UserOwnedViewSet):
     """ViewSet для профилей пользователей"""
     queryset = UserProfile.objects.all()
-    serializer_class = UserProfileSerializer
+    serializer_class = LMSUserProfileSerializer
     
     @action(detail=False, methods=['get', 'patch'])
     def my_profile(self, request):
@@ -66,7 +67,15 @@ class UserProfileViewSet(UserOwnedViewSet):
                 return Response(serializer.data)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-class CourseCategoryViewSet(BaseLMSViewSet):
+    def get_queryset(self):
+        if self.is_swagger_fake_view():
+            return UserProfile.objects.none()
+            
+        user = self.get_safe_user()
+        if not user:
+            return UserProfile.objects.none()
+
+class CourseCategoryViewSet(SwaggerSafeMixin, BaseLMSViewSet):
     """ViewSet для категорий курсов"""
     queryset = CourseCategory.objects.all()
     serializer_class = CourseCategorySerializer
@@ -119,7 +128,15 @@ class CourseCategoryViewSet(BaseLMSViewSet):
         
         return super().partial_update(request, *args, **kwargs)
 
-class CourseFormatViewSet(BaseLMSViewSet):
+    def get_queryset(self):
+        if self.is_swagger_fake_view():
+            return CourseCategory.objects.none()
+            
+        user = self.get_safe_user()
+        if not user:
+            return CourseCategory.objects.none()
+
+class CourseFormatViewSet(SwaggerSafeMixin, BaseLMSViewSet):
     """ViewSet для форматов курсов"""
     queryset = CourseFormat.objects.all()
     serializer_class = CourseFormatSerializer
@@ -170,7 +187,15 @@ class CourseFormatViewSet(BaseLMSViewSet):
         
         return super().partial_update(request, *args, **kwargs)
 
-class SubjectViewSet(BaseLMSViewSet):
+    def get_queryset(self):
+        if self.is_swagger_fake_view():
+            return CourseFormat.objects.none()
+            
+        user = self.get_safe_user()
+        if not user:
+            return CourseFormat.objects.none()
+
+class SubjectViewSet(SwaggerSafeMixin, BaseLMSViewSet):
     """ViewSet для курсов (предметов)"""
     queryset = Subject.objects.all()
     serializer_class = SubjectSerializer
@@ -180,8 +205,15 @@ class SubjectViewSet(BaseLMSViewSet):
     ordering = ['-creationdate']
     
     def get_queryset(self):
-        queryset = get_user_accessible_subjects(self.request.user)
-        print(f"🔍 SubjectViewSet.get_queryset() для пользователя: {self.request.user.username}")
+        if self.is_swagger_fake_view():
+            return Subject.objects.none()
+            
+        user = self.get_safe_user()
+        if not user:
+            return Subject.objects.none()
+            
+        queryset = get_user_accessible_subjects(user)
+        print(f"🔍 SubjectViewSet.get_queryset() для пользователя: {user.username}")
         print(f"🔍 Возвращаем курсы: {queryset.count()}")
         if queryset.count() > 0:
             print(f"🔍 Первые курсы: {[s.name for s in queryset[:3]]}")
@@ -385,7 +417,7 @@ class SubjectViewSet(BaseLMSViewSet):
             'structure': structure
         })
 
-class EnrollmentViewSet(viewsets.ModelViewSet):
+class EnrollmentViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     """ViewSet для записей на курсы"""
     serializer_class = EnrollmentSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -393,7 +425,14 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
     filterset_fields = ['status', 'subject']
     
     def get_queryset(self):
-        return Enrollment.objects.filter(student=self.request.user)
+        if self.is_swagger_fake_view():
+            return Enrollment.objects.none()
+            
+        user = self.get_safe_user()
+        if not user:
+            return Enrollment.objects.none()
+            
+        return Enrollment.objects.filter(student=user)
     
     def get_serializer_class(self):
         """Используем разные сериализаторы для разных действий"""
@@ -401,7 +440,7 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
             return CreateEnrollmentSerializer
         return EnrollmentSerializer
 
-class ThemeViewSet(SubjectRelatedViewSet, ToggleVisibilityMixin, OrderingMixin):
+class ThemeViewSet(SwaggerSafeMixin, SubjectRelatedViewSet, ToggleVisibilityMixin, OrderingMixin):
     """ViewSet для тем курсов"""
     queryset = Theme.objects.all()
     serializer_class = ThemeSerializer
@@ -411,7 +450,13 @@ class ThemeViewSet(SubjectRelatedViewSet, ToggleVisibilityMixin, OrderingMixin):
     
     def get_queryset(self):
         # Переопределяем для тем, так как нужна проверка записи студентов
-        user = self.request.user
+        if self.is_swagger_fake_view():
+            return Theme.objects.none()
+            
+        user = self.get_safe_user()
+        if not user:
+            return Theme.objects.none()
+            
         user_roles = user.roles.values_list('role', flat=True)
         
         print(f"🔍 ThemeViewSet.get_queryset() для пользователя: {user.username}")
@@ -534,7 +579,7 @@ class ThemeViewSet(SubjectRelatedViewSet, ToggleVisibilityMixin, OrderingMixin):
         
         return Response({'message': 'Порядок тем обновлен'}, status=status.HTTP_200_OK)
 
-class LessonViewSet(viewsets.ModelViewSet):
+class LessonViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     """ViewSet для уроков"""
     serializer_class = LessonSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -544,7 +589,13 @@ class LessonViewSet(viewsets.ModelViewSet):
     ordering = ['sort_order']
     
     def get_queryset(self):
-        user = self.request.user
+        if self.is_swagger_fake_view():
+            return Lesson.objects.none()
+            
+        user = self.get_safe_user()
+        if not user:
+            return Lesson.objects.none()
+            
         user_roles = user.roles.values_list('role', flat=True)
         
         print(f"🔍 LessonViewSet.get_queryset() для пользователя: {user.username}")
@@ -676,7 +727,7 @@ class LessonViewSet(viewsets.ModelViewSet):
         serializer = LessonSerializer(lessons, many=True)
         return Response(serializer.data)
 
-class ForumViewSet(viewsets.ModelViewSet):
+class ForumViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     """ViewSet для форумов"""
     serializer_class = ForumSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -685,8 +736,13 @@ class ForumViewSet(viewsets.ModelViewSet):
     search_fields = ['name', 'description']
     
     def get_queryset(self):
-        user = self.request.user
-        
+        if self.is_swagger_fake_view():
+            return Forum.objects.none()
+            
+        user = self.get_safe_user()
+        if not user:
+            return Forum.objects.none()
+            
         # Проверяем роли пользователя
         user_roles = user.roles.values_list('role', flat=True)
         
@@ -709,7 +765,7 @@ class ForumViewSet(viewsets.ModelViewSet):
             return CreateForumSerializer
         return ForumSerializer
 
-class ForumDiscussionViewSet(viewsets.ModelViewSet):
+class ForumDiscussionViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     """ViewSet для дискуссий форума"""
     serializer_class = ForumDiscussionSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -719,7 +775,15 @@ class ForumDiscussionViewSet(viewsets.ModelViewSet):
     ordering_fields = ['created_at', 'last_post_at', 'posts_count']
     ordering = ['-is_pinned', '-last_post_at']
 
-class ForumPostViewSet(viewsets.ModelViewSet):
+    def get_queryset(self):
+        if self.is_swagger_fake_view():
+            return ForumDiscussion.objects.none()
+            
+        user = self.get_safe_user()
+        if not user:
+            return ForumDiscussion.objects.none()
+
+class ForumPostViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     """ViewSet для постов форума"""
     serializer_class = ForumPostSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -728,7 +792,15 @@ class ForumPostViewSet(viewsets.ModelViewSet):
     ordering_fields = ['created_at']
     ordering = ['created_at']
 
-class TestBankViewSet(viewsets.ModelViewSet):
+    def get_queryset(self):
+        if self.is_swagger_fake_view():
+            return ForumPost.objects.none()
+            
+        user = self.get_safe_user()
+        if not user:
+            return ForumPost.objects.none()
+
+class TestBankViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     """ViewSet для банков тестов"""
     serializer_class = TestBankSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -737,13 +809,19 @@ class TestBankViewSet(viewsets.ModelViewSet):
     search_fields = ['name', 'description']
     
     def get_queryset(self):
-        user = self.request.user
+        if self.is_swagger_fake_view():
+            return TestBank.objects.none()
+            
+        user = self.get_safe_user()
+        if not user:
+            return TestBank.objects.none()
+            
         if hasattr(user, 'teacher'):
             return TestBank.objects.filter(created_by=user)
         else:
             return TestBank.objects.filter(subject__enrollment__student=user)
 
-class TestViewSet(viewsets.ModelViewSet):
+class TestViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     """ViewSet для тестов"""
     serializer_class = TestSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -752,7 +830,13 @@ class TestViewSet(viewsets.ModelViewSet):
     search_fields = ['name', 'title', 'description']
     
     def get_queryset(self):
-        user = self.request.user
+        if self.is_swagger_fake_view():
+            return Test.objects.none()
+            
+        user = self.get_safe_user()
+        if not user:
+            return Test.objects.none()
+            
         user_roles = user.roles.values_list('role', flat=True)
         
         if 'admin' in user_roles:
@@ -891,15 +975,22 @@ class TestViewSet(viewsets.ModelViewSet):
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-class TestAttemptViewSet(viewsets.ModelViewSet):
+class TestAttemptViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     """ViewSet для попыток прохождения тестов"""
     serializer_class = TestAttemptSerializer
     permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
-        return TestAttempt.objects.filter(student=self.request.user)
+        if self.is_swagger_fake_view():
+            return TestAttempt.objects.none()
+            
+        user = self.get_safe_user()
+        if not user:
+            return TestAttempt.objects.none()
+            
+        return TestAttempt.objects.filter(student=user)
 
-class AssignmentViewSet(viewsets.ModelViewSet):
+class AssignmentViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     """ViewSet для заданий"""
     serializer_class = AssignmentSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -910,7 +1001,13 @@ class AssignmentViewSet(viewsets.ModelViewSet):
     ordering = ['deadline']
     
     def get_queryset(self):
-        user = self.request.user
+        if self.is_swagger_fake_view():
+            return Assignment.objects.none()
+            
+        user = self.get_safe_user()
+        if not user:
+            return Assignment.objects.none()
+            
         user_roles = user.roles.values_list('role', flat=True)
         
         if 'admin' in user_roles:
@@ -990,7 +1087,7 @@ class AssignmentViewSet(viewsets.ModelViewSet):
         
         return Response({'message': 'Порядок заданий обновлен'}, status=status.HTTP_200_OK)
 
-class SubmittedAssignmentViewSet(viewsets.ModelViewSet):
+class SubmittedAssignmentViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     """ViewSet для сданных заданий"""
     serializer_class = SubmittedAssignmentSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -998,7 +1095,13 @@ class SubmittedAssignmentViewSet(viewsets.ModelViewSet):
     filterset_fields = ['assignment', 'grade']
     
     def get_queryset(self):
-        user = self.request.user
+        if self.is_swagger_fake_view():
+            return SubmittedAssignment.objects.none()
+            
+        user = self.get_safe_user()
+        if not user:
+            return SubmittedAssignment.objects.none()
+            
         user_roles = user.roles.values_list('role', flat=True)
         
         if 'admin' in user_roles:
@@ -1018,7 +1121,7 @@ class SubmittedAssignmentViewSet(viewsets.ModelViewSet):
             return CreateSubmittedAssignmentSerializer
         return SubmittedAssignmentSerializer
 
-class CalendarEventViewSet(viewsets.ModelViewSet):
+class CalendarEventViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     """ViewSet для событий календаря"""
     serializer_class = CalendarEventSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -1028,7 +1131,13 @@ class CalendarEventViewSet(viewsets.ModelViewSet):
     ordering = ['start_date']
     
     def get_queryset(self):
-        user = self.request.user
+        if self.is_swagger_fake_view():
+            return CalendarEvent.objects.none()
+            
+        user = self.get_safe_user()
+        if not user:
+            return CalendarEvent.objects.none()
+            
         if hasattr(user, 'teacher'):
             return CalendarEvent.objects.filter(subject__teacher=user)
         else:
@@ -1058,15 +1167,22 @@ class BadgeViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return Badge.objects.filter(is_active=True)
 
-class UserBadgeViewSet(viewsets.ModelViewSet):
+class UserBadgeViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     """ViewSet для полученных значков"""
     serializer_class = UserBadgeSerializer
     permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
-        return UserBadge.objects.filter(user=self.request.user)
+        if self.is_swagger_fake_view():
+            return UserBadge.objects.none()
+            
+        user = self.get_safe_user()
+        if not user:
+            return UserBadge.objects.none()
+            
+        return UserBadge.objects.filter(user=user)
 
-class NotificationViewSet(BaseLMSViewSet):
+class NotificationViewSet(SwaggerSafeMixin, BaseLMSViewSet):
     """ViewSet для уведомлений"""
     queryset = Notification.objects.all()
     serializer_class = NotificationSerializer
@@ -1074,7 +1190,14 @@ class NotificationViewSet(BaseLMSViewSet):
     ordering = ['-created_at']
     
     def get_queryset(self):
-        return self.queryset.filter(recipient=self.request.user)
+        if self.is_swagger_fake_view():
+            return Notification.objects.none()
+            
+        user = self.get_safe_user()
+        if not user:
+            return Notification.objects.none()
+            
+        return self.queryset.filter(recipient=user)
     
     @action(detail=True, methods=['patch'])
     def mark_as_read(self, request, pk=None):
@@ -1092,7 +1215,7 @@ class NotificationViewSet(BaseLMSViewSet):
         ).update(is_read=True)
         return Response({'message': 'Все уведомления отмечены как прочитанные'})
 
-class PrivateMessageViewSet(viewsets.ModelViewSet):
+class PrivateMessageViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     """ViewSet для личных сообщений"""
     serializer_class = PrivateMessageSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -1102,8 +1225,15 @@ class PrivateMessageViewSet(viewsets.ModelViewSet):
     ordering = ['-sent_at']
     
     def get_queryset(self):
+        if self.is_swagger_fake_view():
+            return PrivateMessage.objects.none()
+            
+        user = self.get_safe_user()
+        if not user:
+            return PrivateMessage.objects.none()
+            
         return PrivateMessage.objects.filter(
-            Q(sender=self.request.user) | Q(recipient=self.request.user)
+            Q(sender=user) | Q(recipient=user)
         )
 
 class AnalyticsViewSet(viewsets.ViewSet):
@@ -1224,13 +1354,20 @@ class AnalyticsViewSet(viewsets.ViewSet):
         
         return Response(debug_info)
 
-class UserRoleViewSet(viewsets.ModelViewSet):
+class UserRoleViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     """ViewSet для ролей пользователей"""
     serializer_class = UserRoleSerializer
     permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
-        return UserRole.objects.filter(user=self.request.user)
+        if self.is_swagger_fake_view():
+            return UserRole.objects.none()
+            
+        user = self.get_safe_user()
+        if not user:
+            return UserRole.objects.none()
+            
+        return UserRole.objects.filter(user=user)
     
     @action(detail=False, methods=['get'])
     def current(self, request):
@@ -1269,7 +1406,7 @@ class UserRoleViewSet(viewsets.ModelViewSet):
             'role': role_name
         })
 
-class QuestionViewSet(viewsets.ModelViewSet):
+class QuestionViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     """ViewSet для вопросов теста"""
     serializer_class = QuestionSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -1281,7 +1418,13 @@ class QuestionViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         """Фильтрация вопросов по правам доступа"""
-        user = self.request.user
+        if self.is_swagger_fake_view():
+            return Question.objects.none()
+            
+        user = self.get_safe_user()
+        if not user:
+            return Question.objects.none()
+            
         user_roles = user.roles.values_list('role', flat=True)
         
         if 'admin' in user_roles:
@@ -1302,7 +1445,7 @@ class QuestionViewSet(viewsets.ModelViewSet):
             return CreateQuestionSerializer
         return QuestionSerializer
 
-class AnswerViewSet(viewsets.ModelViewSet):
+class AnswerViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     """ViewSet для вариантов ответов"""
     serializer_class = AnswerSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -1311,7 +1454,13 @@ class AnswerViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         """Фильтрация ответов по правам доступа"""
-        user = self.request.user
+        if self.is_swagger_fake_view():
+            return Answer.objects.none()
+            
+        user = self.get_safe_user()
+        if not user:
+            return Answer.objects.none()
+            
         user_roles = user.roles.values_list('role', flat=True)
         
         if 'admin' in user_roles:
@@ -1332,7 +1481,7 @@ class AnswerViewSet(viewsets.ModelViewSet):
             return CreateAnswerSerializer
         return AnswerSerializer
 
-class ResourceViewSet(viewsets.ModelViewSet):
+class ResourceViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     """ViewSet для ресурсов (файлов)"""
     serializer_class = ResourceSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -1344,7 +1493,13 @@ class ResourceViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         """Фильтрация ресурсов по правам доступа"""
-        user = self.request.user
+        if self.is_swagger_fake_view():
+            return Resource.objects.none()
+            
+        user = self.get_safe_user()
+        if not user:
+            return Resource.objects.none()
+            
         user_roles = user.roles.values_list('role', flat=True)
         
         if 'admin' in user_roles:
@@ -1466,7 +1621,7 @@ class ResourceViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 # ViewSet для унифицированного управления элементами урока
-class LessonItemViewSet(viewsets.ModelViewSet):
+class LessonItemViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     """ViewSet для элементов урока (тесты, задания, ресурсы)"""
     serializer_class = LessonItemSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -1477,7 +1632,13 @@ class LessonItemViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         """Фильтрация элементов урока по правам доступа"""
-        user = self.request.user
+        if self.is_swagger_fake_view():
+            return LessonItem.objects.none()
+            
+        user = self.get_safe_user()
+        if not user:
+            return LessonItem.objects.none()
+            
         user_roles = user.roles.values_list('role', flat=True)
         
         if 'admin' in user_roles:

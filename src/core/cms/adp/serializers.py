@@ -85,7 +85,7 @@ class UserDeviceSerializer(ModelSerializer):
         fields = ['id', 'device_type', 'device_name', 'ip_address', 'city', 'country', 'is_active', 'last_activity', 'created_at']
         read_only_fields = ['id', 'ip_address', 'last_activity', 'created_at']
 
-class UserProfileSerializer(ModelSerializer):
+class CMSUserProfileSerializer(ModelSerializer):
     full_name = CharField(read_only=True)
     
     class Meta:
@@ -98,8 +98,8 @@ class UserProfileSerializer(ModelSerializer):
         ]
         read_only_fields = ['created_at', 'updated_at', 'full_name']
 
-class UserSerializer(ModelSerializer):
-    adp_profile = UserProfileSerializer(read_only=True)
+class CMSUserSerializer(ModelSerializer):
+    adp_profile = CMSUserProfileSerializer(read_only=True)
     
     class Meta:
         model = User

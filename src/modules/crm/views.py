@@ -9,6 +9,7 @@ from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from datetime import datetime, timedelta
 from django.contrib.auth import get_user_model
+from src.core.utils.mixins import SwaggerSafeMixin
 
 from .models import (
     Project, ProjectMember, Task, TaskComment, TaskAttachment, TimeLog,
@@ -17,7 +18,7 @@ from .models import (
 from .serializers import (
     ProjectSerializer, ProjectListSerializer, ProjectMemberSerializer,
     TaskSerializer, TaskListSerializer, TaskCalendarSerializer, TaskKanbanSerializer,
-    TaskCommentSerializer, TaskAttachmentSerializer, TimeLogSerializer, UserSerializer,
+    TaskCommentSerializer, TaskAttachmentSerializer, TimeLogSerializer, CRMUserSerializer,
     ProjectStatusSerializer, ProjectPrioritySerializer, TaskStatusSerializer, TaskPrioritySerializer
 )
 
@@ -146,7 +147,7 @@ class TaskPriorityViewSet(viewsets.ModelViewSet):
             return Response({'error': 'Приоритет по умолчанию не найден'}, status=status.HTTP_404_NOT_FOUND)
 
 
-class ProjectViewSet(viewsets.ModelViewSet):
+class ProjectViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     """ViewSet для управления проектами"""
     queryset = Project.objects.all()
     permission_classes = [IsAuthenticated]
@@ -162,8 +163,14 @@ class ProjectViewSet(viewsets.ModelViewSet):
         return ProjectSerializer
     
     def get_queryset(self):
+        if self.is_swagger_fake_view():
+            return Project.objects.none()
+            
+        user = self.get_safe_user()
+        if not user:
+            return Project.objects.none()
+            
         queryset = super().get_queryset()
-        user = self.request.user
         
         # По умолчанию показываем только проекты, в которых пользователь участвует
         # Это включает: владельца, менеджера и участников команды
@@ -258,7 +265,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
         })
 
 
-class TaskViewSet(viewsets.ModelViewSet):
+class TaskViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     """ViewSet для управления задачами"""
     queryset = Task.objects.all()
     permission_classes = [IsAuthenticated]
@@ -278,8 +285,14 @@ class TaskViewSet(viewsets.ModelViewSet):
         return TaskSerializer
     
     def get_queryset(self):
+        if self.is_swagger_fake_view():
+            return Task.objects.none()
+            
+        user = self.get_safe_user()
+        if not user:
+            return Task.objects.none()
+            
         queryset = super().get_queryset()
-        user = self.request.user
         
         # Параметр "Мои задачи" 
         my_tasks = self.request.query_params.get('my_tasks', None)
@@ -567,7 +580,7 @@ class TaskCommentViewSet(viewsets.ModelViewSet):
         return queryset
 
 
-class TimeLogViewSet(viewsets.ModelViewSet):
+class TimeLogViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     """ViewSet для учета времени"""
     queryset = TimeLog.objects.all()
     serializer_class = TimeLogSerializer
@@ -577,6 +590,13 @@ class TimeLogViewSet(viewsets.ModelViewSet):
     ordering = ['-date', '-created_at']
     
     def get_queryset(self):
+        if self.is_swagger_fake_view():
+            return TimeLog.objects.none()
+            
+        user = self.get_safe_user()
+        if not user:
+            return TimeLog.objects.none()
+            
         queryset = super().get_queryset()
         task_id = self.request.query_params.get('task_id')
         if task_id:
@@ -594,7 +614,7 @@ class TimeLogViewSet(viewsets.ModelViewSet):
 class UserViewSet(viewsets.ReadOnlyModelViewSet):
     """ViewSet для получения пользователей (только чтение)"""
     queryset = User.objects.filter(is_active=True)
-    serializer_class = UserSerializer
+    serializer_class = CRMUserSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['username', 'first_name', 'last_name', 'email']

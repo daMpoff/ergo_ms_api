@@ -47,7 +47,7 @@ class TaskPrioritySerializer(serializers.ModelSerializer):
         read_only_fields = ['created_at', 'updated_at']
 
 
-class UserSerializer(serializers.ModelSerializer):
+class CRMUserSerializer(serializers.ModelSerializer):
     """Сериализатор пользователя"""
     full_name = serializers.CharField(source='get_full_name', read_only=True)
     
@@ -58,7 +58,7 @@ class UserSerializer(serializers.ModelSerializer):
 
 class ProjectMemberSerializer(serializers.ModelSerializer):
     """Сериализатор участника проекта"""
-    user = UserSerializer(read_only=True)
+    user = CRMUserSerializer(read_only=True)
     user_id = serializers.IntegerField(write_only=True)
     
     class Meta:
@@ -68,8 +68,8 @@ class ProjectMemberSerializer(serializers.ModelSerializer):
 
 class ProjectSerializer(serializers.ModelSerializer):
     """Сериализатор проекта"""
-    owner = UserSerializer(read_only=True)
-    manager = UserSerializer(read_only=True)
+    owner = CRMUserSerializer(read_only=True)
+    manager = CRMUserSerializer(read_only=True)
     manager_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
     memberships = ProjectMemberSerializer(many=True, read_only=True)
     
@@ -130,8 +130,8 @@ class ProjectSerializer(serializers.ModelSerializer):
 
 class ProjectListSerializer(serializers.ModelSerializer):
     """Сериализатор списка проектов"""
-    owner = UserSerializer(read_only=True)
-    manager = UserSerializer(read_only=True)
+    owner = CRMUserSerializer(read_only=True)
+    manager = CRMUserSerializer(read_only=True)
     
     # Новые поля для статусов и приоритетов
     status_ref = ProjectStatusSerializer(read_only=True)
@@ -181,7 +181,7 @@ class ProjectListSerializer(serializers.ModelSerializer):
 
 class TaskCommentSerializer(serializers.ModelSerializer):
     """Сериализатор комментария к задаче"""
-    author = UserSerializer(read_only=True)
+    author = CRMUserSerializer(read_only=True)
     
     class Meta:
         model = TaskComment
@@ -194,7 +194,7 @@ class TaskCommentSerializer(serializers.ModelSerializer):
 
 class TaskAttachmentSerializer(serializers.ModelSerializer):
     """Сериализатор прикрепленного файла"""
-    uploaded_by = UserSerializer(read_only=True)
+    uploaded_by = CRMUserSerializer(read_only=True)
     
     class Meta:
         model = TaskAttachment
@@ -207,7 +207,7 @@ class TaskAttachmentSerializer(serializers.ModelSerializer):
 
 class TimeLogSerializer(serializers.ModelSerializer):
     """Сериализатор учета времени"""
-    user = UserSerializer(read_only=True)
+    user = CRMUserSerializer(read_only=True)
     
     class Meta:
         model = TimeLog
@@ -220,8 +220,8 @@ class TimeLogSerializer(serializers.ModelSerializer):
 
 class TaskSerializer(serializers.ModelSerializer):
     """Сериализатор задачи"""
-    assignee = UserSerializer(read_only=True)
-    creator = UserSerializer(read_only=True)
+    assignee = CRMUserSerializer(read_only=True)
+    creator = CRMUserSerializer(read_only=True)
     project = ProjectListSerializer(read_only=True)
     assignee_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
     project_id = serializers.IntegerField(write_only=True)
@@ -279,8 +279,8 @@ class TaskSerializer(serializers.ModelSerializer):
 
 class TaskListSerializer(serializers.ModelSerializer):
     """Сериализатор списка задач"""
-    assignee = UserSerializer(read_only=True)
-    creator = UserSerializer(read_only=True)
+    assignee = CRMUserSerializer(read_only=True)
+    creator = CRMUserSerializer(read_only=True)
     project = ProjectListSerializer(read_only=True)
     
     # Новые поля для статусов и приоритетов
@@ -314,7 +314,7 @@ class TaskListSerializer(serializers.ModelSerializer):
 
 class TaskCalendarSerializer(serializers.ModelSerializer):
     """Сериализатор задач для календаря"""
-    assignee = UserSerializer(read_only=True)
+    assignee = CRMUserSerializer(read_only=True)
     project = ProjectListSerializer(read_only=True)
     
     class Meta:
@@ -327,7 +327,7 @@ class TaskCalendarSerializer(serializers.ModelSerializer):
 
 class TaskKanbanSerializer(serializers.ModelSerializer):
     """Сериализатор задач для канбан доски"""
-    assignee = UserSerializer(read_only=True)
+    assignee = CRMUserSerializer(read_only=True)
     project = ProjectListSerializer(read_only=True)
     
     class Meta:

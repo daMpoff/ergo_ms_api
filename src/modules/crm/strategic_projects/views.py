@@ -23,6 +23,7 @@ import xlsxwriter
 from docx import Document
 from docx.shared import Inches, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from src.core.utils.mixins import SwaggerSafeMixin
 from .models import (
     DevelopmentProgram, ProgramTopic, StrategicProject,
     ProjectStage, StageExecutor, ProjectReport,
@@ -1023,14 +1024,21 @@ class EmployeeWorkloadViewSet(viewsets.ModelViewSet):
         })
 
 
-class ProjectNotificationViewSet(viewsets.ModelViewSet):
+class ProjectNotificationViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     """ViewSet для управления уведомлениями по стратегическим проектам"""
     serializer_class = ProjectNotificationSerializer
     permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
+        if self.is_swagger_fake_view():
+            return ProjectNotification.objects.none()
+            
+        user = self.get_safe_user()
+        if not user:
+            return ProjectNotification.objects.none()
+            
         # Пользователь видит только свои уведомления
-        queryset = ProjectNotification.objects.filter(recipient=self.request.user)
+        queryset = ProjectNotification.objects.filter(recipient=user)
         
         # Фильтр по статусу прочтения
         is_read = self.request.query_params.get('is_read', None)

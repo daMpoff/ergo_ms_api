@@ -25,7 +25,7 @@ class UserRoleSerializer(serializers.ModelSerializer):
         model = UserRole
         fields = '__all__'
 
-class UserProfileSerializer(serializers.ModelSerializer):
+class LMSUserProfileSerializer(serializers.ModelSerializer):
     user = LMSUserSerializer(read_only=True)
     
     class Meta:

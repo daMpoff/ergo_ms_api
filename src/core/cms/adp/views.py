@@ -21,8 +21,8 @@ from src.core.cms.adp.serializers import (
     UserRegistrationValidationSerializer,
     ChangePasswordSerializer,
     UserDeviceSerializer,
-    UserSerializer,
-    UserProfileSerializer,
+    CMSUserSerializer,
+    CMSUserProfileSerializer,
     UpdateUserProfileSerializer,
 )
 from src.core.utils.base.base_views import BaseAPIView, BaseAPIViewAuthMixin
@@ -359,7 +359,7 @@ class ProtectedView(BaseAPIViewAuthMixin):
         responses={
             200: openapi.Response(
                 description="Данные авторизованного пользователя.",
-                schema=UserSerializer()
+                schema=CMSUserSerializer()
             ),
             401: "Неавторизованный доступ."
         },
@@ -372,7 +372,7 @@ class ProtectedView(BaseAPIViewAuthMixin):
         # Создаем профиль если его нет
         profile, created = UserProfile.objects.get_or_create(user=request.user)
         
-        serializer = UserSerializer(request.user)
+        serializer = CMSUserSerializer(request.user)
         return Response(serializer.data, status=status.HTTP_200_OK)
     
     def _update_device_activity(self, request):
@@ -583,7 +583,7 @@ class UserProfileView(BaseAPIViewAuthMixin):
         responses={
             200: openapi.Response(
                 description="Данные профиля пользователя.",
-                schema=UserSerializer()
+                schema=CMSUserSerializer()
             ),
         },
         security=[{'Bearer': []}]
@@ -592,7 +592,7 @@ class UserProfileView(BaseAPIViewAuthMixin):
         # Создаем профиль если его нет
         profile, created = UserProfile.objects.get_or_create(user=request.user)
         
-        serializer = UserSerializer(request.user)
+        serializer = CMSUserSerializer(request.user)
         return Response(serializer.data, status=status.HTTP_200_OK)
     
     @swagger_auto_schema(
@@ -614,7 +614,7 @@ class UserProfileView(BaseAPIViewAuthMixin):
             serializer.save()
             
             # Возвращаем обновленные данные
-            user_serializer = UserSerializer(request.user)
+            user_serializer = CMSUserSerializer(request.user)
             return Response(user_serializer.data, status=status.HTTP_200_OK)
         
         errors = parse_errors_to_dict(serializer.errors)
