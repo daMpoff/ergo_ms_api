@@ -11,8 +11,6 @@ from src.modules.lms.views import (
     QuestionViewSet, AnswerViewSet, LessonItemViewSet
 )
 
-app_name = 'lms'
-
 # Создаем роутер для API
 router = DefaultRouter()
 
@@ -46,7 +44,7 @@ router.register(r'analytics', AnalyticsViewSet, basename='analytics')
 
 urlpatterns = [
     # API endpoints
-    path('api/', include(router.urls)),
+    path('', include(router.urls)),
     
     # Дополнительные специфичные endpoints
     path('analytics/student/', AnalyticsViewSet.as_view({'get': 'student_stats'}), name='student-analytics'),

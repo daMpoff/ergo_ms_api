@@ -10,7 +10,6 @@ from ..serializers import (
 )
 from django.db.models import Q
 
-# Создавайте свои представления здесь
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = User.objects.all()

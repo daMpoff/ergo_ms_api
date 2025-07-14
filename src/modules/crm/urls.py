@@ -19,6 +19,5 @@ router.register(r'task-statuses', TaskStatusViewSet)
 router.register(r'task-priorities', TaskPriorityViewSet)
 
 urlpatterns = [
-    path('strategic-projects/', include('src.modules.crm.strategic_projects.urls')),
-    path('api/', include(router.urls)),
+    path('', include(router.urls)),
 ]

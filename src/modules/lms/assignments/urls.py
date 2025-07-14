@@ -1,8 +1,6 @@
 from django.urls import path, include
 from . import views
 
-app_name = 'assignments'
-
 urlpatterns = [
     # Assignment Management endpoints
     path('management/', views.AssignmentManagementViewSet.as_view({'get': 'list', 'post': 'create'})),

@@ -4,10 +4,7 @@ from django.urls import (
 )
 from src.core.cms.views import *
 
-urlpatterns = [    
-    # ADP (Authentication & Data Processing) модуль
-    path('adp/', include('src.core.cms.adp.urls')),
-    
+urlpatterns = [        
     # Основные CMS роуты
     path('check_access_to_page/', CheckAccesstoPage.as_view(), name='check access to page'),
     path('check_access_to_admin_panel/', CheckAccessToAdminPanel.as_view(), name='check access to admin panel'),

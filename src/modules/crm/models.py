@@ -3,8 +3,6 @@ from django.contrib.auth import get_user_model
 
 User = get_user_model()
 
-# Модели для управления статусами и приоритетами
-
 class ProjectStatus(models.Model):
     """Статусы проектов"""
     name = models.CharField(max_length=100, verbose_name='Название статуса')

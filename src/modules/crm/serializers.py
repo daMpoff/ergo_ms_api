@@ -7,9 +7,6 @@ from .models import (
 
 User = get_user_model()
 
-# Создавайте свои сериализаторы здесь
-
-# Сериализаторы для статусов и приоритетов
 
 class ProjectStatusSerializer(serializers.ModelSerializer):
     """Сериализатор статусов проектов"""

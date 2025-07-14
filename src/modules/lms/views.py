@@ -74,6 +74,9 @@ class UserProfileViewSet(SwaggerSafeMixin, UserOwnedViewSet):
         user = self.get_safe_user()
         if not user:
             return UserProfile.objects.none()
+        
+        # Возвращаем профиль пользователя
+        return UserProfile.objects.filter(user=user)
 
 class CourseCategoryViewSet(SwaggerSafeMixin, BaseLMSViewSet):
     """ViewSet для категорий курсов"""
@@ -135,6 +138,18 @@ class CourseCategoryViewSet(SwaggerSafeMixin, BaseLMSViewSet):
         user = self.get_safe_user()
         if not user:
             return CourseCategory.objects.none()
+        
+        # Проверяем роли пользователя
+        user_roles = user.roles.values_list('role', flat=True)
+        
+        # Администраторы и преподаватели видят все категории
+        if 'admin' in user_roles or 'teacher' in user_roles:
+            return CourseCategory.objects.all()
+        
+        # Студенты видят только категории опубликованных курсов
+        return CourseCategory.objects.filter(
+            subjects__is_published=True
+        ).distinct()
 
 class CourseFormatViewSet(SwaggerSafeMixin, BaseLMSViewSet):
     """ViewSet для форматов курсов"""
@@ -194,6 +209,18 @@ class CourseFormatViewSet(SwaggerSafeMixin, BaseLMSViewSet):
         user = self.get_safe_user()
         if not user:
             return CourseFormat.objects.none()
+        
+        # Проверяем роли пользователя
+        user_roles = user.roles.values_list('role', flat=True)
+        
+        # Администраторы и преподаватели видят все форматы
+        if 'admin' in user_roles or 'teacher' in user_roles:
+            return CourseFormat.objects.all()
+        
+        # Студенты видят только форматы опубликованных курсов
+        return CourseFormat.objects.filter(
+            subjects__is_published=True
+        ).distinct()
 
 class SubjectViewSet(SwaggerSafeMixin, BaseLMSViewSet):
     """ViewSet для курсов (предметов)"""
@@ -782,6 +809,25 @@ class ForumDiscussionViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         user = self.get_safe_user()
         if not user:
             return ForumDiscussion.objects.none()
+        
+        # Проверяем роли пользователя
+        user_roles = user.roles.values_list('role', flat=True)
+        
+        if 'admin' in user_roles:
+            return ForumDiscussion.objects.all()
+        elif 'teacher' in user_roles:
+            # Преподаватели видят дискуссии своих курсов
+            return ForumDiscussion.objects.filter(
+                forum__subject__teacher=user
+            ).distinct()
+        else:
+            # Студенты видят дискуссии курсов, на которые они записаны
+            enrolled_subjects = Enrollment.objects.filter(
+                student=user, status='active'
+            ).values_list('subject', flat=True)
+            return ForumDiscussion.objects.filter(
+                forum__subject__in=enrolled_subjects
+            ).distinct()
 
 class ForumPostViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     """ViewSet для постов форума"""
@@ -799,6 +845,25 @@ class ForumPostViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         user = self.get_safe_user()
         if not user:
             return ForumPost.objects.none()
+        
+        # Проверяем роли пользователя
+        user_roles = user.roles.values_list('role', flat=True)
+        
+        if 'admin' in user_roles:
+            return ForumPost.objects.all()
+        elif 'teacher' in user_roles:
+            # Преподаватели видят посты своих курсов
+            return ForumPost.objects.filter(
+                discussion__forum__subject__teacher=user
+            ).distinct()
+        else:
+            # Студенты видят посты курсов, на которые они записаны
+            enrolled_subjects = Enrollment.objects.filter(
+                student=user, status='active'
+            ).values_list('subject', flat=True)
+            return ForumPost.objects.filter(
+                discussion__forum__subject__in=enrolled_subjects
+            ).distinct()
 
 class TestBankViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     """ViewSet для банков тестов"""
@@ -1156,7 +1221,7 @@ class CalendarEventViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
 
-class BadgeViewSet(viewsets.ModelViewSet):
+class BadgeViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     """ViewSet для значков"""
     serializer_class = BadgeSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -1165,7 +1230,30 @@ class BadgeViewSet(viewsets.ModelViewSet):
     search_fields = ['name', 'description']
     
     def get_queryset(self):
-        return Badge.objects.filter(is_active=True)
+        if self.is_swagger_fake_view():
+            return Badge.objects.none()
+            
+        user = self.get_safe_user()
+        if not user:
+            return Badge.objects.none()
+        
+        # Проверяем роли пользователя
+        user_roles = user.roles.values_list('role', flat=True)
+        
+        if 'admin' in user_roles:
+            return Badge.objects.all()
+        elif 'teacher' in user_roles:
+            # Преподаватели видят все активные значки
+            return Badge.objects.filter(is_active=True)
+        else:
+            # Студенты видят только значки курсов, на которые они записаны
+            enrolled_subjects = Enrollment.objects.filter(
+                student=user, status='active'
+            ).values_list('subject', flat=True)
+            return Badge.objects.filter(
+                is_active=True,
+                subject__in=enrolled_subjects
+            ).distinct()
 
 class UserBadgeViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     """ViewSet для полученных значков"""

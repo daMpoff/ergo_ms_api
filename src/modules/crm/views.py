@@ -24,9 +24,6 @@ from .serializers import (
 
 User = get_user_model()
 
-# Создавайте свои представления здесь
-
-# ViewSets для управления статусами и приоритетами
 
 class ProjectStatusViewSet(viewsets.ModelViewSet):
     """ViewSet для управления статусами проектов"""
