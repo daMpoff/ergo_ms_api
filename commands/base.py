@@ -1,99 +1,99 @@
 """
-Файл для определения базовых классов предоставляющих механизм для выполнения команд через Poetry.
+Базовый класс для выполнения Django команд через Poetry.
 """
 
 import os
-
+import subprocess
+import sys
 from typing import Optional
 
+from src.core.utils.auto_api.auto_config import get_env_deploy_type
+
+
 class PoetryCommand:
-    """
-        Базовый класс для выполнения команд через Poetry, включая Django команды и пользовательские Python скрипты.
-
-        Этот класс предоставляет механизм для выполнения команд, как через `manage.py` (для Django), так и через
-        обычные Python скрипты, которые могут быть указаны пользователем.
-
-        Аргументы:
-            poetry_command_name (str): Имя команды, которое будет использовано в Poetry.
-            django_command_name (Optional[str]): Имя команды, которое будет передано Django через manage.py.
-            script_command (Optional[str]): Имя пользовательской команды или Python скрипта, который будет выполнен.
-
-        Методы:
-            __init__(self, command_name: Optional[str] = None):
-                Инициализация команды с указанием ее имени. Можно указать команду для Django или пользовательскую команду.
-            
-            run(self, *args):
-                Выполняет команду с переданными аргументами. Формирует команду для выполнения и запускает ее.
-        
-        Пример:
-            Для запуска в терминале команды, например `makemigrations`: 
-            >>> poetry run cmd makemigrations
-
-            Для использования Django команды, например `makemigrations`:
-            >>> command = PoetryCommand(django_command_name="makemigrations")
-            >>> command.run()
-
-            Для выполнения пользовательского скрипта, например `my_script.py`: 
-            >>> command = PoetryCommand(script_command="python my_script.py")
-            >>> command.run()
-    """
-    poetry_command_name: str
-    # Имя команды django
+    """Базовый класс для выполнения команд через Poetry."""
+    
+    poetry_command_name: Optional[str] = None
     django_command_name: Optional[str] = None
-    # Пользовательская команда
     script_command: Optional[str] = None
     
     def __init__(self, command_name: Optional[str] = None):
-        """
-        Инициализация команды, которая будет выполнена.
-
-        Принимает имя команды для выполнения, которое может быть:
-        - командой Django (через `manage.py`), если указано поле `django_command_name`,
-        - пользовательской командой или скриптом, если указано поле `script_command`.
-        
-        Если имя команды не указано, будет выбрано значение из одного из полей, если оно присутствует.
-        
-        Аргументы:
-            command_name (Optional[str]): Имя команды для выполнения. Если не указано, используется значение из
-                                          `django_command_name` или `script_command`.
-        
-        Исключения:
-            ValueError: Если не указано имя команды для выполнения.
-        """
+        """Инициализация команды."""
         self.command_name = command_name or self.django_command_name or self.script_command
 
         if not self.command_name:
             raise ValueError("Не указано имя команды для выполнения.")
-
-    def run(self, *args):
-        """
-        Выполняет команду с переданными аргументами.
-
-        Формирует команду для выполнения, исходя из типа команды (Django или пользовательская команда),
-        и запускает ее в операционной системе.
-
-        Аргументы:
-            *args (str): Аргументы, которые будут переданы в команду при выполнении. Они конкатенируются в строку.
-
-        Исключения:
-            RuntimeError: Если не удалось определить тип команды для выполнения (например, если не указаны
-                          ни Django, ни пользовательские команды).
         
-        Пример:
-            Для команды `makemigrations` с дополнительными аргументами:
-            >>> command = PoetryCommand(django_command_name="makemigrations")
-            >>> command.run("--dry-run")
+        if not self.poetry_command_name:
+            self.poetry_command_name = self.command_name
 
-            Команда будет запущена как: `poetry run cmd makemigrations --dry-run`
-            Команда будет выполнена как: `python src/manage.py makemigrations --dry-run`
-        """
-        args_str = " ".join(args)
+    def run(self, *args) -> int:
+        """Выполнение команды."""
+        args_str = " ".join(str(arg) for arg in args if arg)
 
         if self.django_command_name:
-            command = f"python src/manage.py {self.command_name} {args_str}"
+            return self._run_django(args_str)
         elif self.script_command:
-            command = f"{self.script_command} {args_str}"
+            return self._run_script(f"{self.script_command} {args_str}".strip())
         else:
-            raise RuntimeError("Не удалось определить, какую команду выполнять.")
+            raise RuntimeError("Не удалось определить тип команды.")
 
-        os.system(command)
+    def _run_django(self, args_str: str) -> int:
+        """Выполнение Django команды."""
+        try:
+            self._init_django()
+            
+            from django.core.management import execute_from_command_line
+            
+            django_args = ['manage.py', self.command_name]
+            if args_str:
+                django_args.extend(args_str.split())
+            
+            print(f"Выполняется Django команда: {' '.join(django_args)}")
+            execute_from_command_line(django_args)
+            return 0
+            
+        except SystemExit as e:
+            return e.code if e.code is not None else 0
+        except Exception as e:
+            print(f"Ошибка при выполнении Django команды: {e}")
+            return 1
+
+    def _run_script(self, command: str) -> int:
+        """Выполнение пользовательской команды."""
+        print(f"Выполняется команда: {command}")
+        
+        try:
+            result = subprocess.run(
+                command, 
+                shell=True, 
+                cwd=os.path.dirname(os.path.dirname(__file__)),
+                capture_output=False,
+                text=True
+            )
+            
+            if result.returncode != 0:
+                print(f"Команда завершилась с ошибкой (код: {result.returncode})")
+                return result.returncode
+            
+            return 0
+            
+        except Exception as e:
+            print(f"Ошибка при выполнении команды: {e}")
+            return 1
+
+    def _init_django(self):
+        """Инициализация Django."""
+        try:
+            project_path = os.path.join(os.path.dirname(__file__), '..', 'src')
+            if project_path not in sys.path:
+                sys.path.insert(0, project_path)
+            
+            deploy_type = get_env_deploy_type()
+            os.environ.setdefault('DJANGO_SETTINGS_MODULE', deploy_type)
+            
+            import django
+            if not django.conf.settings.configured:
+                django.setup()
+        except Exception as e:
+            print(f"Предупреждение: Не удалось инициализировать Django: {e}")

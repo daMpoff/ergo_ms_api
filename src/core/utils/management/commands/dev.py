@@ -24,7 +24,6 @@ class Command(RunserverCommand):
     Расширяет стандартную команду runserver для использования
     настроек хоста и порта из конфигурации проекта.
     """
-    poetry_command_name = 'start_dev'
     help = 'Запускает development сервер с необходимыми сервисами'
 
     def add_arguments(self, parser: CommandParser) -> None:

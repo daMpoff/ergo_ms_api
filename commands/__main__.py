@@ -1,104 +1,62 @@
 """
-Файл для связи poetry и команд созданных в commands.py.
-
-Данный функционал взаимодействует с Poetry при помощи следующей секции pyproject.toml файла:
-
-[tool.poetry.scripts]
-cmd = "commands.__main__:main"
-
-Пример команды для запуска сервера Django API:
->>> poetry run cmd dev
+Точка входа для выполнения Django команд через Poetry.
 """
 
 import sys
-import inspect
 import logging
+from typing import Dict, Type
 
-from commands.definitions import PoetryCommand
+from commands.base import PoetryCommand
+from commands.discovery import discovery
 from src.config.settings.logger import LOGGING
 
-# Настройка логгера для скриптов
+# Настройка логгера
 logger = logging.getLogger('commands')
-
-# Использование форматтера из конфигурации
 formatter = logging.Formatter(
     fmt=LOGGING['formatters']['simple']['format'],
     style=LOGGING['formatters']['simple']['style']
 )
-
-# Настройка вывода только в консоль
 console_handler = logging.StreamHandler()
 console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
 logger.setLevel(logging.INFO)
 
+
+def get_commands() -> Dict[str, Type[PoetryCommand]]:
+    """Получение всех доступных команд."""
+    try:
+        return discovery.get_all()
+    except Exception as e:
+        logger.warning(f"Ошибка при загрузке команд: {e}")
+        return {}
+
+
 def main():
-    """
-    Точка входа для управления командами через Poetry.
+    """Главная функция."""
+    commands = get_commands()
 
-    Этот скрипт динамически загружает все доступные команды, которые являются подклассами `PoetryCommand`,
-    и предоставляет интерфейс для их вызова через терминал.
-
-    Основные этапы выполнения:
-    1. Загрузка всех команд из модуля `scripts.commands`.
-    2. Проверка переданных аргументов.
-    3. Поиск команды по её имени (ключ `poetry_command_name`).
-    4. Выполнение команды с переданными аргументами.
-
-    Пример использования:
-        В терминале, запустите:
-        ```bash
-        poetry run <команда> [аргументы...]
-        ```
-
-        Например:
-        ```bash
-        poetry run cmd makemigrations --dry-run
-        poetry run cmd dev
-        poetry run cmd collectstatic --no-input
-        ```
-
-    Вывод:
-        Если команды отсутствуют или указана неверная команда, будет выведен список доступных команд.
-
-    Исключения:
-        - Выход с кодом `1`, если команда не указана.
-        - Выход с кодом `1`, если указана неизвестная команда.
-
-    Зависимости:
-        -  `commands.definitions` должен содержать классы команд, наследующие `PoetryCommand`.
-    """
-    # Динамически получаем все классы, наследующие PoetryCommand
-    modules = sys.modules["commands.definitions"]
-
-    # Создаем словарь команд
-    commands = {}
-
-    # Ищем все классы, наследующие PoetryCommand, но не сам PoetryCommand
-    for _, cls in inspect.getmembers(modules, inspect.isclass):
-        if issubclass(cls, PoetryCommand) and cls is not PoetryCommand:
-            # Добавляем класс в словарь с ключом, равным poetry_command_name
-            commands[cls.poetry_command_name] = cls
-
-    # Проверяем, что указана команда
     if len(sys.argv) < 2:
-        logger.info("Использование: poetry run <команда> [аргументы...]")
-        logger.info("Доступные команды: %s", ", ".join(commands.keys()))
+        logger.info("Использование: cmd <команда> [аргументы...]")
+        logger.info("Доступные команды: %s", ", ".join(sorted(commands.keys())))
         return
 
-    # Получаем имя команды и аргументы
     command_name = sys.argv[1]
     args = sys.argv[2:]
 
-    # Проверяем, существует ли команда
-    CommandClass = commands.get(command_name)
-    if not CommandClass:
+    command_class = commands.get(command_name)
+    if not command_class:
         logger.error("Неизвестная команда: %s", command_name)
-        logger.info("Доступные команды: %s", ", ".join(commands.keys()))
+        logger.info("Доступные команды: %s", ", ".join(sorted(commands.keys())))
         return
 
-    # Создаём экземпляр команды и вызываем метод run
-    CommandClass().run(*args)
+    try:
+        command_instance = command_class()
+        exit_code = command_instance.run(*args)
+        sys.exit(exit_code if exit_code is not None else 0)
+    except Exception as e:
+        logger.error("Ошибка при выполнении команды %s: %s", command_name, e)
+        sys.exit(1)
+
 
 if __name__ == "__main__":
     main()
