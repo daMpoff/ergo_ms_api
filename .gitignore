@@ -29,4 +29,6 @@ resources/*
 *.joblib
 *.pkl
 
+!src/modules/cities_expansion/geoanalyzer/models/*.pkl
+
 data/
