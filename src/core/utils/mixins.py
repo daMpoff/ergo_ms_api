@@ -1,6 +1,3 @@
-from django.db import models
-
-
 class SwaggerSafeMixin:
     """
     Миксин для безопасной работы с Swagger генерацией схемы.
