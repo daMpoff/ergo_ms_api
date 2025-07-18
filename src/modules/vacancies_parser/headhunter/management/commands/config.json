@@ -1,0 +1,24 @@
+{
+  "area_code": 113,
+  "parsing_settings": {
+    "pages_per_query": 3,
+    "delay_between_queries": 1.5,
+    "get_detailed_info": true,
+    "delay_between_pages": 0.5,
+    "delay_between_vacancies": 0.1
+  },
+  "universal_parsing": {
+    "enabled": false,
+    "pages_per_area": 5,
+    "max_total_pages": 100,
+    "areas_only": false,
+    "delay_between_areas": 2.0
+  },
+  "regions": [
+    {
+      "id": 113,
+      "name": "Россия",
+      "type": "country"
+    }
+  ]
+} 
