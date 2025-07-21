@@ -1308,7 +1308,7 @@ class PatchAllProgectPages(BaseAPIViewAuthMixin):
                     route_constants = [const for const in route_constants if (const != 'mainRoutes')& (const!= 'adminpanelRoutes')
                         & (const!= 'userRoutes') & (const!='settingsRoutes') &(const!= 'startRoutes')]
                     for const_name in route_constants:
-                        const_pattern = f"const {const_name} = \[(.*?)\]"
+                        const_pattern = rf"const {const_name} = \[(.*?)\]"
                         const_match = re.search(const_pattern, content, re.DOTALL)
                         content_const = const_match.group(1)
                         const_pattern = f"path: '(.*?)'"
