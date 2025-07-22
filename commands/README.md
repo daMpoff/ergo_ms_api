@@ -1,33 +1,33 @@
 # Система команд Poetry для Django
 
-Автоматическое создание poetry команд для всех Django команд (встроенных и пользовательских).
+Функционал для автоматического создания poetry команд дублирующих все Django команд (встроенные и пользовательские).
 Реализовано для упрощения синтаксиса обращения к Django командам.
 
 ## Использование
 
-### Базовые команды
+### Вид команд
 ```bash
 # Запуск сервера разработки
-cmd dev
+api dev
 
 # Создание миграций
-cmd makemigrations
+api makemigrations
 
 # Применение миграций
-cmd migrate
+api migrate
 
 # Пользовательские команды
-cmd clear_cache
-cmd clear_pycache
+api clear_cache
+api clear_pycache
 ```
 
 ### Альтернативный синтаксис
 ```bash
 # Можно использовать poetry run
-poetry run cmd runserver
+poetry run api dev
 
-# Или просто cmd
-cmd runserver
+# Или просто api
+api dev
 ```
 
 ## Создание пользовательской команды
@@ -50,7 +50,7 @@ class Command(BaseCommand):
 
 2. Команда автоматически станет доступной:
 ```bash
-cmd my_command --option value
+api my_command --option value
 ```
 
 ## Конфигурация
@@ -58,11 +58,56 @@ cmd my_command --option value
 ### pyproject.toml
 ```toml
 [tool.poetry.scripts]
-cmd = "commands.__main__:main"
+api = "commands.__main__:main"
 ```
 
-## Просмотр всех команд
+## Базовые команды
 
-```bash
-cmd
-```
+### Core-команды (инфраструктура и сервис)
+- **add_module** — добавить модуль
+- **dev** — запуск dev-сервера
+- **discover_modules** — обнаружение модулей
+- **generate_swagger** — генерация swagger схемы
+- **generateschema** — генерация схемы
+- **optimizemigration** — оптимизация миграций
+- **sendtestemail** — отправка тестового письма
+- **clear_cache** — очистка кэша
+- **clear_pycache** — очистка pycache
+- **flushexpiredtokens** — очистка устаревших токенов
+- **update_adp_routes** — обновление маршрутов ADP
+- **update_dependencies** — обновление зависимостей
+- **start_celery_beat** — запуск celery beat
+- **start_celery_worker** — запуск celery worker
+- **celery_beat_stop** — остановка celery beat
+- **celery_worker_stop** — остановка celery worker
+- **stop_prod** — остановка production сервера
+- **start_prod** — запуск production сервера
+
+### Стандартные команды Django
+- **makemigrations** — создание миграций
+- **migrate** — применение миграций
+- **createsuperuser** — создать суперпользователя
+- **shell** — интерактивная консоль
+- **runserver** — запуск dev-сервера
+- **test** — запуск тестов
+- **testserver** — запуск тестового сервера
+- **dbshell** — SQL shell
+- **loaddata** — загрузка фикстур
+- **dumpdata** — дамп данных
+- **collectstatic** — сбор статики
+- **findstatic** — поиск статики
+- **check** — проверка проекта
+- **showmigrations** — показать миграции
+- **sqlmigrate** — SQL для миграции
+- **sqlflush** — SQL для очистки БД
+- **flush** — очистка БД
+- **remove_stale_contenttypes** — удаление устаревших contenttypes
+- **changepassword** — смена пароля пользователя
+- **inspectdb** — генерация моделей из БД
+- **startapp** — создать приложение
+- **startproject** — создать проект
+- **compilemessages** — компиляция переводов
+- **makemessages** — генерация файлов переводов
+- **squashmigrations** — объединение миграций
+- **createcachetable** — создать таблицу кэша
+- **diffsettings** — разница настроек

@@ -5,10 +5,10 @@
 import os
 import subprocess
 import sys
+
 from typing import Optional
 
 from src.core.utils.auto_api.auto_config import get_env_deploy_type
-
 
 class PoetryCommand:
     """Базовый класс для выполнения команд через Poetry."""

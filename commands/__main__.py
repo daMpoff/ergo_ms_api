@@ -4,10 +4,12 @@
 
 import sys
 import logging
+
 from typing import Dict, Type
 
 from commands.base import PoetryCommand
 from commands.discovery import discovery
+
 from src.config.settings.logger import LOGGING
 
 # Настройка логгера

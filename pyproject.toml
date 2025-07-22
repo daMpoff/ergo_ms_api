@@ -60,7 +60,7 @@ packages = [
 ]
 
 [project.scripts]
-cmd = "commands.__main__:main"
+api = "commands.__main__:main"
 
 [build-system]
 requires = ["poetry-core>=2.1.3"]
