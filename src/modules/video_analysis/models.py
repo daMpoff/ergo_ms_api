@@ -36,10 +36,10 @@ class VideoAnalysis(models.Model):
     started_at = models.DateTimeField(null=True, blank=True, verbose_name='Начало обработки')
     completed_at = models.DateTimeField(null=True, blank=True, verbose_name='Завершение обработки')
     
-    # Результаты
-    audio_file = models.FileField(upload_to='video_analysis/audio/', null=True, blank=True, verbose_name='Аудио файл')
-    subtitles_file = models.FileField(upload_to='video_analysis/subtitles/', null=True, blank=True, verbose_name='Файл субтитров')
-    output_video = models.FileField(upload_to='video_analysis/output/', null=True, blank=True, verbose_name='Видео с субтитрами')
+    # Результаты (пути к файлам в папке results)
+    audio_file = models.CharField(max_length=500, null=True, blank=True, verbose_name='Путь к аудио файлу')
+    subtitles_file = models.CharField(max_length=500, null=True, blank=True, verbose_name='Путь к файлу субтитров')
+    output_video = models.CharField(max_length=500, null=True, blank=True, verbose_name='Путь к видео с субтитрами')
     
     # Метаданные
     duration = models.FloatField(null=True, blank=True, verbose_name='Длительность (секунды)')
@@ -59,8 +59,8 @@ class VideoAnalysis(models.Model):
     
     @property
     def analysis_dir(self):
-        """Возвращает путь к папке анализа"""
-        return Path(MEDIA_ROOT) / 'video_analysis' / str(self.id)
+        """Возвращает путь к папке анализа в results"""
+        return Path(MEDIA_ROOT) / 'video_analysis' / 'results' / str(self.id)
     
     def get_analysis_dir(self):
         """Создает и возвращает папку для анализа"""
@@ -70,19 +70,25 @@ class VideoAnalysis(models.Model):
     
     def get_original_video_path(self):
         """Возвращает путь к исходному видео"""
-        return str(self.analysis_dir / 'original_video.mp4')
+        return str(Path(MEDIA_ROOT) / 'video_analysis' / 'initial_video' / f'{self.title}.mp4')
     
     def get_audio_path(self):
         """Возвращает путь к аудио файлу"""
-        return str(self.analysis_dir / 'audio.wav')
+        if self.audio_file:
+            return str(Path(MEDIA_ROOT) / self.audio_file)
+        return None
     
     def get_subtitles_path(self):
         """Возвращает путь к файлу субтитров"""
-        return str(self.analysis_dir / 'subtitles.srt')
+        if self.subtitles_file:
+            return str(Path(MEDIA_ROOT) / self.subtitles_file)
+        return None
     
     def get_output_video_path(self):
         """Возвращает путь к выходному видео"""
-        return str(self.analysis_dir / 'output_video.mp4')
+        if self.output_video:
+            return str(Path(MEDIA_ROOT) / self.output_video)
+        return None
     
     def update_status(self, status, **kwargs):
         """Обновляет статус и связанные поля"""
@@ -102,12 +108,48 @@ class VideoAnalysis(models.Model):
         self.save()
     
     def cleanup_files(self):
-        """Удаляет временные файлы"""
+        """Удаляет всю папку с результатами анализа"""
         try:
-            if self.audio_file and os.path.exists(self.audio_file.path):
-                os.remove(self.audio_file.path)
+            import shutil
+            if self.analysis_dir.exists():
+                shutil.rmtree(self.analysis_dir)
         except Exception:
             pass
+    
+    def get_subtitle_segments_data(self):
+        """Возвращает данные сегментов субтитров в удобном формате"""
+        segments = self.subtitle_segments.all().order_by('segment_number')
+        return [
+            {
+                'segment_number': segment.segment_number,
+                'start_time': segment.start_time,
+                'end_time': segment.end_time,
+                'russian_text': segment.russian_text,
+                'french_text': segment.french_text
+            }
+            for segment in segments
+        ]
+    
+    def get_subtitle_segments_count(self):
+        """Возвращает количество сегментов субтитров"""
+        return self.subtitle_segments.count()
+    
+    def clear_subtitle_segments(self):
+        """Удаляет все сегменты субтитров для данного анализа"""
+        deleted_count = self.subtitle_segments.count()
+        self.subtitle_segments.all().delete()
+        return deleted_count
+    
+    def add_subtitle_segment(self, segment_number, start_time, end_time, russian_text, french_text):
+        """Добавляет новый сегмент субтитров"""
+        return SubtitleSegment.objects.create(
+            video_analysis=self,
+            segment_number=segment_number,
+            start_time=start_time,
+            end_time=end_time,
+            russian_text=russian_text,
+            french_text=french_text
+        )
 
 
 class SubtitleSegment(models.Model):

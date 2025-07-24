@@ -19,7 +19,7 @@ from src.modules.video_analysis.scripts import (
 )
 
 @shared_task(bind=True)
-def translate_video_analysis(self, video_name, user_id=1):
+def translate_video_analysis(self, video_name, user_id=1, use_gpu=None):
     """
     Основная Celery задача: перевод видео, создание анализа в БД, сохранение всех файлов и сегментов.
     Все папки внутри media/video_analysis/.
@@ -80,14 +80,16 @@ def translate_video_analysis(self, video_name, user_id=1):
         self.update_state(state='LOADING_MODELS', meta={'progress': 20})
         preload_models(
             str(TRAINED_MODELS_PATH / "opus-mt-ru-fr"),
-            str(TRAINED_MODELS_PATH / "vosk-model-ru-0.42")
+            str(TRAINED_MODELS_PATH / "vosk-model-ru-0.42"),
+            use_gpu
         )
 
         # --- Распознавание и перевод ---
         self.update_state(state='RECOGNIZING_SPEECH', meta={'progress': 30})
         srt_path, df_subtitles = convert_wav_to_bilingual_subtitles(
             str(temp_audio_path),
-            str(temp_srt_path)
+            str(temp_srt_path),
+            use_gpu=use_gpu
         )
         if not srt_path or df_subtitles is None:
             analysis.status = 'failed'
@@ -96,16 +98,34 @@ def translate_video_analysis(self, video_name, user_id=1):
             return {'status': 'error', 'message': analysis.error_message}
 
         # --- Сохраняем сегменты субтитров ---
-        analysis.subtitle_segments.all().delete()
+        self.update_state(state='SAVING_SEGMENTS', meta={'progress': 60})
+        
+        # Удаляем старые сегменты, если они есть
+        old_segments_count = analysis.clear_subtitle_segments()
+        if old_segments_count > 0:
+            print(f"Удалено {old_segments_count} старых сегментов")
+        
+        # Создаем новые сегменты
+        segments_created = 0
         for _, row in df_subtitles.iterrows():
-            SubtitleSegment.objects.create(
-                video_analysis=analysis,
-                segment_number=row['id'],
-                start_time=row['start_time'],
-                end_time=row['end_time'],
-                russian_text=row['russian_text'],
-                french_text=row['french_text']
-            )
+            try:
+                analysis.add_subtitle_segment(
+                    segment_number=row['id'],
+                    start_time=row['start_time'],
+                    end_time=row['end_time'],
+                    russian_text=row['russian_text'],
+                    french_text=row['french_text']
+                )
+                segments_created += 1
+            except Exception as e:
+                print(f"Ошибка при создании сегмента {row['id']}: {e}")
+                continue
+        
+        print(f"Создано {segments_created} сегментов субтитров для анализа {analysis_uuid}")
+        
+        # Проверяем, что сегменты действительно созданы
+        final_segments_count = analysis.get_subtitle_segments_count()
+        print(f"Всего сегментов в БД для анализа {analysis_uuid}: {final_segments_count}")
 
         # --- Добавление субтитров к видео ---
         self.update_state(state='ADDING_SUBTITLES', meta={'progress': 80})
@@ -124,13 +144,10 @@ def translate_video_analysis(self, video_name, user_id=1):
             analysis.save()
             return {'status': 'error', 'message': analysis.error_message}
 
-        # --- Сохраняем файлы в модель ---
-        with open(temp_audio_path, 'rb') as f:
-            analysis.audio_file.save(f'audio_{analysis_uuid}.wav', File(f), save=False)
-        with open(temp_srt_path, 'rb') as f:
-            analysis.subtitles_file.save(f'subtitles_{analysis_uuid}.srt', File(f), save=False)
-        with open(output_video_path, 'rb') as f:
-            analysis.output_video.save(f'output_{analysis_uuid}.mp4', File(f), save=False)
+        # --- Сохраняем пути к файлам в модели (файлы остаются в results папке) ---
+        analysis.audio_file = f'video_analysis/results/{analysis_uuid}/{base_name}_temp_audio.wav'
+        analysis.subtitles_file = f'video_analysis/results/{analysis_uuid}/{base_name}_bilingual.srt'
+        analysis.output_video = f'video_analysis/results/{analysis_uuid}/{base_name}_with_bilingual_subtitles.mp4'
 
         # --- Длительность видео ---
         video = VideoFileClip(video_path_abs)
@@ -144,9 +161,8 @@ def translate_video_analysis(self, video_name, user_id=1):
         analysis.completed_at = timezone.now()
         analysis.save()
 
-        # --- Удаляем временные файлы ---
-        if os.path.exists(temp_audio_path):
-            os.remove(temp_audio_path)
+        # --- Временные файлы остаются в папке results ---
+        # Аудио файл сохраняется для возможного повторного использования
 
         return {
             'status': 'completed',

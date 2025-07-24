@@ -16,6 +16,7 @@ class VideoAnalysisSerializer(serializers.ModelSerializer):
     subtitle_segments = SubtitleSegmentSerializer(many=True, read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     duration_formatted = serializers.SerializerMethodField()
+    segments_count = serializers.SerializerMethodField()
     
     class Meta:
         model = VideoAnalysis

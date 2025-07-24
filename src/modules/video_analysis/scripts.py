@@ -15,6 +15,9 @@ from transformers import MarianMTModel, MarianTokenizer
 from src.config.settings.base import PACKAGES_PATH, TRAINED_MODELS_PATH
 from src.config.settings.static import MEDIA_ROOT
 
+# Импорт для GPU поддержки
+import torch
+from django.apps import apps
 
 # Константы
 FRAME_CHUNK_SIZE = 4000  # Размер блока чтения аудио в фреймах
@@ -29,14 +32,50 @@ if not os.path.exists(VIDEO_ANALYSIS_MEDIA_DIR):
 _translation_model = None
 _translation_tokenizer = None
 _vosk_model = None
+_device = None
+
+def get_device(use_gpu=None):
+    """
+    Определяет устройство для моделей (GPU/CPU)
+    
+    Параметры:
+    use_gpu (bool): Принудительно использовать GPU (None - использовать настройки из конфига)
+    
+    Возвращает:
+    str: 'cuda' или 'cpu'
+    """
+    global _device
+    
+    if _device is not None:
+        return _device
+    
+    if use_gpu is None:
+        # Получаем настройки из конфигурации приложения
+        try:
+            app_config = apps.get_app_config('video_analysis')
+            use_gpu = app_config.USE_GPU
+        except Exception:
+            use_gpu = False
+    
+    if use_gpu and torch.cuda.is_available():
+        _device = 'cuda'
+        print(f"Используется GPU: {torch.cuda.get_device_name()}")
+    else:
+        _device = 'cpu'
+        if use_gpu and not torch.cuda.is_available():
+            print("GPU запрошен, но недоступен. Используется CPU.")
+        else:
+            print("Используется CPU")
+    
+    return _device
 
 def replace_html_entities(text):
     # Преобразуем HTML-сущности в обычные символы
     return html.unescape(text)
 
-def _load_translation_model(translation_model_name=None):
+def _load_translation_model(translation_model_name=None, use_gpu=None):
     """
-    Ленивая загрузка модели перевода
+    Ленивая загрузка модели перевода с поддержкой GPU
     """
     global _translation_model, _translation_tokenizer
     
@@ -45,15 +84,21 @@ def _load_translation_model(translation_model_name=None):
         if translation_model_name is None:
             translation_model_name = str(TRAINED_MODELS_PATH / "opus-mt-ru-fr")
         
+        device = get_device(use_gpu)
+        
         _translation_tokenizer = MarianTokenizer.from_pretrained(translation_model_name)
         _translation_model = MarianMTModel.from_pretrained(translation_model_name)
-        print("Модель перевода загружена!")
+        
+        # Перемещаем модель на нужное устройство
+        _translation_model = _translation_model.to(device)
+        
+        print(f"Модель перевода загружена на {device}!")
     
     return _translation_model, _translation_tokenizer
 
 def _load_vosk_model(model_path=None):
     """
-    Ленивая загрузка модели Vosk
+    Ленивая загрузка модели Vosk (Vosk не поддерживает GPU напрямую)
     """
     global _vosk_model
     
@@ -67,20 +112,21 @@ def _load_vosk_model(model_path=None):
     
     return _vosk_model
 
-def preload_models(translation_model_name=None, vosk_model_path=None):
+def preload_models(translation_model_name=None, vosk_model_path=None, use_gpu=None):
     """
     Предварительная загрузка всех моделей для ускорения последующих операций
     
     Параметры:
     translation_model_name (str): Путь к модели перевода
     vosk_model_path (str): Путь к модели Vosk
+    use_gpu (bool): Использовать GPU для моделей перевода
     """
     print("Предварительная загрузка моделей...")
-    _load_translation_model(translation_model_name)
+    _load_translation_model(translation_model_name, use_gpu)
     _load_vosk_model(vosk_model_path)
     print("Все модели загружены и готовы к использованию!")
 
-def translate_text_ru_to_fr(text, model=None, tokenizer=None):
+def translate_text_ru_to_fr(text, model=None, tokenizer=None, use_gpu=None):
     """
     Переводит текст с русского на французский
     
@@ -88,6 +134,7 @@ def translate_text_ru_to_fr(text, model=None, tokenizer=None):
     text (str): Текст на русском языке
     model: Модель перевода (опционально, если не указана, используется кэшированная)
     tokenizer: Токенизатор (опционально, если не указан, используется кэшированный)
+    use_gpu (bool): Использовать GPU для перевода
     
     Возвращает:
     str: Переведенный текст на французском
@@ -97,9 +144,14 @@ def translate_text_ru_to_fr(text, model=None, tokenizer=None):
     
     # Используем кэшированные модели, если не указаны другие
     if model is None or tokenizer is None:
-        model, tokenizer = _load_translation_model()
-        
+        model, tokenizer = _load_translation_model(use_gpu=use_gpu)
+    
+    device = get_device(use_gpu)
+    
     inputs = tokenizer(text, return_tensors="pt", padding=True)
+    # Перемещаем входные данные на нужное устройство
+    inputs = {k: v.to(device) for k, v in inputs.items()}
+    
     translated = model.generate(**inputs, max_new_tokens=100)
     french_text = tokenizer.decode(translated[0], skip_special_tokens=True)
 
@@ -146,7 +198,7 @@ def extract_audio(video_path, output_audio_path):
         print(f"Ошибка при извлечении аудио: {e}")
         return False
 
-def convert_wav_to_bilingual_subtitles(wav_file_path, output_srt_path=None, model_path=None, translation_model_name=None):
+def convert_wav_to_bilingual_subtitles(wav_file_path, output_srt_path=None, model_path=None, translation_model_name=None, use_gpu=None):
     """
     Преобразует WAV файл в двуязычные субтитры формата SRT (русский + французский)
     
@@ -162,7 +214,7 @@ def convert_wav_to_bilingual_subtitles(wav_file_path, output_srt_path=None, mode
     import time
     
     # Загружаем модели (используем кэшированные, если уже загружены)
-    translation_model, tokenizer = _load_translation_model(translation_model_name)
+    translation_model, tokenizer = _load_translation_model(translation_model_name, use_gpu)
     vosk_model = _load_vosk_model(model_path)
     
     # Создаем имя для SRT файла, если не указано
@@ -223,7 +275,7 @@ def convert_wav_to_bilingual_subtitles(wav_file_path, output_srt_path=None, mode
             if ru_text:
                 # Переводим текст на французский
                 translation_start = time.time()
-                fr_text = translate_text_ru_to_fr(ru_text)
+                fr_text = translate_text_ru_to_fr(ru_text, use_gpu=use_gpu)
                 translation_time = time.time() - translation_start
                 total_translation_time += translation_time
                 translation_count += 1

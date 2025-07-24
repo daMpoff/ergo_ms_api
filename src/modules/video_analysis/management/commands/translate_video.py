@@ -18,6 +18,8 @@ class Command(BaseCommand):
         parser.add_argument('video_name', type=str, help='Имя видеофайла (например, input.mp4)')
         parser.add_argument('--output-dir', type=str, help='Директория для сохранения результатов (опционально)')
         parser.add_argument('--wait', action='store_true', help='Ждать завершения обработки')
+        parser.add_argument('--gpu', action='store_true', help='Использовать GPU для моделей перевода')
+        parser.add_argument('--cpu', action='store_true', help='Принудительно использовать CPU')
 
     def handle(self, *args, **options):
         start_time = time.time()
@@ -25,6 +27,14 @@ class Command(BaseCommand):
         video_name = options['video_name']
         output_dir = options.get('output_dir')
         wait_for_completion = options.get('wait')
+        
+        # Определяем использование GPU
+        use_gpu = None
+        if options.get('gpu'):
+            use_gpu = True
+        elif options.get('cpu'):
+            use_gpu = False
+        # Если не указано ни --gpu, ни --cpu, используем настройки по умолчанию из конфига
         
         video_path = INITIAL_VIDEO_DIR / video_name
 
@@ -36,13 +46,21 @@ class Command(BaseCommand):
         self.stdout.write(f'Запуск обработки видео: {video_name}')
         self.stdout.write(f'Путь к видео: {video_path}')
         
+        # Показываем информацию о GPU/CPU
+        if use_gpu is True:
+            self.stdout.write('Использование: GPU (принудительно)')
+        elif use_gpu is False:
+            self.stdout.write('Использование: CPU (принудительно)')
+        else:
+            self.stdout.write('Использование: настройки по умолчанию из конфига')
+        
         if output_dir:
             self.stdout.write(f'Директория для результатов: {output_dir}')
         else:
             self.stdout.write(f'Результаты будут сохранены в: {RESULTS_DIR}')
         
         # Запускаем задачу в Celery
-        task = translate_video_analysis.delay(video_name, 1)
+        task = translate_video_analysis.delay(video_name, 1, use_gpu)
         
         self.stdout.write(f'Задача запущена с ID: {task.id}')
         self.stdout.write(f'Статус: {task.status}')
