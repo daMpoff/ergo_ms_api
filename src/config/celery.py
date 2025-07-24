@@ -147,7 +147,8 @@ celery_app.conf.update(
     broker_url='sqla+sqlite:///celerydb.sqlite',
     result_backend='db+sqlite:///results.sqlite',
     task_routes={
-        'modules.analysis_porosity.tasks.*': {'queue': 'porosity_analysis'},
+        'src.modules.analysis_porosity.tasks.*': {'queue': 'porosity_analysis'},
+        'src.modules.video_analysis.tasks.*': {'queue': 'video_analysis'},
     },
     task_default_queue='default',
     task_queues={
@@ -156,12 +157,20 @@ celery_app.conf.update(
             'exchange': 'porosity_analysis',
             'routing_key': 'porosity_analysis',
         },
+        'video_analysis': {
+            'exchange': 'video_analysis',
+            'routing_key': 'video_analysis',
+        },
     },
     # Настройки для задач анализа пористости (ограничения сняты)
     task_annotations={
-        'modules.analysis_porosity.tasks.run_porosity_analysis': {
+        'src.modules.analysis_porosity.tasks.run_porosity_analysis': {
             'time_limit': 3600,   # Увеличен таймаут до 1 часа
             'soft_time_limit': 3300,  # Мягкий таймаут 55 минут
+        },
+        'src.modules.video_analysis.tasks.translate_video_analysis': {
+            'time_limit': 7200,   # Таймаут 2 часа для команды перевода
+            'soft_time_limit': 6900,  # Мягкий таймаут 1 час 55 минут
         },
     },
     # Настройки воркеров для очереди анализа пористости

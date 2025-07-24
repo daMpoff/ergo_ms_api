@@ -50,6 +50,10 @@ dependencies = [
     "xlsxwriter (>=3.2.5,<4.0.0)",
     "docx (>=0.2.4,<0.3.0)",
     "python-docx (>=1.2.0,<2.0.0)",
+    "vosk (>=0.3.45,<0.4.0)",
+    "moviepy==1.0.3",
+    "sentencepiece (>=0.2.0,<0.3.0)",
+    "sacremoses (>=0.1.1,<0.2.0)",
 ]
 
 requires-python = ">=3.12,<3.13"

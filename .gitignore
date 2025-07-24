@@ -26,6 +26,9 @@ resources/*
 trained_models/*
 !trained_models/.gitignore
 
+packages/*
+!packages/.gitignore
+
 *.keras
 *.joblib
 *.pkl
