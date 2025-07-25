@@ -172,6 +172,14 @@ celery_app.conf.update(
             'time_limit': 7200,   # Таймаут 2 часа для команды перевода
             'soft_time_limit': 6900,  # Мягкий таймаут 1 час 55 минут
         },
+        'src.modules.vacancies_parser.headhunter.tasks.parse_hh_vacancies_task': {
+            'time_limit': 7200,   # Таймаут 2 часа для команды перевода
+            'soft_time_limit': 6900,  # Мягкий таймаут 1 час 55 минут
+        },
+        'src.modules.vacancies_parser.headhunter.tasks.parse_single_vacancy_task': {
+            'time_limit': 7200,   # Таймаут 2 часа для команды перевода
+            'soft_time_limit': 6900,  # Мягкий таймаут 1 час 55 минут
+        },
     },
     # Настройки воркеров для очереди анализа пористости
     task_acks_late=True,  # Подтверждаем задачи только после выполнения
