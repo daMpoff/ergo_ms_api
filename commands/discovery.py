@@ -4,12 +4,13 @@
 
 import os
 import sys
+
 from typing import Dict, List, Type, Optional
 from pathlib import Path
 
 from commands.base import PoetryCommand
-from src.core.utils.auto_api.auto_config import get_env_deploy_type
 
+from src.core.utils.auto_api.auto_config import get_env_deploy_type
 
 class CommandDiscovery:
     """Автоматическое обнаружение Django команд."""

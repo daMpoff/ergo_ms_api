@@ -1,8 +1,11 @@
 import json
 import os
 import time
+import sys
 from django.core.management.base import BaseCommand
 from src.modules.vacancies_parser.headhunter.scripts import parse_vacancies_by_text, parse_all_vacancies
+from src.modules.vacancies_parser.headhunter.tasks import parse_hh_vacancies_task
+from celery.result import AsyncResult
 
 
 class Command(BaseCommand):
@@ -84,6 +87,11 @@ class Command(BaseCommand):
             action='store_true',
             help='Использовать только настройки из конфигурационного файла'
         )
+        parser.add_argument(
+            '--wait',
+            action='store_true',
+            help='Дождаться завершения задачи Celery и вывести результат'
+        )
     
     def load_config(self, config_path):
         """Загрузка конфигурации из JSON файла"""
@@ -119,19 +127,41 @@ class Command(BaseCommand):
             )
             return None
     
+    def print_formatted_result(self, result):
+        if not isinstance(result, dict):
+            self.stdout.write(f'Результат: {result}')
+            return
+        if result.get('error'):
+            self.stdout.write(f'❌ Ошибка: {result["error"]}')
+            return
+        if result.get('mode') == 'universal':
+            self.stdout.write('\n📊 Итоги универсального парсинга:')
+            self.stdout.write(f'   • Обработано регионов: {result.get("areas_processed", "-")}')
+            self.stdout.write(f'   • Обработано ролей: {result.get("roles_processed", "-")}')
+            self.stdout.write(f'   • Обработано страниц: {result.get("pages_processed", "-")}')
+            self.stdout.write(f'   • Всего вакансий: {result.get("total_vacancies", "-")}')
+            self.stdout.write(f'   • Новых вакансий: {result.get("new_vacancies", "-")}')
+            self.stdout.write(f'   • Обновлено вакансий: {result.get("updated_vacancies", "-")}')
+            self.stdout.write(f'   • Всего в базе: {result.get("total_in_db", "-")}')
+        elif result.get('mode') == 'by_text':
+            self.stdout.write('\n📊 Итоги парсинга по запросам:')
+            self.stdout.write(f'   • Всего вакансий: {result.get("total_vacancies", "-")}')
+            self.stdout.write(f'   • Новых вакансий: {result.get("new_vacancies", "-")}')
+            self.stdout.write(f'   • Обновлено вакансий: {result.get("updated_vacancies", "-")}')
+            self.stdout.write(f'   • Всего в базе: {result.get("total_in_db", "-")}')
+        else:
+            self.stdout.write(f'Результат: {result}')
+
     def handle(self, *args, **options):
         # Загружаем конфигурацию
         config = self.load_config(options.get('config'))
-        
         if not config and options.get('use_config_only'):
             self.stdout.write(
                 '❌ Не удалось загрузить конфигурацию, а флаг --use-config-only установлен'
             )
             return
-        
         # Определяем параметры парсинга
         if options.get('use_config_only') and config:
-            # Используем только конфигурацию
             text_list = config.get('search_queries', [])
             area = config.get('area_code', 113)
             pages = config.get('parsing_settings', {}).get('pages_per_query', 2)
@@ -142,7 +172,6 @@ class Command(BaseCommand):
             max_total_pages = config.get('universal_parsing', {}).get('max_total_pages', 100)
             areas_only = config.get('universal_parsing', {}).get('areas_only', False)
         else:
-            # Используем аргументы командной строки с fallback на конфигурацию
             text_list = options.get('text')
             area = options.get('area') or (config.get('area_code', 113) if config else 113)
             pages = options.get('pages') or (config.get('parsing_settings', {}).get('pages_per_query', 2) if config else 2)
@@ -152,70 +181,38 @@ class Command(BaseCommand):
             pages_per_area = options.get('pages_per_area') or (config.get('universal_parsing', {}).get('pages_per_area', 5) if config else 5)
             max_total_pages = options.get('max_total_pages') or (config.get('universal_parsing', {}).get('max_total_pages', 100) if config else 100)
             areas_only = options.get('areas_only') or (config.get('universal_parsing', {}).get('areas_only', False) if config else False)
-        
-        # Если не указан текст и не включен универсальный парсинг, используем конфигурацию
         if not text_list and not universal and config:
             text_list = config.get('search_queries', [])
             universal = config.get('universal_parsing', {}).get('enabled', False)
-        
-        if universal:
-            # Универсальный парсинг всех вакансий
-            self.stdout.write(
-                f'🚀 Запуск универсального парсинга всех вакансий...\n'
-                f'Страниц на регион: {pages_per_area}\n'
-                f'Задержка: {delay} сек\n'
-                f'Максимум страниц: {max_total_pages}\n'
-                f'Только регионы: {areas_only}'
-            )
-            
-            result = parse_all_vacancies(
-                pages_per_area=pages_per_area,
-                delay=delay,
-                max_total_pages=max_total_pages,
-                areas_only=areas_only
-            )
-            
-            self.stdout.write(
-                f'\n🎉 Универсальный парсинг завершен!\n'
-                f'📊 Статистика:\n'
-                f'   • Обработано регионов: {result["areas_processed"]}\n'
-                f'   • Обработано ролей: {result["roles_processed"]}\n'
-                f'   • Обработано страниц: {result["pages_processed"]}\n'
-                f'   • Всего вакансий: {result["total_vacancies"]}\n'
-                f'   • Новых вакансий: {result["new_vacancies"]}\n'
-                f'   • Обновлено вакансий: {result["updated_vacancies"]}\n'
-                f'   • Всего в базе: {result["total_in_db"]}'
-            )
-            
-        elif text_list:
-            # Парсинг по текстовым запросам
-            self.stdout.write(
-                f'🚀 Запуск парсинга по запросам: {text_list}\n'
-                f'Регион: {area}\n'
-                f'Страниц на запрос: {pages}\n'
-                f'Задержка: {delay} сек\n'
-                f'Детальная информация: {get_details}'
-            )
-            
-            result = parse_vacancies_by_text(
-                text_list=text_list,
-                area=area,
-                pages=pages,
-                delay=delay,
-                get_details=get_details
-            )
-            
-            self.stdout.write(
-                f'\n🎉 Парсинг завершен!\n'
-                f'📊 Статистика:\n'
-                f'   • Всего вакансий: {result["total_vacancies"]}\n'
-                f'   • Новых вакансий: {result["new_vacancies"]}\n'
-                f'   • Обновлено вакансий: {result["updated_vacancies"]}\n'
-                f'   • Всего в базе: {result["total_in_db"]}'
-            )
-            
+        # Запуск задачи Celery
+        task = parse_hh_vacancies_task.delay(
+            text_list=text_list,
+            area=area,
+            pages=pages,
+            delay=delay,
+            get_details=get_details,
+            universal=universal,
+            pages_per_area=pages_per_area,
+            max_total_pages=max_total_pages,
+            areas_only=areas_only,
+            config=config
+        )
+        self.stdout.write(f'🚀 Задача Celery отправлена! Task ID: {task.id}')
+        if options.get('wait'):
+            self.stdout.write('⏳ Ожидание завершения задачи...')
+            spinner = ['|', '/', '-', '\\']
+            i = 0
+            while not task.ready():
+                sys.stdout.write(f'\rВыполняется... {spinner[i % 4]}')
+                sys.stdout.flush()
+                time.sleep(2)
+                i += 1
+            sys.stdout.write('\r')
+            if task.successful():
+                result = task.get()
+                self.stdout.write('✅ Задача завершена!')
+                self.print_formatted_result(result)
+            else:
+                self.stdout.write(f'❌ Ошибка при выполнении задачи: {task.result}')
         else:
-            self.stdout.write(
-                '❌ Необходимо указать --text для поиска по запросам, --universal для универсального парсинга '
-                'или настроить конфигурационный файл'
-            ) 
+            self.stdout.write('Проверьте статус задачи через Celery Flower или Django shell.') 
