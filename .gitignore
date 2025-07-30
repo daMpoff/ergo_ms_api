@@ -34,3 +34,5 @@ packages/*
 *.pkl
 
 !src/modules/cities_expansion/geoanalyzer/models/*.pkl
+
+.ipynb_checkpoints/
