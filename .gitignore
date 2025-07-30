@@ -9,25 +9,25 @@ venv/
 __pycache__/
 
 celery/*
-!celery/.gitignore
+!celery/.gitkeep
 
 logs/*
-!logs/.gitignore
+!logs/.gitkeep
 
 static/*
-!static/.gitignore
+!static/.gitkeep
 
 media/*
-!media/.gitignore
+!media/.gitkeep
 
 resources/*
-!resources/.gitignore
+!resources/.gitkeep
 
 trained_models/*
-!trained_models/.gitignore
+!trained_models/.gitkeep
 
 packages/*
-!packages/.gitignore
+!packages/.gitkeep
 
 *.keras
 *.joblib
