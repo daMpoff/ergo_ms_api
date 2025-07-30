@@ -74,7 +74,7 @@ api = "commands.__main__:main"
 - **clear_cache** — очистка кэша
 - **clear_pycache** — очистка pycache
 - **flushexpiredtokens** — очистка устаревших токенов
-- **update_adp_routes** — обновление маршрутов ADP
+- **update_routes** — обновление маршрутов клиентского приложения
 - **update_dependencies** — обновление зависимостей
 - **start_celery_beat** — запуск celery beat
 - **start_celery_worker** — запуск celery worker
