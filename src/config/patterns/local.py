@@ -1,21 +1,25 @@
 """
 Файл объединяющий локальные настройки для Django-приложения.
 
-Он импортирует и объединяет настройки из различных модулей конфигурации, таких как базовые настройки,
-настройки приложений, аутентификации, CORS, базы данных, локализации, статических файлов, логирования,
-сервера, шаблонов и SMTP.
+Он автоматически импортирует и объединяет настройки из различных модулей конфигурации в папке settings.
 """
 
-from src.config.settings.base import *
-from src.config.settings.apps import *
-from src.config.settings.static import *
-from src.config.settings.logger import *
-from src.config.settings.auth import *
-from src.config.settings.cors import *
-from src.config.settings.database import *
-from src.config.settings.localization import *
-from src.config.settings.server import *
-from src.config.settings.templates import *
-from src.config.settings.smtp import *
-from src.config.settings.swagger import *
-from src.config.settings.celery import *
+import importlib
+from pathlib import Path
+
+# Получаем путь к папке settings
+settings_dir = Path(__file__).parent.parent / 'settings'
+
+# Автоматически импортируем все .py файлы из папки settings
+for file_path in settings_dir.glob('*.py'):
+    if file_path.name != '__init__.py' and file_path.name != '__pycache__':
+        module_name = file_path.stem
+        module_path = f'src.config.settings.{module_name}'
+        
+        try:
+            module = importlib.import_module(module_path)
+            # Импортируем все из модуля
+            globals().update({name: getattr(module, name) for name in dir(module) 
+                            if not name.startswith('_')})
+        except ImportError as e:
+            print(f"Ошибка импорта модуля {module_path}: {e}")

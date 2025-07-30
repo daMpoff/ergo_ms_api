@@ -5,9 +5,10 @@
 такие как секретный ключ, режим отладки и разрешенные хосты.
 """
 
+from celery.schedules import crontab
+
 from src.config.patterns.local import *
 from src.config.env import env
-from celery.schedules import crontab
 
 SECRET_KEY = env.str('API_SECRET_KEY')
 

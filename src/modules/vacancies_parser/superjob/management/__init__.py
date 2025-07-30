@@ -1,0 +1,1 @@
+# Management commands for SuperJob vacancies parser 

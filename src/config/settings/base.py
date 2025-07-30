@@ -15,6 +15,3 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 API_DIR = Path(__file__).resolve().parent.parent.parent.parent
 
 SYSTEM_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent
-
-TRAINED_MODELS_PATH = API_DIR / 'trained_models'
-PACKAGES_PATH = API_DIR / 'packages'

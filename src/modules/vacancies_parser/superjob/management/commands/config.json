@@ -1,0 +1,22 @@
+{
+  "api_key": "",
+  "search_queries": [
+    "Python",
+    "JavaScript",
+    "Java",
+    "React",
+    "Vue",
+    "Django",
+    "DevOps"
+  ],
+  "town": "Москва",
+  "experience": null,
+  "employment": null,
+  "schedule": null,
+  "max_pages": 5,
+  "delay": 1.0,
+  "universal_parsing": {
+    "max_pages_per_query": 3,
+    "delay": 1.0
+  }
+} 
