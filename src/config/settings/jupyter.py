@@ -11,15 +11,15 @@ except ImportError:
 PATH_TO_NOTEBOOK_DIR = str(BASE_DIR)
 
 # Хост сервера jupyter, полученный из переменной окружения.
-JUPYTER_HOST = env.str('JUPYTER_HOST', default='localhost')
+API_JUPYTER_HOST = env.str('API_JUPYTER_HOST', default='localhost')
 
 # Порт сервера jupyter, полученный из переменной окружения.
-JUPYTER_PORT = env.str('JUPYTER_PORT', default='8002')
+API_JUPYTER_PORT = env.str('API_JUPYTER_PORT', default='8002')
 
 # Аргументы для запуска сервера jupyter.
 NOTEBOOK_ARGUMENTS = [
-    '--ip', JUPYTER_HOST,
-    '--port', JUPYTER_PORT,
+    '--ip', API_JUPYTER_HOST,
+    '--port', API_JUPYTER_PORT,
     '--notebook-dir', PATH_TO_NOTEBOOK_DIR,
     '--NotebookApp.default_url', notebook_default_url,
     '--NotebookApp.allow_origin', '*',
