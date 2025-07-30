@@ -1812,18 +1812,6 @@ files = [
 ]
 
 [[package]]
-name = "h11"
-version = "0.16.0"
-description = "A pure-Python, bring-your-own-I/O implementation of HTTP/1.1"
-optional = false
-python-versions = ">=3.8"
-groups = ["main"]
-files = [
-    {file = "h11-0.16.0-py3-none-any.whl", hash = "sha256:63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86"},
-    {file = "h11-0.16.0.tar.gz", hash = "sha256:4e35b956cf45792e4caa5885e69fba00bdbc6ffafbfa020300e549b208ee5ff1"},
-]
-
-[[package]]
 name = "h5py"
 version = "3.14.0"
 description = "Read and write HDF5 files from Python"
@@ -7093,4 +7081,4 @@ cffi = ["cffi (>=1.11)"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<3.13"
-content-hash = "1b177bd55dd4c4c150e9c71b84e54cdcefe450631de737fade1acd2f0142e03a"
+content-hash = "7698a6b6dcfb02c642b7e8b100592a72798cb234f63fd2cc6acc929315b2137c"
