@@ -14,7 +14,7 @@ def __init__(self, stdout)
 
 **Параметры:**
 
-- `stdout` - объект для вывода сообщений (обычно `self.stdout` из Django команды)
+- `stdout` - объект для вывода сообщений
 
 ### Методы управления моделями
 
@@ -195,9 +195,7 @@ def add_arguments(self, parser) -> None
 - `--remove <model>` - удалить модель
 - `--test <model>` - протестировать модель
 - `--info` - показать информацию о системе
-- `--train <model>` - обучить модель
 - `--data <file>` - путь к файлу данных
-- `--generate-data` - сгенерировать данные
 
 **Аргументы чата:**
 
@@ -301,18 +299,6 @@ ollama.pull_model("llama2:latest")
 # Удалить модель
 ollama.remove_model("llama2:latest")
 
-# Протестировать модель
-ollama.test_model("llama2:latest")
-```
-
-### Обучение моделей
-
-```python
-# Обучить модель
-ollama.train_model(
-    base_model="llama2:latest",
-    data_file_path="training_data/ergo_data.jsonl"
-)
 ```
 
 ## Расширение функциональности
@@ -415,51 +401,6 @@ class OllamaMethods:
         except Exception as e:
             logger.error(f"Ошибка при отправке сообщения: {e}")
             raise
-```
-
-## Тестирование
-
-### Модульные тесты
-
-```python
-import unittest
-from unittest.mock import Mock, patch
-from src.modules.ollama_framework.methods import OllamaMethods
-
-class TestOllamaMethods(unittest.TestCase):
-    def setUp(self):
-        self.stdout = Mock()
-        self.ollama = OllamaMethods(self.stdout)
-
-    @patch('src.modules.ollama_framework.methods.ollama')
-    def test_send_message(self, mock_ollama):
-        # Настройка мока
-        mock_ollama.chat.return_value = {
-            "message": {"content": "Привет!"}
-        }
-
-        # Тест
-        response = self.ollama.send_message("llama2", "Привет")
-
-        # Проверка
-        self.assertEqual(response, "Привет!")
-        mock_ollama.chat.assert_called_once()
-```
-
-### Интеграционные тесты
-
-```python
-def test_ollama_integration():
-    """Интеграционный тест с реальным Ollama"""
-    ollama = OllamaMethods(Mock())
-
-    # Проверить подключение
-    try:
-        client = ollama.get_ollama_client()
-        models = client.list()
-        assert "models" in models
-    except Exception as e:
-        pytest.skip(f"Ollama недоступен: {e}")
 ```
 
 ## Производительность
