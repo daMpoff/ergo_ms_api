@@ -20,4 +20,5 @@ class VideoAnalysisViewSet(SwaggerSafeMixin, viewsets.ReadOnlyModelViewSet):
     ordering = ['-created_at']
 
     def get_queryset(self):
-        return VideoAnalysis.objects.filter(user=self.request.user) 
+        base_queryset = VideoAnalysis.objects.all()
+        return self.get_safe_queryset(base_queryset.filter(user=self.get_safe_user())) 

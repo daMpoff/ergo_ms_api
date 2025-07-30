@@ -24,7 +24,7 @@ class VideoAnalysisSerializer(serializers.ModelSerializer):
             'id', 'title', 'description', 'status', 'status_display',
             'created_at', 'updated_at', 'started_at', 'completed_at',
             'original_video', 'audio_file', 'subtitles_file', 'output_video',
-            'duration', 'duration_formatted', 'subtitle_count', 'error_message',
+            'duration', 'duration_formatted', 'subtitle_count', 'segments_count', 'error_message',
             'subtitle_segments'
         ]
         read_only_fields = fields
@@ -41,4 +41,8 @@ class VideoAnalysisSerializer(serializers.ModelSerializer):
         if hours > 0:
             return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
         else:
-            return f"{minutes:02d}:{seconds:02d}" 
+            return f"{minutes:02d}:{seconds:02d}"
+    
+    def get_segments_count(self, obj):
+        """Возвращает количество сегментов субтитров"""
+        return obj.subtitle_segments.count() if hasattr(obj, 'subtitle_segments') else 0 
