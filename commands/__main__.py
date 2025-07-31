@@ -38,7 +38,7 @@ def main():
     commands = get_commands()
 
     if len(sys.argv) < 2:
-        logger.info("Использование: cmd <команда> [аргументы...]")
+        logger.info("Использование: api <команда> [аргументы...]")
         logger.info("Доступные команды: %s", ", ".join(sorted(commands.keys())))
         return
 
