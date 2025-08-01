@@ -12,8 +12,7 @@ from vosk import Model, KaldiRecognizer
 from moviepy.editor import VideoFileClip
 from transformers import MarianMTModel, MarianTokenizer
 
-from src.config.settings.base import PACKAGES_PATH, TRAINED_MODELS_PATH
-from src.config.settings.static import MEDIA_ROOT
+from src.config.settings.static import MEDIA_ROOT, PACKAGES_PATH, TRAINED_MODELS_PATH
 
 # Импорт для GPU поддержки
 import torch
@@ -22,7 +21,7 @@ from django.apps import apps
 # Константы
 FRAME_CHUNK_SIZE = 4000  # Размер блока чтения аудио в фреймах
 
-FFMPEG_PATH = PACKAGES_PATH / 'ffmpeg' / 'bin' / 'ffmpeg.exe'
+FFMPEG_PATH = Path(PACKAGES_PATH) / 'ffmpeg' / 'bin' / 'ffmpeg.exe'
 
 VIDEO_ANALYSIS_MEDIA_DIR = Path(MEDIA_ROOT) / 'video_analysis'
 if not os.path.exists(VIDEO_ANALYSIS_MEDIA_DIR):
