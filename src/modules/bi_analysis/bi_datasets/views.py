@@ -60,6 +60,14 @@ class DatasetListCreateView(generics.ListCreateAPIView):
     serializer_class = DatasetSerializer
     permission_classes = [permissions.IsAuthenticated]
 
+    def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            # Для генерации схемы Swagger возвращаем пустой queryset
+            return Dataset.objects.none()
+        return (Dataset.objects
+            .filter(owner=self.request.user)
+            .order_by('-created_at'))
+
     @transaction.atomic
     def perform_create(self, serializer):
         dataset = serializer.save(owner=self.request.user)
@@ -149,6 +157,12 @@ class DatasetListView(generics.ListAPIView):
 class DatasetDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Dataset.objects.all()
     permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            # Для генерации схемы Swagger возвращаем пустой queryset
+            return Dataset.objects.none()
+        return Dataset.objects.filter(owner=self.request.user)
 
     def get_serializer_class(self):
         if self.request.method in ('PUT', 'PATCH'):
@@ -810,3 +824,65 @@ class XlsxTempPreviewView(APIView):
             return Response({"parsed": values})
         except Exception as exc:
             return Response({"error": f"Ошибка при чтении Excel: {exc}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+# ==============================================================================
+# Field values endpoint
+# ==============================================================================
+
+class DatasetFieldValuesView(APIView):
+    """
+    GET /bi_analysis/bi_datasets/{pk}/field-values/{field_id}/
+    Получить уникальные значения для конкретного поля датасета
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk, field_id):
+        dataset = Dataset.objects.filter(pk=pk, owner=request.user).first()
+        
+        if not dataset:
+            dataset_exists = Dataset.objects.filter(pk=pk).exists()
+            
+            if dataset_exists:
+                return Response({"detail": "Dataset exists but doesn't belong to current user"}, status=404)
+            else:
+                return Response({"detail": "Dataset not found"}, status=404)
+
+        field = DataSetField.objects.filter(pk=field_id, dataset=dataset).first()
+        
+        if not field:
+            field_exists = DataSetField.objects.filter(pk=field_id).exists()
+            
+            if field_exists:
+                return Response({"detail": "Field exists but doesn't belong to this dataset"}, status=404)
+            else:
+                return Response({"detail": "Field not found"}, status=404)
+
+        if not dataset.table_ref or not dataset.table_ref.startswith(('staging_', 'temp_')):
+            return Response({"detail": "Таблица ещё не создана для датасета"}, status=400)
+
+        base_table = dataset.table_ref
+        if '.' in base_table:
+            schema, table = base_table.split('.', 1)
+        else:
+            schema, table = 'public', base_table
+
+        try:
+            with connection.cursor() as cursor:
+                # Get unique values for the field
+                cursor.execute(
+                    f'SELECT DISTINCT "{field.source_column}" FROM "{schema}"."{table}" WHERE "{field.source_column}" IS NOT NULL ORDER BY "{field.source_column}" LIMIT 1000',
+                )
+                rows = cursor.fetchall()
+                values = [str(row[0]) for row in rows if row[0] is not None]
+        except ProgrammingError:
+            return Response({"detail": f"Table {schema}.{table} does not exist or field {field.source_column} not found"}, status=404)
+        except Exception as e:
+            return Response({"detail": f"Database error: {str(e)}"}, status=500)
+
+        return Response({
+            "field_id": field_id,
+            "field_name": field.name,
+            "field_column": field.source_column,
+            "values": values,
+            "count": len(values)
+        })

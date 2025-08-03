@@ -7,7 +7,7 @@ DatasetDetailView, DatasetPreviewView,
     TempUploadView, FileUploadDetailView,
     FinalizeUploadView, XlsxSheetListView,
     XlsxTempPreviewView, FileUploadByConnectionView, AddTableToDatasetView, DatasetRemoveRelationView,
-    RenameDatasetColumnsView, DatasetListCreateView, DatasetJoinTableView, DataSetTableColumnsView, DatasetDraftPreviewView, DatasetAddRelationView, DatasetRowsAPIView, DatasetRowsAggAPIView
+    RenameDatasetColumnsView, DatasetListCreateView, DatasetJoinTableView, DataSetTableColumnsView, DatasetDraftPreviewView, DatasetAddRelationView, DatasetRowsAPIView, DatasetRowsAggAPIView, DatasetFieldValuesView
 )
 
 from rest_framework.routers import SimpleRouter
@@ -30,6 +30,7 @@ urlpatterns = [
     path('<int:dataset_id>/add-relation/', DatasetAddRelationView.as_view()),
     path('<int:pk>/rows/', DatasetRowsAPIView.as_view(), name='dataset-rows'),
     path('<int:pk>/rows-agg/', DatasetRowsAggAPIView.as_view(), name='dataset-rows-agg'),
+    path('<int:pk>/field-values/<int:field_id>/', DatasetFieldValuesView.as_view(), name='dataset-field-values'),
 
     path('', DatasetListCreateView.as_view(), name='bi_datasets-list-create'),
     path('<int:pk>/', DatasetDetailView.as_view(), name='bi_datasets-detail'),
