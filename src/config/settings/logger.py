@@ -7,6 +7,12 @@ import os
 
 from src.config.settings.static import LOGS_ROOT
 
+import warnings
+from sklearn.exceptions import InconsistentVersionWarning
+
+# Отключаем предупреждения scikit-learn о несовместимости версий
+warnings.filterwarnings("ignore", category=InconsistentVersionWarning)
+
 # Создаем директорию для логов, если она не существует
 os.makedirs(LOGS_ROOT, exist_ok=True)
 
