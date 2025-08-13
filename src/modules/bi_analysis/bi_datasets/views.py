@@ -60,6 +60,14 @@ class DatasetListCreateView(generics.ListCreateAPIView):
     serializer_class = DatasetSerializer
     permission_classes = [permissions.IsAuthenticated]
 
+    def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            # Для генерации схемы Swagger возвращаем пустой queryset
+            return Dataset.objects.none()
+        return (Dataset.objects
+            .filter(owner=self.request.user)
+            .order_by('-created_at'))
+
     @transaction.atomic
     def perform_create(self, serializer):
         dataset = serializer.save(owner=self.request.user)
@@ -149,6 +157,12 @@ class DatasetListView(generics.ListAPIView):
 class DatasetDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Dataset.objects.all()
     permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            # Для генерации схемы Swagger возвращаем пустой queryset
+            return Dataset.objects.none()
+        return Dataset.objects.filter(owner=self.request.user)
 
     def get_serializer_class(self):
         if self.request.method in ('PUT', 'PATCH'):
@@ -551,16 +565,84 @@ class FileUploadDetailView(generics.RetrieveUpdateDestroyAPIView):
     def perform_update(self, serializer):
         file = self.request.FILES.get('file')
         name = self.request.data.get('name')
+        sheet = self.request.data.get('sheet')  # Добавляем поддержку листа
         file_type = (file.name.split('.')[-1].lower()
                      if file else 
                      (name.split('.')[-1].lower() if name and '.' in name else None))
 
-        instance = serializer.save(
-            name=name or serializer.instance.name,
-            original_filename=(file.name if file else serializer.instance.original_filename),
-            file=(file if file else serializer.instance.file),
-            file_type=file_type
-        )
+        # Если есть новый файл и указан лист - обрабатываем листы
+        if file and file_type == 'xlsx' and sheet:
+            print(f"[DEBUG UPDATE] Обновляем Excel файл с листом: {sheet}")
+            suffix = os.path.splitext(file.name)[-1]
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                for chunk in file.chunks():
+                    tmp.write(chunk)
+                temp_path = tmp.name
+            
+            try:
+                wb = load_workbook(temp_path, read_only=False)
+                print(f"[DEBUG UPDATE] Доступные листы: {wb.sheetnames}")
+                
+                # Удаляем все листы кроме нужного
+                sheets_to_remove = [ws_name for ws_name in wb.sheetnames if ws_name != sheet]
+                for ws_name in sheets_to_remove:
+                    ws = wb[ws_name]
+                    wb.remove(ws)
+                
+                single_sheet_path = temp_path + "_single.xlsx"
+                wb.save(single_sheet_path)
+                wb.close()
+                print(f"[DEBUG UPDATE] Обновляем файл одним листом: {single_sheet_path}")
+                
+                # Сначала сохраняем экземпляр без файла
+                instance = serializer.save(
+                    name=name or serializer.instance.name,
+                    original_filename=file.name,
+                    file_type=file_type
+                )
+                
+                # Удаляем старый файл если он есть
+                if instance.file and hasattr(instance.file, 'path') and os.path.exists(instance.file.path):
+                    try:
+                        old_path = instance.file.path
+                        instance.file.delete(save=False)
+                        print(f"[DEBUG UPDATE] Удален старый файл: {old_path}")
+                    except Exception as e:
+                        print(f"[DEBUG UPDATE] Ошибка при удалении старого файла: {e}")
+                
+                # Затем обновляем файл отдельно
+                with open(single_sheet_path, 'rb') as f:
+                    instance.file.save(file.name, File(f), save=True)
+                
+                print(f"[DEBUG UPDATE] Файл обновлен в базе: {instance.file.path}")
+                
+                # Очищаем временные файлы
+                try:
+                    os.remove(single_sheet_path)
+                    os.remove(temp_path)
+                except Exception as e:
+                    print(f"[DEBUG UPDATE] Ошибка при удалении временных файлов: {e}")
+                    
+            except Exception as e:
+                print(f"[DEBUG UPDATE] Ошибка при обработке листов: {e}")
+                # Если не удалось обработать листы, сохраняем как есть
+                try:
+                    os.remove(temp_path)
+                except Exception:
+                    pass
+                instance = serializer.save(
+                    name=name or serializer.instance.name,
+                    original_filename=(file.name if file else serializer.instance.original_filename),
+                    file=(file if file else serializer.instance.file),
+                    file_type=file_type
+                )
+        else:
+            instance = serializer.save(
+                name=name or serializer.instance.name,
+                original_filename=(file.name if file else serializer.instance.original_filename),
+                file=(file if file else serializer.instance.file),
+                file_type=file_type
+            )
 
         columns_info = self._extract_columns_info(instance)
         instance.columns_info = columns_info
@@ -736,25 +818,43 @@ class FinalizeUploadView(APIView):
             connection=connection_obj
         )
 
+        # Сначала сохраняем объект без файла
+        upload.save()
+        
         if file_type == "xlsx" and sheet:
-            wb = load_workbook(temp_path, read_only=False)
-            for ws_name in wb.sheetnames:
-                if ws_name != sheet:
+            print(f"[DEBUG] Обрабатываем Excel файл с листом: {sheet}")
+            try:
+                wb = load_workbook(temp_path, read_only=False)
+                print(f"[DEBUG] Доступные листы: {wb.sheetnames}")
+                
+                # Удаляем все листы кроме нужного
+                sheets_to_remove = [ws_name for ws_name in wb.sheetnames if ws_name != sheet]
+                for ws_name in sheets_to_remove:
                     ws = wb[ws_name]
                     wb.remove(ws)
-            single_sheet_path = temp_path + "_single.xlsx"
-            wb.save(single_sheet_path)
-            with open(single_sheet_path, 'rb') as f:
-                upload.file.save(original_filename, File(f), save=False)
-            try:
-                os.remove(single_sheet_path)
-            except Exception:
-                pass
+                
+                single_sheet_path = temp_path + "_single.xlsx"
+                wb.save(single_sheet_path)
+                wb.close()  # Явно закрываем workbook
+                print(f"[DEBUG] Сохраняем одностраничный файл: {single_sheet_path}")
+                
+                with open(single_sheet_path, 'rb') as f:
+                    upload.file.save(original_filename, File(f), save=True)  # save=True для сохранения в БД
+                print(f"[DEBUG] Файл сохранен в базу: {upload.file.path}")
+                
+                try:
+                    os.remove(single_sheet_path)
+                except Exception as e:
+                    print(f"[DEBUG] Ошибка при удалении временного файла: {e}")
+                    
+            except Exception as e:
+                print(f"[DEBUG] Ошибка при обработке листов: {e}")
+                # Если ошибка, сохраняем оригинальный файл
+                with open(temp_path, 'rb') as f:
+                    upload.file.save(original_filename, File(f), save=True)
         else:
             with open(temp_path, 'rb') as f:
-                upload.file.save(original_filename, File(f), save=False)
-
-        upload.save()
+                upload.file.save(original_filename, File(f), save=True)  # save=True для сохранения в БД
 
         upload.columns_info = extract_columns_info(upload)
         upload.save(update_fields=['columns_info'])
@@ -810,3 +910,65 @@ class XlsxTempPreviewView(APIView):
             return Response({"parsed": values})
         except Exception as exc:
             return Response({"error": f"Ошибка при чтении Excel: {exc}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+# ==============================================================================
+# Field values endpoint
+# ==============================================================================
+
+class DatasetFieldValuesView(APIView):
+    """
+    GET /bi_analysis/bi_datasets/{pk}/field-values/{field_id}/
+    Получить уникальные значения для конкретного поля датасета
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk, field_id):
+        dataset = Dataset.objects.filter(pk=pk, owner=request.user).first()
+        
+        if not dataset:
+            dataset_exists = Dataset.objects.filter(pk=pk).exists()
+            
+            if dataset_exists:
+                return Response({"detail": "Dataset exists but doesn't belong to current user"}, status=404)
+            else:
+                return Response({"detail": "Dataset not found"}, status=404)
+
+        field = DataSetField.objects.filter(pk=field_id, dataset=dataset).first()
+        
+        if not field:
+            field_exists = DataSetField.objects.filter(pk=field_id).exists()
+            
+            if field_exists:
+                return Response({"detail": "Field exists but doesn't belong to this dataset"}, status=404)
+            else:
+                return Response({"detail": "Field not found"}, status=404)
+
+        if not dataset.table_ref or not dataset.table_ref.startswith(('staging_', 'temp_')):
+            return Response({"detail": "Таблица ещё не создана для датасета"}, status=400)
+
+        base_table = dataset.table_ref
+        if '.' in base_table:
+            schema, table = base_table.split('.', 1)
+        else:
+            schema, table = 'public', base_table
+
+        try:
+            with connection.cursor() as cursor:
+                # Get unique values for the field
+                cursor.execute(
+                    f'SELECT DISTINCT "{field.source_column}" FROM "{schema}"."{table}" WHERE "{field.source_column}" IS NOT NULL ORDER BY "{field.source_column}" LIMIT 1000',
+                )
+                rows = cursor.fetchall()
+                values = [str(row[0]) for row in rows if row[0] is not None]
+        except ProgrammingError:
+            return Response({"detail": f"Table {schema}.{table} does not exist or field {field.source_column} not found"}, status=404)
+        except Exception as e:
+            return Response({"detail": f"Database error: {str(e)}"}, status=500)
+
+        return Response({
+            "field_id": field_id,
+            "field_name": field.name,
+            "field_column": field.source_column,
+            "values": values,
+            "count": len(values)
+        })

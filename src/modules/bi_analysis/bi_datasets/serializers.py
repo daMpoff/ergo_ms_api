@@ -182,12 +182,18 @@ class DatasetSerializer(serializers.ModelSerializer):
 # --- File upload сериализатор ---
 class FileUploadSerializer(serializers.ModelSerializer):
     file_url = serializers.SerializerMethodField()
+    file_path = serializers.SerializerMethodField()
+    exists = serializers.SerializerMethodField()
+    missing = serializers.SerializerMethodField()
+    file_not_found = serializers.SerializerMethodField()
+    error = serializers.SerializerMethodField()
 
     class Meta:
         model = FileUpload
         fields = [
-            'id', 'name', 'file', 'file_url', 'uploaded_at',
-            'owner', 'original_filename', 'file_type', 'connection', 'columns_info'
+            'id', 'name', 'file', 'file_url', 'file_path', 'uploaded_at',
+            'owner', 'original_filename', 'file_type', 'connection', 'columns_info',
+            'exists', 'missing', 'file_not_found', 'error'
         ]
         read_only_fields = ['id', 'uploaded_at']
         extra_kwargs = {
@@ -199,3 +205,33 @@ class FileUploadSerializer(serializers.ModelSerializer):
             return obj.file.url if obj.file else None
         except ValueError:
             return None
+    
+    def get_file_path(self, obj):
+        """Возвращает путь к файлу"""
+        try:
+            return obj.file.path if obj.file else None
+        except ValueError:
+            return None
+    
+    def get_exists(self, obj):
+        """Проверяет существование файла на диске"""
+        try:
+            if obj.file and obj.file.path:
+                return os.path.exists(obj.file.path)
+            return False
+        except ValueError:
+            return False
+    
+    def get_missing(self, obj):
+        """Возвращает True если файл отсутствует"""
+        return not self.get_exists(obj)
+    
+    def get_file_not_found(self, obj):
+        """Alias для missing для совместимости"""
+        return self.get_missing(obj)
+    
+    def get_error(self, obj):
+        """Возвращает текст ошибки если файл отсутствует"""
+        if self.get_missing(obj):
+            return "Файл не найден на диске"
+        return None
