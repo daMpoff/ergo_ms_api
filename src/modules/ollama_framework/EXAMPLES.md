@@ -8,23 +8,23 @@
 
 ```bash
 # Проверить статус системы
-cmd ollama --info
+api ollama --info
 
 # Скачать базовую модель
-cmd ollama --pull llama2:latest
+api ollama --pull llama2:latest
 
 # Протестировать модель
-cmd ollama --test llama2:latest
+api ollama --test llama2:latest
 ```
 
 ### 2. Первый чат
 
 ```bash
 # Простое приветствие
-cmd ollama --chat "Привет! Как дела?"
+api ollama --chat "Привет! Как дела?"
 
 # С указанием модели
-cmd ollama --chat "Расскажи о Python" --model llama2
+api ollama --chat "Расскажи о Python" --model llama2
 ```
 
 ## Управление моделями
@@ -33,28 +33,28 @@ cmd ollama --chat "Расскажи о Python" --model llama2
 
 ```bash
 # Популярные модели
-cmd ollama --pull llama2:latest
-cmd ollama --pull mistral:latest
-cmd ollama --pull codellama:latest
-cmd ollama --pull qwen:4b
+api ollama --pull llama2:latest
+api ollama --pull mistral:latest
+api ollama --pull codellama:latest
+api ollama --pull qwen:4b
 
 # Специализированные модели
-cmd ollama --pull llama2:7b-chat
-cmd ollama --pull llama2:13b-chat
-cmd ollama --pull codellama:7b-instruct
+api ollama --pull llama2:7b-chat
+api ollama --pull llama2:13b-chat
+api ollama --pull codellama:7b-instruct
 ```
 
 ### Управление моделями
 
 ```bash
 # Просмотр списка
-cmd ollama --list
+api ollama --list
 
 # Удаление модели
-cmd ollama --remove llama2:latest
+api ollama --remove llama2:latest
 
 # Тестирование модели
-cmd ollama --test mistral:latest
+api ollama --test mistral:latest
 ```
 
 ## Чат с моделями
@@ -63,32 +63,32 @@ cmd ollama --test mistral:latest
 
 ```bash
 # Простые вопросы
-cmd ollama --chat "Что такое искусственный интеллект?"
-cmd ollama --chat "Объясни концепцию ООП"
-cmd ollama --chat "Напиши функцию для сортировки списка"
+api ollama --chat "Что такое искусственный интеллект?"
+api ollama --chat "Объясни концепцию ООП"
+api ollama --chat "Напиши функцию для сортировки списка"
 
 # С указанием модели
-cmd ollama --chat "Напиши код на Python" --model codellama:latest
-cmd ollama --chat "Переведи на английский: Привет, как дела?" --model mistral:latest
+api ollama --chat "Напиши код на Python" --model codellama:latest
+api ollama --chat "Переведи на английский: Привет, как дела?" --model mistral:latest
 ```
 
 ### Использование системных промптов
 
 ```bash
 # Программирование
-cmd ollama --chat "Напиши функцию для работы с JSON" \
+api ollama --chat "Напиши функцию для работы с JSON" \
   --system-prompt "Ты - опытный Python разработчик"
 
 # Преподавание
-cmd ollama --chat "Объясни концепцию REST API" \
+api ollama --chat "Объясни концепцию REST API" \
   --system-prompt "Ты - преподаватель, который объясняет сложные концепции простым языком"
 
 # Анализ данных
-cmd ollama --chat "Объясни машинное обучение" \
+api ollama --chat "Объясни машинное обучение" \
   --system-prompt "Ты - эксперт по анализу данных и машинному обучению"
 
 # Креативное письмо
-cmd ollama --chat "Напиши короткую историю о роботе" \
+api ollama --chat "Напиши короткую историю о роботе" \
   --system-prompt "Ты - креативный писатель-фантаст"
 ```
 
@@ -96,19 +96,19 @@ cmd ollama --chat "Напиши короткую историю о роботе"
 
 ```bash
 # Низкая креативность (более предсказуемые ответы)
-cmd ollama --chat "Что такое API?" --temperature 0.1
+api ollama --chat "Что такое API?" --temperature 0.1
 
 # Высокая креативность
-cmd ollama --chat "Напиши стихотворение о программировании" --temperature 0.9
+api ollama --chat "Напиши стихотворение о программировании" --temperature 0.9
 
 # Короткие ответы
-cmd ollama --chat "Да или нет?" --max-tokens 50
+api ollama --chat "Да или нет?" --max-tokens 50
 
 # Длинные ответы
-cmd ollama --chat "Напиши подробное эссе о искусственном интеллекте" --max-tokens 4096
+api ollama --chat "Напиши подробное эссе о искусственном интеллекте" --max-tokens 4096
 
 # Комбинирование параметров
-cmd ollama --chat "Напиши креативное стихотворение" \
+api ollama --chat "Напиши креативное стихотворение" \
   --temperature 0.8 \
   --max-tokens 1000 \
   --system-prompt "Ты - поэт"
@@ -120,10 +120,10 @@ cmd ollama --chat "Напиши креативное стихотворение"
 
 ```bash
 # Простой интерактивный режим
-cmd ollama --interactive --model llama2
+api ollama --interactive --model llama2
 
 # С системным промптом
-cmd ollama --interactive \
+api ollama --interactive \
   --model llama2 \
   --system-prompt "Ты - помощник по программированию"
 ```
@@ -132,17 +132,17 @@ cmd ollama --interactive \
 
 ```bash
 # Режим программирования
-cmd ollama --interactive \
+api ollama --interactive \
   --model codellama:latest \
   --system-prompt "Ты - опытный программист. Отвечай кратко и по делу."
 
 # Режим обучения
-cmd ollama --interactive \
+api ollama --interactive \
   --model llama2 \
   --system-prompt "Ты - преподаватель программирования. Объясняй простым языком."
 
 # Креативный режим
-cmd ollama --interactive \
+api ollama --interactive \
   --model llama2 \
   --temperature 0.9 \
   --system-prompt "Ты - креативный писатель и поэт."
@@ -154,21 +154,21 @@ cmd ollama --interactive \
 
 ```bash
 # Написание кода
-cmd ollama --chat "Напиши функцию на Python, которая:
+api ollama --chat "Напиши функцию на Python, которая:
 1. Принимает список чисел
 2. Возвращает сумму всех четных чисел
 3. Обрабатывает ошибки" \
   --system-prompt "Ты - опытный Python разработчик"
 
 # Отладка кода
-cmd ollama --chat "Помоги отладить этот код:
+api ollama --chat "Помоги отладить этот код:
 def sort_list(lst):
     return lst.sort()
 print(sort_list([3,1,2]))" \
   --system-prompt "Ты - опытный программист и отладчик"
 
 # Сравнение технологий
-cmd ollama --chat "Сравни Python и JavaScript для веб-разработки" \
+api ollama --chat "Сравни Python и JavaScript для веб-разработки" \
   --system-prompt "Ты - эксперт по веб-разработке"
 ```
 
@@ -176,15 +176,15 @@ cmd ollama --chat "Сравни Python и JavaScript для веб-разраб�
 
 ```bash
 # Объяснение концепций
-cmd ollama --chat "Объясни концепцию Docker простыми словами" \
+api ollama --chat "Объясни концепцию Docker простыми словами" \
   --system-prompt "Ты - преподаватель, который объясняет сложные концепции простым языком"
 
 # Анализ данных
-cmd ollama --chat "Объясни разницу между машинным обучением и глубоким обучением" \
+api ollama --chat "Объясни разницу между машинным обучением и глубоким обучением" \
   --system-prompt "Ты - эксперт по анализу данных и машинному обучению"
 
 # Сравнение технологий
-cmd ollama --chat "Сравни SQL и NoSQL базы данных" \
+api ollama --chat "Сравни SQL и NoSQL базы данных" \
   --system-prompt "Ты - эксперт по базам данных"
 ```
 
@@ -192,17 +192,17 @@ cmd ollama --chat "Сравни SQL и NoSQL базы данных" \
 
 ```bash
 # Написание стихов
-cmd ollama --chat "Напиши стихотворение о программировании" \
+api ollama --chat "Напиши стихотворение о программировании" \
   --temperature 0.9 \
   --system-prompt "Ты - поэт"
 
 # Создание историй
-cmd ollama --chat "Напиши короткую историю о роботе-программисте" \
+api ollama --chat "Напиши короткую историю о роботе-программисте" \
   --temperature 0.8 \
   --system-prompt "Ты - писатель-фантаст"
 
 # Генерация идей
-cmd ollama --chat "Придумай 10 идей для мобильного приложения" \
+api ollama --chat "Придумай 10 идей для мобильного приложения" \
   --temperature 0.7 \
   --system-prompt "Ты - креативный директор"
 ```
@@ -213,7 +213,7 @@ cmd ollama --chat "Придумай 10 идей для мобильного пр
 
 ```bash
 # Настройка помощника
-cmd ollama --interactive \
+api ollama --interactive \
   --model codellama:latest \
   --system-prompt "Ты - опытный программист. Отвечай кратко, давай практические примеры кода."
 
@@ -227,7 +227,7 @@ cmd ollama --interactive \
 
 ```bash
 # Настройка преподавателя
-cmd ollama --interactive \
+api ollama --interactive \
   --model llama2 \
   --system-prompt "Ты - преподаватель программирования. Объясняй простым языком, используй аналогии."
 
@@ -241,7 +241,7 @@ cmd ollama --interactive \
 
 ```bash
 # Настройка креативного помощника
-cmd ollama --interactive \
+api ollama --interactive \
   --model llama2 \
   --temperature 0.9 \
   --system-prompt "Ты - креативный помощник. Помогай генерировать идеи и создавать контент."
@@ -256,7 +256,7 @@ cmd ollama --interactive \
 
 ```bash
 # Настройка аналитика
-cmd ollama --interactive \
+api ollama --interactive \
   --model llama2 \
   --system-prompt "Ты - эксперт по анализу данных. Объясняй концепции и методы анализа."
 
@@ -293,10 +293,10 @@ cmd ollama --interactive \
 
 ```bash
 # Модель не найдена
-cmd ollama --list
-cmd ollama --pull <model_name>
+api ollama --list
+api ollama --pull <model_name>
 
 # Ошибка подключения
 ollama serve
-cmd ollama --info
+api ollama --info
 ```
