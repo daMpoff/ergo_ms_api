@@ -11,7 +11,7 @@ class Vacancy(models.Model):
     salary_from = models.IntegerField(null=True, blank=True, verbose_name="Зарплата от")
     salary_to = models.IntegerField(null=True, blank=True, verbose_name="Зарплата до")
     salary_currency = models.CharField(max_length=10, null=True, blank=True, verbose_name="Валюта зарплаты")
-    salary_gross = models.BooleanField(default=True, verbose_name="Зарплата до вычета налогов")
+    salary_gross = models.BooleanField(null=True, blank=True, default=True, verbose_name="Зарплата до вычета налогов")
     
     # Локация
     city = models.CharField(max_length=100, null=True, blank=True, verbose_name="Город")
@@ -96,7 +96,7 @@ class Vacancy(models.Model):
         if self.salary_currency:
             salary_str += f" {self.salary_currency}"
         
-        if not self.salary_gross:
+        if self.salary_gross is False:
             salary_str += " на руки"
         
         return salary_str
@@ -155,7 +155,7 @@ class Vacancy(models.Model):
     def has_changes(self, new_data):
         """Проверяет, есть ли изменения в вакансии"""
         significant_fields = [
-            'title', 'company_name', 'salary_from', 'salary_to', 'salary_currency',
+            'title', 'company_name', 'salary_from', 'salary_to', 'salary_currency', 'salary_gross',
             'city', 'address', 'description', 'requirements', 'responsibilities',
             'employment_type', 'experience_level', 'key_skills', 'schedule_type',
             'professional_role', 'employer_name', 'premium', 'has_test',
@@ -172,8 +172,13 @@ class Vacancy(models.Model):
                     if set(current_value or []) != set(new_value or []):
                         return True
                 else:
-                    if current_value != new_value:
-                        return True
+                    # Специальная обработка для boolean полей с возможностью None
+                    if field == 'salary_gross':
+                        if current_value is not new_value:
+                            return True
+                    else:
+                        if current_value != new_value:
+                            return True
         
         return False
 

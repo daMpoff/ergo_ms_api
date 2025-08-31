@@ -108,6 +108,12 @@ LOGGING = {
             'maxBytes': 10*1024*1024,  # 10MB
             'backupCount': 5,
         },
+        
+        'celery_error_console': {
+            'level': 'ERROR',
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
     },
 
     # Логгеры для различных частей приложения.
@@ -183,6 +189,32 @@ LOGGING = {
             'handlers': ['celery_tasks_file', 'console'],
             'level': 'DEBUG',
             'propagate': False,
+        },
+        
+        'celery.task.video_analysis': {
+            'handlers': ['celery_tasks_file', 'console'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+        
+        # Логгеры для модулей Celery
+        'celery.module': {
+            'handlers': ['celery_tasks_file', 'console', 'celery_error_console'],
+            'level': 'DEBUG',
+            'propagate': True,
+        },
+        
+        # Логгер для модуля video_analysis
+        'video_analysis': {
+            'handlers': ['celery_tasks_file', 'console'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+        
+        'celery.beat.module': {
+            'handlers': ['celery_beat_file', 'console', 'celery_error_console'],
+            'level': 'DEBUG',
+            'propagate': True,
         },
         
         'kombu': {

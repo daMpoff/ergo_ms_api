@@ -19,14 +19,23 @@ def parse_hh_vacancies_task(
     Celery-задача для парсинга вакансий с HeadHunter.
     Возвращает статистику по результатам парсинга.
     """
+    import logging
+    
+    # Получаем логгер для модуля
+    logger = logging.getLogger('celery.module.headhunter')
+    
+    logger.info(f"Запуск задачи parse_hh_vacancies_task с параметрами: text_list={text_list}, universal={universal}")
+    
     result = None
     if universal:
+        logger.info("Выполняется универсальный парсинг")
         result = parse_all_vacancies(
             pages_per_area=pages_per_area,
             delay=delay,
             max_total_pages=max_total_pages,
             areas_only=areas_only
         )
+        logger.info(f"Универсальный парсинг завершен: {result}")
         return {
             'mode': 'universal',
             'areas_processed': result.get('areas_processed'),
@@ -38,6 +47,7 @@ def parse_hh_vacancies_task(
             'total_in_db': result.get('total_in_db'),
         }
     elif text_list:
+        logger.info(f"Выполняется парсинг по тексту: {text_list}")
         result = parse_vacancies_by_text(
             text_list=text_list,
             area=area,
@@ -45,6 +55,7 @@ def parse_hh_vacancies_task(
             delay=delay,
             get_details=get_details
         )
+        logger.info(f"Парсинг по тексту завершен: {result}")
         return {
             'mode': 'by_text',
             'total_vacancies': result.get('total_vacancies'),
@@ -53,7 +64,10 @@ def parse_hh_vacancies_task(
             'total_in_db': result.get('total_in_db'),
         }
     else:
-        return {'error': 'Необходимо указать text_list или universal=True'}
+        error_msg = 'Необходимо указать text_list или universal=True'
+        logger.error(error_msg)
+        print(f"ОШИБКА: {error_msg}")  # Дополнительный вывод в консоль
+        return {'error': error_msg}
 
 @shared_task
 def parse_single_vacancy_task(vacancy_id, force_update=False):
@@ -61,16 +75,31 @@ def parse_single_vacancy_task(vacancy_id, force_update=False):
     Celery-задача для парсинга одной вакансии по ID.
     Возвращает результат сохранения/обновления.
     """
+    import logging
+    
+    # Получаем логгер для модуля
+    logger = logging.getLogger('celery.module.headhunter')
+    
+    logger.info(f"Запуск задачи parse_single_vacancy_task для вакансии {vacancy_id}, force_update={force_update}")
+    
     parser = HeadHunterParser()
     existing_vacancy = Vacancy.objects.filter(hh_id=vacancy_id).first()
     if existing_vacancy and not force_update:
-        return {'status': 'exists', 'message': f'Вакансия {vacancy_id} уже есть в базе'}
+        msg = f'Вакансия {vacancy_id} уже есть в базе'
+        logger.info(msg)
+        return {'status': 'exists', 'message': msg}
+    
     vacancy_data = parser.get_vacancy_details(vacancy_id)
     if not vacancy_data or not isinstance(vacancy_data, dict) or 'id' not in vacancy_data:
-        return {'status': 'error', 'message': f'Вакансия {vacancy_id} не найдена или данные некорректны'}
+        msg = f'Вакансия {vacancy_id} не найдена или данные некорректны'
+        logger.error(msg)
+        return {'status': 'error', 'message': msg}
+    
     vacancy = parser.parse_vacancy(vacancy_data)
     if not vacancy:
-        return {'status': 'error', 'message': 'Ошибка при парсинге вакансии'}
+        msg = 'Ошибка при парсинге вакансии'
+        logger.error(msg)
+        return {'status': 'error', 'message': msg}
     if existing_vacancy:
         if force_update:
             new_data = {
@@ -79,6 +108,7 @@ def parse_single_vacancy_task(vacancy_id, force_update=False):
                 'salary_from': vacancy.salary_from,
                 'salary_to': vacancy.salary_to,
                 'salary_currency': vacancy.salary_currency,
+                'salary_gross': vacancy.salary_gross,
                 'city': vacancy.city,
                 'address': vacancy.address,
                 'description': vacancy.description,

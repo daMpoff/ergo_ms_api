@@ -1,27 +1,22 @@
 """
 Основной конфигурационный файл Celery для Django-приложения.
-Отвечает за инициализацию Celery, настройку периодических задач и автоматическое обнаружение задач.
+Отвечает за инициализацию Celery и автоматическое обнаружение задач.
 
 Функциональность:
     - Инициализация Celery приложения
     - Настройка интеграции с Django
     - Автоматическое обнаружение задач из установленных приложений
-    - Полное логирование в файлы
+    - Модульная система конфигурации
 """
 
 import os
-from datetime import timedelta
 
 from celery import Celery
-from celery.schedules import crontab
 
 from django.conf import settings
 
 from src.core.utils.auto_api.auto_config import get_env_deploy_type
-
-# Настройки логирования для Celery
-import logging
-from logging.handlers import RotatingFileHandler
+from src.core.utils.celery.manager import CeleryModuleManager
 
 # Определение типа развертывания и настройка переменной окружения Django
 deploy_type = get_env_deploy_type()
@@ -32,10 +27,15 @@ celery_app = Celery('src')
 celery_app.config_from_object('django.conf:settings', namespace='CELERY')
 celery_app.autodiscover_tasks(lambda: settings.INSTALLED_APPS)
 
+# Инициализация менеджера модулей
+module_manager = CeleryModuleManager()
+
 # Настройка логирования Celery
 def setup_celery_logging():
-    """Настраивает логирование для Celery"""
+    """Настраивает основное логирование для Celery"""
     import os
+    import logging
+    from logging.handlers import RotatingFileHandler
     
     # Создаем директорию для логов если её нет
     log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'logs')
@@ -123,20 +123,15 @@ def setup_celery_logging():
     broker_file_handler.setLevel(logging.INFO)
     broker_file_handler.setFormatter(log_formatter)
     broker_logger.addHandler(broker_file_handler)
-    
-    # Отключаем вывод в консоль для продакшена
-    if os.environ.get('DJANGO_SETTINGS_MODULE') == 'src.settings.production':
-        # В продакшене только файловое логирование
-        pass
-    else:
-        # В разработке добавляем консольный вывод
-        console_handler = logging.StreamHandler()
-        console_handler.setLevel(logging.INFO)
-        console_handler.setFormatter(log_formatter)
-        celery_logger.addHandler(console_handler)
-        worker_logger.addHandler(console_handler)
-        beat_logger.addHandler(console_handler)
-        tasks_logger.addHandler(console_handler)
+
+    # В разработке добавляем консольный вывод
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(log_formatter)
+    celery_logger.addHandler(console_handler)
+    worker_logger.addHandler(console_handler)
+    beat_logger.addHandler(console_handler)
+    tasks_logger.addHandler(console_handler)
 
 # Настраиваем логирование Celery
 setup_celery_logging()
@@ -146,42 +141,19 @@ celery_app.conf.update(
     beat_schedule_filename="celery/celerybeat-schedule",
     broker_url='sqla+sqlite:///celerydb.sqlite',
     result_backend='db+sqlite:///results.sqlite',
-    task_routes={
-        'src.modules.analysis_porosity.tasks.*': {'queue': 'porosity_analysis'},
-        'src.modules.video_analysis.tasks.*': {'queue': 'video_analysis'},
-    },
+    
+    # Маршруты задач из всех модулей
+    task_routes=module_manager.get_all_task_routes(),
+    
     task_default_queue='default',
-    task_queues={
-        'default': {},
-        'porosity_analysis': {
-            'exchange': 'porosity_analysis',
-            'routing_key': 'porosity_analysis',
-        },
-        'video_analysis': {
-            'exchange': 'video_analysis',
-            'routing_key': 'video_analysis',
-        },
-    },
-    # Настройки для задач анализа пористости (ограничения сняты)
-    task_annotations={
-        'src.modules.analysis_porosity.tasks.run_porosity_analysis': {
-            'time_limit': 3600,   # Увеличен таймаут до 1 часа
-            'soft_time_limit': 3300,  # Мягкий таймаут 55 минут
-        },
-        'src.modules.video_analysis.tasks.translate_video_analysis': {
-            'time_limit': 7200,   # Таймаут 2 часа для команды перевода
-            'soft_time_limit': 6900,  # Мягкий таймаут 1 час 55 минут
-        },
-        'src.modules.vacancies_parser.headhunter.tasks.parse_hh_vacancies_task': {
-            'time_limit': 7200,   # Таймаут 2 часа для команды перевода
-            'soft_time_limit': 6900,  # Мягкий таймаут 1 час 55 минут
-        },
-        'src.modules.vacancies_parser.headhunter.tasks.parse_single_vacancy_task': {
-            'time_limit': 7200,   # Таймаут 2 часа для команды перевода
-            'soft_time_limit': 6900,  # Мягкий таймаут 1 час 55 минут
-        },
-    },
-    # Настройки воркеров для очереди анализа пористости
+    
+    # Очереди задач из всех модулей
+    task_queues=module_manager.get_all_task_queues(),
+    
+    # Аннотации задач из всех модулей
+    task_annotations=module_manager.get_all_task_annotations(),
+    
+    # Настройки воркеров
     task_acks_late=True,  # Подтверждаем задачи только после выполнения
     
     # Настройки логирования Celery
@@ -190,4 +162,7 @@ celery_app.conf.update(
     worker_log_color=False,
     worker_redirect_stdouts=False,
     worker_redirect_stdouts_level='INFO',
+    
+    # Дополнительные настройки из модулей
+    **module_manager.get_additional_configs()
 )

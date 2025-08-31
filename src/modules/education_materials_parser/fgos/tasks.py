@@ -4,7 +4,7 @@ from src.modules.education_materials_parser.fgos.scripts import FgosParser
 from src.modules.education_materials_parser.fgos.models import FgosParsingSession
 
 
-@shared_task(bind=True, name='fgos.parse_all_documents')
+@shared_task(bind=True)
 def parse_all_fgos_documents(self):
     """
     Celery задача для полного парсинга всех документов ФГОС
@@ -36,7 +36,7 @@ def parse_all_fgos_documents(self):
         }
 
 
-@shared_task(bind=True, name='fgos.download_missing_files')
+@shared_task(bind=True)
 def download_missing_fgos_files(self):
     """
     Celery задача для скачивания недостающих PDF файлов
@@ -112,7 +112,7 @@ def download_missing_fgos_files(self):
         }
 
 
-@shared_task(bind=True, name='fgos.update_existing_documents')
+@shared_task(bind=True)
 def update_existing_fgos_documents(self):
     """
     Celery задача для обновления существующих документов ФГОС
@@ -184,7 +184,7 @@ def update_existing_fgos_documents(self):
         }
 
 
-@shared_task(bind=True, name='fgos.cleanup_orphaned_files')
+@shared_task(bind=True)
 def cleanup_orphaned_fgos_files(self):
     """
     Celery задача для очистки файлов без соответствующих записей в БД
