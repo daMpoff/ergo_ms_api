@@ -1,11 +1,15 @@
 import uuid
 import os
+import logging
 from pathlib import Path
 
 from django.db import models
 from django.contrib.auth import get_user_model
 
 from src.config.settings.static import MEDIA_ROOT
+
+# Получаем логгер для модуля
+logger = logging.getLogger('video_analysis')
 
 User = get_user_model()
 

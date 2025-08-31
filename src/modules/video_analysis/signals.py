@@ -1,9 +1,13 @@
 import shutil
+import logging
 
 from django.db.models.signals import pre_delete
 from django.dispatch import receiver
 
 from src.modules.video_analysis.models import VideoAnalysis
+
+# Получаем логгер для модуля
+logger = logging.getLogger('video_analysis')
 
 
 @receiver(pre_delete, sender=VideoAnalysis)
@@ -15,12 +19,12 @@ def cleanup_video_analysis_files(sender, instance, **kwargs):
         # Удаляем сегменты субтитров (они удалятся автоматически из-за CASCADE)
         segments_count = instance.get_subtitle_segments_count()
         if segments_count > 0:
-            print(f"Удаление {segments_count} сегментов субтитров для анализа {instance.id}")
+            logger.info(f"Удаление {segments_count} сегментов субтитров для анализа {instance.id}")
         
         # Удаляем папку анализа
         analysis_dir = instance.analysis_dir
         if analysis_dir.exists():
             shutil.rmtree(analysis_dir)
-            print(f"Удалена папка анализа {instance.id}")
+            logger.info(f"Удалена папка анализа {instance.id}")
     except Exception as e:
-        print(f"Ошибка при удалении файлов анализа {instance.id}: {e}") 
+        logger.error(f"Ошибка при удалении файлов анализа {instance.id}: {e}") 
