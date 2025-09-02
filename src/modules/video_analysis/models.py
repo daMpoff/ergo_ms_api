@@ -74,7 +74,10 @@ class VideoAnalysis(models.Model):
     
     def get_original_video_path(self):
         """Возвращает путь к исходному видео"""
-        return str(Path(MEDIA_ROOT) / 'video_analysis' / 'initial_video' / f'{self.title}.mp4')
+        if self.original_video:
+            return str(Path(MEDIA_ROOT) / self.original_video)
+        # Fallback на старую логику для совместимости
+        return str(Path(MEDIA_ROOT) / 'video_analysis' / 'initial_video' / f'{self.id}.mp4')
     
     def get_audio_path(self):
         """Возвращает путь к аудио файлу"""
@@ -112,13 +115,132 @@ class VideoAnalysis(models.Model):
         self.save()
     
     def cleanup_files(self):
-        """Удаляет всю папку с результатами анализа"""
+        """Удаляет всю папку с результатами анализа и исходный видео файл по UUID"""
         try:
             import shutil
+            from src.config.settings.static import MEDIA_ROOT
+            
+            # Удаляем папку с результатами
             if self.analysis_dir.exists():
                 shutil.rmtree(self.analysis_dir)
-        except Exception:
-            pass
+                logger.debug(f"Удалена папка с результатами: {self.analysis_dir}")
+            
+            # Удаляем исходный видео файл по UUID
+            if self.original_video:
+                # Путь к исходному файлу уже сохранен в модели
+                original_video_path = Path(MEDIA_ROOT) / self.original_video
+                if original_video_path.exists():
+                    original_video_path.unlink()
+                    logger.debug(f"Удален исходный видео файл по UUID: {original_video_path}")
+                else:
+                    logger.warning(f"Исходный видео файл не найден: {original_video_path}")
+            else:
+                # Fallback: пытаемся удалить по UUID + расширение
+                media_root = Path(MEDIA_ROOT)
+                initial_dir = media_root / 'video_analysis' / 'initial_video'
+                
+                # Ищем файлы с UUID в имени
+                for file_path in initial_dir.glob(f"{self.id}.*"):
+                    try:
+                        file_path.unlink()
+                        logger.debug(f"Удален исходный файл по UUID (fallback): {file_path}")
+                    except Exception as e:
+                        logger.warning(f"Не удалось удалить файл {file_path}: {e}")
+                        
+        except Exception as e:
+            logger.warning(f"Ошибка при удалении файлов анализа {self.id}: {e}")
+    
+    def force_cleanup_all_files(self):
+        """Принудительно удаляет все файлы, связанные с анализом, по UUID"""
+        try:
+            import shutil
+            from src.config.settings.static import MEDIA_ROOT
+            
+            media_root = Path(MEDIA_ROOT)
+            
+            # 1. Удаляем папку с результатами
+            if self.analysis_dir.exists():
+                shutil.rmtree(self.analysis_dir)
+                logger.debug(f"Удалена папка с результатами: {self.analysis_dir}")
+            
+            # 2. Удаляем исходный видео файл по UUID
+            initial_dir = media_root / 'video_analysis' / 'initial_video'
+            
+            # Ищем все файлы, начинающиеся с UUID
+            uuid_pattern = f"{self.id}.*"
+            found_files = list(initial_dir.glob(uuid_pattern))
+            
+            if found_files:
+                for file_path in found_files:
+                    try:
+                        file_path.unlink()
+                        logger.debug(f"Удален исходный файл по UUID: {file_path}")
+                    except Exception as e:
+                        logger.warning(f"Не удалось удалить файл {file_path}: {e}")
+            else:
+                logger.info(f"Файлы с UUID {self.id} не найдены в {initial_dir}")
+            
+            # 3. Проверяем, есть ли файлы в других местах
+            # Ищем во всех подпапках video_analysis
+            video_analysis_root = media_root / 'video_analysis'
+            if video_analysis_root.exists():
+                for root, dirs, files in os.walk(video_analysis_root):
+                    for file in files:
+                        if file.startswith(str(self.id)):
+                            file_path = Path(root) / file
+                            try:
+                                file_path.unlink()
+                                logger.debug(f"Удален файл по UUID из {root}: {file}")
+                            except Exception as e:
+                                logger.warning(f"Не удалось удалить файл {file_path}: {e}")
+                                
+        except Exception as e:
+            logger.error(f"Критическая ошибка при принудительной очистке файлов анализа {self.id}: {e}")
+            raise
+    
+    @classmethod
+    def cleanup_orphaned_files(cls):
+        """Очищает осиротевшие файлы - файлы без привязки к анализам"""
+        try:
+            from src.config.settings.static import MEDIA_ROOT
+            import os
+            
+            media_root = Path(MEDIA_ROOT)
+            initial_dir = media_root / 'video_analysis' / 'initial_video'
+            
+            if not initial_dir.exists():
+                return
+            
+            # Получаем все UUID анализов из БД
+            existing_uuids = set(str(analysis.id) for analysis in cls.objects.all())
+            
+            # Ищем файлы в папке initial_video
+            orphaned_files = []
+            for file_path in initial_dir.iterdir():
+                if file_path.is_file():
+                    # Извлекаем UUID из имени файла (убираем расширение)
+                    file_uuid = file_path.stem
+                    
+                    # Проверяем, есть ли такой UUID в БД
+                    if file_uuid not in existing_uuids:
+                        orphaned_files.append(file_path)
+            
+            # Удаляем осиротевшие файлы
+            deleted_count = 0
+            for file_path in orphaned_files:
+                try:
+                    file_path.unlink()
+                    deleted_count += 1
+                    logger.info(f"Удален осиротевший файл: {file_path}")
+                except Exception as e:
+                    logger.warning(f"Не удалось удалить осиротевший файл {file_path}: {e}")
+            
+            logger.info(f"Очистка осиротевших файлов завершена. Удалено: {deleted_count}")
+            return deleted_count
+            
+        except Exception as e:
+            logger.error(f"Ошибка при очистке осиротевших файлов: {e}")
+            return 0
     
     def get_subtitle_segments_data(self):
         """Возвращает данные сегментов субтитров в удобном формате"""

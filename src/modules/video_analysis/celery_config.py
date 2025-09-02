@@ -63,7 +63,7 @@ class VideoAnalysisCeleryConfig(CeleryModuleConfig):
         """Дополнительные настройки для модуля анализа видео"""
         return {
             # Специфичные настройки для анализа видео
-            'video_analysis_max_concurrent_tasks': 1,  # Ограничиваем из-за ресурсов
-            'video_analysis_memory_limit': '4GB',
+            'video_analysis_max_concurrent_tasks': 4,  # Ограничиваем из-за ресурсов
+            'video_analysis_memory_limit': '8GB',
             'video_analysis_gpu_enabled': True,
         } 

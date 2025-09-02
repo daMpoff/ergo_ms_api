@@ -31,7 +31,7 @@ from src.modules.video_analysis.utils import (
 logger = logging.getLogger('video_analysis')
 
 @shared_task(bind=True)
-def translate_video_analysis(self, video_name, user_id=1, use_gpu=None):
+def translate_video_analysis(self, video_name, user_id=1, use_gpu=None, analysis_uuid=None, title=None):
     """
     Основная Celery задача: перевод видео, создание анализа в БД, сохранение всех файлов и сегментов.
     Все папки внутри media/video_analysis/.
@@ -52,7 +52,9 @@ def translate_video_analysis(self, video_name, user_id=1, use_gpu=None):
         results_root = Path(video_analysis_root) / 'results'
 
         # --- UUID анализа ---
-        analysis_uuid = str(uuid.uuid4())
+        if analysis_uuid is None:
+            logger.error("UUID анализа не передан, что недопустимо в новой логике")
+            raise ValueError("UUID анализа обязателен")
         results_path = Path(results_root) / analysis_uuid
         results_path.mkdir(parents=True, exist_ok=True)
         
@@ -66,37 +68,38 @@ def translate_video_analysis(self, video_name, user_id=1, use_gpu=None):
         video_path = Path(initial_video_dir) / video_name
         if not os.path.exists(video_path):
             raise Exception(f'Файл {video_path} не найден!')
+        
+        # Для UUID файлов base_name будет UUID анализа
         base_name = os.path.splitext(video_name)[0]
+        # Проверяем, что base_name соответствует analysis_uuid
+        if base_name != analysis_uuid:
+            logger.warning(f"base_name ({base_name}) не совпадает с analysis_uuid ({analysis_uuid}). Используем analysis_uuid.")
+            base_name = analysis_uuid
         
         logger.debug(f"video_path = {video_path}")
         logger.debug(f"base_name = {base_name}")
 
-        # --- Создаём VideoAnalysis ---
+        # --- Создаём или получаем VideoAnalysis ---
         try:
             user = User.objects.get(id=user_id)
             logger.info(f"Пользователь найден - {user.username} (ID: {user.id})")
         except User.DoesNotExist:
-            # Если пользователь не найден, создаем его или берем первого
             user = User.objects.first()
             if not user:
                 raise Exception(f'Пользователь с ID {user_id} не найден и нет других пользователей в системе')
             logger.warning(f"Пользователь с ID {user_id} не найден, используется первый пользователь - {user.username} (ID: {user.id})")
-        
-        # Логируем создание анализа
+
         from src.modules.video_analysis.utils import log_model_operation
-        log_model_operation('create', 'VideoAnalysis', 
-                           analysis_uuid=analysis_uuid, 
-                           user_id=user.id, 
-                           title=base_name)
-        
-        analysis = VideoAnalysis.objects.create(
-            id=analysis_uuid,
-            user=user,
-            title=base_name,
-            description=f'Автоматический анализ для файла {video_name}',
-            original_video=f'video_analysis/initial_video/{video_name}',
-            status='processing',
-        )
+        # Ищем существующий анализ (должен быть создан во views)
+        try:
+            analysis = VideoAnalysis.objects.get(id=analysis_uuid, user=user)
+            # Обновляем статус на processing
+            analysis.update_status('processing')
+            log_model_operation('update', 'VideoAnalysis', analysis_uuid=analysis_uuid, status='processing')
+            logger.info(f"Найден анализ с ID {analysis.id}, статус обновлен на 'processing'")
+        except VideoAnalysis.DoesNotExist:
+            logger.error(f"Анализ с UUID {analysis_uuid} не найден для пользователя {user.id}")
+            raise ValueError(f"Анализ с UUID {analysis_uuid} не найден")
         
         logger.info(f"Создан анализ с ID {analysis.id}")
 

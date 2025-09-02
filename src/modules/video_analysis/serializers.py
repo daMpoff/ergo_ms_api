@@ -45,4 +45,41 @@ class VideoAnalysisSerializer(serializers.ModelSerializer):
     
     def get_segments_count(self, obj):
         """Возвращает количество сегментов субтитров"""
-        return obj.subtitle_segments.count() if hasattr(obj, 'subtitle_segments') else 0 
+        return obj.subtitle_segments.count() if hasattr(obj, 'subtitle_segments') else 0
+
+
+class BulkVideoAnalysisCreateSerializer(serializers.Serializer):
+    """Сериализатор для создания нескольких анализов одновременно"""
+    videos = serializers.ListField(
+        child=serializers.FileField(),
+        allow_empty=False,
+        max_length=10,  # Ограничиваем до 10 файлов за раз
+        help_text="Список видео файлов для анализа"
+    )
+    titles = serializers.ListField(
+        child=serializers.CharField(max_length=255, allow_blank=True),
+        required=False,
+        help_text="Список названий для анализов (опционально)"
+    )
+    
+    def validate(self, data):
+        videos = data.get('videos', [])
+        titles = data.get('titles', [])
+        
+        if titles and len(titles) != len(videos):
+            raise serializers.ValidationError(
+                "Количество названий должно соответствовать количеству видео файлов"
+            )
+        
+        return data
+
+
+class VideoAnalysisCreateSerializer(serializers.Serializer):
+    """Сериализатор для создания одного анализа"""
+    video = serializers.FileField(help_text="Видео файл для анализа")
+    title = serializers.CharField(
+        max_length=255, 
+        required=False, 
+        allow_blank=True,
+        help_text="Название анализа (опционально)"
+    ) 
