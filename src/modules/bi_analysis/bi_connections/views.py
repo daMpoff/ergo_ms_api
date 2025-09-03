@@ -11,6 +11,7 @@ from src.modules.bi_analysis.bi_connections.methods import CheckConnection
 
 from django.shortcuts import get_object_or_404
 from sqlalchemy import create_engine, text
+import os
 
 class ConnectionListCreateView(generics.ListCreateAPIView):
     queryset = Connection.objects.all()
@@ -140,3 +141,59 @@ class ConnectionTablesView(APIView):
         )
         result = client.query("SHOW TABLES")
         return [{"name": row[0], "schema": cfg.get("database")} for row in result.result_rows]
+
+class ConnectionFilesStatusView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        """Получить статус файлов для всех файловых подключений пользователя"""
+        from src.modules.bi_analysis.bi_datasets.models import Dataset
+        
+        # Получаем все файловые подключения пользователя
+        file_connections = Connection.objects.filter(
+            owner=request.user,
+            connector_type__icontains='file'
+        )
+        
+        result = {}
+        
+        for connection in file_connections:
+            try:
+                # Получаем файлы для подключения
+                files = Dataset.objects.filter(connection=connection)
+                files_data = []
+                
+                for file in files:
+                    files_data.append({
+                        'id': file.id,
+                        'name': file.name,
+                        'file_path': file.file_path,
+                        'missing': not file.file_path or not os.path.exists(file.file_path) if file.file_path else True,
+                        'exists': file.file_path and os.path.exists(file.file_path) if file.file_path else False,
+                        'status': 'missing' if not file.file_path or not os.path.exists(file.file_path) else 'ok'
+                    })
+                
+                has_missing_files = len(files_data) == 0
+                has_problematic_files = any(
+                    file.get('missing', False) or 
+                    not file.get('exists', False) or
+                    file.get('status') in ['missing', 'error']
+                    for file in files_data
+                )
+                
+                result[connection.id] = {
+                    'hasMissingFiles': has_missing_files,
+                    'hasProblematicFiles': has_problematic_files,
+                    'filesCount': len(files_data),
+                    'files': files_data
+                }
+                
+            except Exception as e:
+                result[connection.id] = {
+                    'hasMissingFiles': True,
+                    'hasProblematicFiles': True,
+                    'filesCount': 0,
+                    'error': str(e)
+                }
+        
+        return Response(result)
