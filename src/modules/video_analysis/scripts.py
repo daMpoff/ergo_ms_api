@@ -3,6 +3,8 @@ import json
 import os
 import html
 import subprocess
+import logging
+import time
 
 from pathlib import Path
 
@@ -13,6 +15,9 @@ from moviepy.editor import VideoFileClip
 from transformers import MarianMTModel, MarianTokenizer
 
 from src.config.settings.static import MEDIA_ROOT, PACKAGES_PATH, TRAINED_MODELS_PATH
+
+# Получаем логгер для модуля
+logger = logging.getLogger('video_analysis')
 
 # Импорт для GPU поддержки
 import torch
@@ -58,13 +63,13 @@ def get_device(use_gpu=None):
     
     if use_gpu and torch.cuda.is_available():
         _device = 'cuda'
-        print(f"Используется GPU: {torch.cuda.get_device_name()}")
+        logger.info(f"Используется GPU: {torch.cuda.get_device_name()}")
     else:
         _device = 'cpu'
         if use_gpu and not torch.cuda.is_available():
-            print("GPU запрошен, но недоступен. Используется CPU.")
+            logger.warning("GPU запрошен, но недоступен. Используется CPU.")
         else:
-            print("Используется CPU")
+            logger.info("Используется CPU")
     
     return _device
 
@@ -79,9 +84,9 @@ def _load_translation_model(translation_model_name=None, use_gpu=None):
     global _translation_model, _translation_tokenizer
     
     if _translation_model is None or _translation_tokenizer is None:
-        print("Загрузка модели перевода...")
+        logger.info("Загрузка модели перевода...")
         if translation_model_name is None:
-            translation_model_name = str(TRAINED_MODELS_PATH / "opus-mt-ru-fr")
+            translation_model_name = str(Path(TRAINED_MODELS_PATH) / "opus-mt-ru-fr")
         
         device = get_device(use_gpu)
         
@@ -91,7 +96,7 @@ def _load_translation_model(translation_model_name=None, use_gpu=None):
         # Перемещаем модель на нужное устройство
         _translation_model = _translation_model.to(device)
         
-        print(f"Модель перевода загружена на {device}!")
+        logger.info(f"Модель перевода загружена на {device}!")
     
     return _translation_model, _translation_tokenizer
 
@@ -102,12 +107,12 @@ def _load_vosk_model(model_path=None):
     global _vosk_model
     
     if _vosk_model is None:
-        print("Загрузка модели распознавания речи...")
+        logger.info("Загрузка модели распознавания речи...")
         if model_path is None:
-            model_path = str(TRAINED_MODELS_PATH / "vosk-model-ru-0.42")
+            model_path = str(Path(TRAINED_MODELS_PATH) / "vosk-model-ru-0.42")
         
         _vosk_model = Model(model_path)
-        print("Модель распознавания речи загружена!")
+        logger.info("Модель распознавания речи загружена!")
     
     return _vosk_model
 
@@ -120,10 +125,10 @@ def preload_models(translation_model_name=None, vosk_model_path=None, use_gpu=No
     vosk_model_path (str): Путь к модели Vosk
     use_gpu (bool): Использовать GPU для моделей перевода
     """
-    print("Предварительная загрузка моделей...")
+    logger.info("Предварительная загрузка моделей...")
     _load_translation_model(translation_model_name, use_gpu)
     _load_vosk_model(vosk_model_path)
-    print("Все модели загружены и готовы к использованию!")
+    logger.info("Все модели загружены и готовы к использованию!")
 
 def translate_text_ru_to_fr(text, model=None, tokenizer=None, use_gpu=None):
     """
@@ -174,14 +179,22 @@ def extract_audio(video_path, output_audio_path):
     
     Параметры:
     video_path (str): Путь к видеофайлу
-    output_audio_path (str): Путь для сохранения аудио
+    output_audio_path (output_audio_path): Путь для сохранения аудио
     
     Возвращает:
     bool: Успешность операции
     """
     try:
+        logger.info(f"Начинаю извлечение аудио из {video_path}")
+        logger.debug(f"Выходной файл: {output_audio_path}")
+        
         video = VideoFileClip(video_path)
         audio = video.audio
+        
+        if audio is None:
+            logger.error("Ошибка: видео не содержит аудио")
+            video.close()
+            return False
         
         # Указываем параметры для создания моно WAV PCM
         audio.write_audiofile(
@@ -192,9 +205,20 @@ def extract_audio(video_path, output_audio_path):
         
         audio.close()
         video.close()
-        return True
+        
+        # Проверяем, что файл создался
+        if os.path.exists(output_audio_path):
+            file_size = os.path.getsize(output_audio_path)
+            logger.info(f"Аудио успешно извлечено. Размер файла: {file_size} байт")
+            return True
+        else:
+            logger.error("Ошибка: выходной аудиофайл не создался")
+            return False
+            
     except Exception as e:
-        print(f"Ошибка при извлечении аудио: {e}")
+        import traceback
+        logger.error(f"Ошибка при извлечении аудио: {e}")
+        logger.error(f"Полный стек ошибки:\n{traceback.format_exc()}")
         return False
 
 def convert_wav_to_bilingual_subtitles(wav_file_path, output_srt_path=None, model_path=None, translation_model_name=None, use_gpu=None):
@@ -224,15 +248,26 @@ def convert_wav_to_bilingual_subtitles(wav_file_path, output_srt_path=None, mode
         output_srt_path = str(output_srt_path)
     
     # Открываем WAV файл
-    wf = wave.open(wav_file_path, "rb")
+    try:
+        wf = wave.open(wav_file_path, "rb")
+    except Exception as e:
+        logger.error(f"Ошибка при открытии WAV файла {wav_file_path}: {e}")
+        return None, None
     
     # Проверяем частоту дискретизации
     if wf.getnchannels() != 1 or wf.getsampwidth() != 2 or wf.getcomptype() != "NONE":
-        print("Аудиофайл должен быть в формате WAV mono PCM")
+        logger.error("Аудиофайл должен быть в формате WAV mono PCM")
+        wf.close()
         return None, None
     
     # Получаем частоту дискретизации для расчета времени
-    frame_rate = wf.getframerate()
+    frame_rate = float(wf.getframerate())  # Явно приводим к float
+    
+    # Проверяем корректность полученных значений
+    if frame_rate <= 0:
+        logger.error(f"Ошибка: некорректная частота дискретизации: {frame_rate}")
+        wf.close()
+        return None, None
     
     # Создаем распознаватель с указанной частотой дискретизации
     recognizer = KaldiRecognizer(vosk_model, frame_rate)
@@ -243,9 +278,15 @@ def convert_wav_to_bilingual_subtitles(wav_file_path, output_srt_path=None, mode
         pass  # Просто создаем пустой файл
     
     # Переменные для отслеживания прогресса и нумерации субтитров
-    total_frames = wf.getnframes()
+    total_frames = int(wf.getnframes())  # Явно приводим к int
     processed_frames = 0
     subtitle_count = 0
+    
+    # Проверяем корректность полученных значений
+    if total_frames <= 0:
+        logger.error(f"Ошибка: некорректное количество кадров: {total_frames}")
+        wf.close()
+        return None, None
     
     # Создаем список для хранения результатов для DataFrame
     recognition_results = []
@@ -261,8 +302,23 @@ def convert_wav_to_bilingual_subtitles(wav_file_path, output_srt_path=None, mode
             break
         
         processed_frames += FRAME_CHUNK_SIZE
-        progress = min(100, int(processed_frames / total_frames * 100))
-        print(f"Прогресс распознавания: {progress}%", end="\r")
+        
+        # Дополнительная отладочная информация каждые 10000 кадров
+        if processed_frames % 10000 == 0:
+            logger.debug(f"processed_frames = {processed_frames} (тип: {type(processed_frames)})")
+        
+        # Проверяем, что переменные являются числами
+        if not isinstance(processed_frames, (int, float)) or not isinstance(total_frames, (int, float)):
+            logger.error(f"Ошибка: неверные типы переменных - processed_frames: {type(processed_frames)}, total_frames: {type(total_frames)}")
+            break
+            
+        # Безопасное вычисление прогресса
+        try:
+            progress = min(100, int(processed_frames / total_frames * 100))
+            logger.debug(f"Прогресс распознавания: {progress}%")
+        except (TypeError, ZeroDivisionError) as e:
+            logger.error(f"Ошибка при вычислении прогресса: {e}")
+            break
         
         if recognizer.AcceptWaveform(data):
             subtitle_count += 1
@@ -288,9 +344,14 @@ def convert_wav_to_bilingual_subtitles(wav_file_path, output_srt_path=None, mode
                     end_time = result['result'][-1]['end']
                 else:
                     # Если нет детальной информации о словах, используем приблизительное время
-                    current_frame = processed_frames - FRAME_CHUNK_SIZE
-                    start_time = max(0, (current_frame - FRAME_CHUNK_SIZE) / frame_rate)
-                    end_time = current_frame / frame_rate
+                    try:
+                        current_frame = processed_frames - FRAME_CHUNK_SIZE
+                        start_time = max(0, (current_frame - FRAME_CHUNK_SIZE) / frame_rate)
+                        end_time = current_frame / frame_rate
+                    except (TypeError, ZeroDivisionError) as e:
+                        logger.error(f"Ошибка при вычислении времени: {e}")
+                        start_time = 0
+                        end_time = 1
                 
                 # Сохраняем результат для DataFrame
                 recognition_results.append({
@@ -326,8 +387,13 @@ def convert_wav_to_bilingual_subtitles(wav_file_path, output_srt_path=None, mode
             end_time = final_result['result'][-1]['end']
         else:
             # Если нет детальной информации о словах, используем приблизительное время
-            start_time = (processed_frames - FRAME_CHUNK_SIZE) / frame_rate
-            end_time = processed_frames / frame_rate
+            try:
+                start_time = (processed_frames - FRAME_CHUNK_SIZE) / frame_rate
+                end_time = processed_frames / frame_rate
+            except (TypeError, ZeroDivisionError) as e:
+                logger.error(f"Ошибка при вычислении финального времени: {e}")
+                start_time = 0
+                end_time = 1
         
         # Сохраняем финальный результат для DataFrame
         recognition_results.append({
@@ -344,15 +410,18 @@ def convert_wav_to_bilingual_subtitles(wav_file_path, output_srt_path=None, mode
             f.write(f"{format_srt_time(start_time)} --> {format_srt_time(end_time)}\n")
             f.write(f"{final_fr_text}\n\n")
     
-    print(f"\nРаспознавание и перевод завершены. Субтитры сохранены в файл {output_srt_path}")
+    logger.info(f"Распознавание и перевод завершены. Субтитры сохранены в файл {output_srt_path}")
     
     # Выводим статистику времени
     if translation_count > 0:
         avg_translation_time = total_translation_time / translation_count
-        print(f"Статистика перевода:")
-        print(f"  Всего переводов: {translation_count}")
-        print(f"  Общее время перевода: {total_translation_time:.2f} сек")
-        print(f"  Среднее время на перевод: {avg_translation_time:.3f} сек")
+        logger.info(f"Статистика перевода:")
+        logger.info(f"  Всего переводов: {translation_count}")
+        logger.info(f"  Общее время перевода: {total_translation_time:.2f} сек")
+        logger.info(f"  Среднее время на перевод: {avg_translation_time:.3f} сек")
+    
+    # Закрываем WAV файл
+    wf.close()
     
     # Создаем DataFrame с результатами
     df_results = pd.DataFrame(recognition_results)
@@ -383,11 +452,11 @@ def add_subtitles_to_video(video_path, srt_path, output_video_path, ffmpeg_path=
     
     # Проверяем существование файлов
     if not os.path.exists(video_path):
-        print(f"Ошибка: видеофайл не найден: {video_path}")
+        logger.error(f"Ошибка: видеофайл не найден: {video_path}")
         return False
     
     if not os.path.exists(srt_path):
-        print(f"Ошибка: файл субтитров не найден: {srt_path}")
+        logger.error(f"Ошибка: файл субтитров не найден: {srt_path}")
         return False
     
     # Создаём директорию для выходного файла, если её нет
@@ -412,11 +481,11 @@ def add_subtitles_to_video(video_path, srt_path, output_video_path, ffmpeg_path=
     ]
     
     try:
-        print(f"Выполняем команду FFmpeg: {' '.join(command)}")
+        logger.info(f"Выполняем команду FFmpeg: {' '.join(command)}")
         subprocess.run(command, check=True)
-        print(f"Субтитры успешно добавлены. Результат сохранен в {output_video_path}")
+        logger.info(f"Субтитры успешно добавлены. Результат сохранен в {output_video_path}")
         return True
     except subprocess.CalledProcessError as e:
-        print(f"Ошибка при добавлении субтитров: {e}")
-        print(f"Команда, которая вызвала ошибку: {' '.join(command)}")
+        logger.error(f"Ошибка при добавлении субтитров: {e}")
+        logger.error(f"Команда, которая вызвала ошибку: {' '.join(command)}")
         return False

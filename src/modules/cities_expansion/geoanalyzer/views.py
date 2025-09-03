@@ -16,7 +16,7 @@ from src.modules.cities_expansion.models import Task, TaskResult
 from src.modules.cities_expansion.geoanalyzer.models import GroupCoords
 
 from src.modules.cities_expansion.geoanalyzer.methods import parse_coordinate
-from src.modules.cities_expansion.geoanalyzer.methods import process_map_group
+from src.modules.cities_expansion.geoanalyzer.tasks import process_map_group
 
 class UploadMaps(BaseAPIView):
     permission_classes = [IsAuthenticated]

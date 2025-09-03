@@ -7,8 +7,8 @@ class VideoAnalysisConfig(AppConfig):
     verbose_name = 'Видео-анализ'
     
     # Конфигурация по умолчанию для GPU/CPU
-    USE_GPU = False  # По умолчанию использовать CPU
-    DEVICE = 'cpu'   # Устройство по умолчанию
+    USE_GPU = True  # По умолчанию использовать CPU
+    DEVICE = 'gpu'   # Устройство по умолчанию
     CUDA_VISIBLE_DEVICES = '0'  # Номер GPU устройства
     
     def ready(self):

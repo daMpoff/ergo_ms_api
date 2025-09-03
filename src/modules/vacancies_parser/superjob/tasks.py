@@ -10,7 +10,7 @@ from src.modules.vacancies_parser.superjob.scripts import (
 logger = logging.getLogger(__name__)
 
 
-@shared_task(bind=True, name='parse_superjob_vacancies')
+@shared_task(bind=True)
 def parse_superjob_vacancies_task(self, 
                                  text: str = None,
                                  town: str = None,
@@ -79,7 +79,7 @@ def parse_superjob_vacancies_task(self,
         }
 
 
-@shared_task(bind=True, name='parse_all_superjob_vacancies')
+@shared_task(bind=True)
 def parse_all_superjob_vacancies_task(self,
                                      max_pages_per_query: int = 3,
                                      delay: float = 1.0,
@@ -133,7 +133,7 @@ def parse_all_superjob_vacancies_task(self,
         }
 
 
-@shared_task(bind=True, name='get_superjob_vacancy_details')
+@shared_task(bind=True)
 def get_superjob_vacancy_details_task(self,
                                      vacancy_id: str,
                                      api_key: str = None) -> Dict[str, Any]:
@@ -187,7 +187,7 @@ def get_superjob_vacancy_details_task(self,
         }
 
 
-@shared_task(bind=True, name='parse_superjob_vacancies_by_config')
+@shared_task(bind=True)
 def parse_superjob_vacancies_by_config_task(self, config: Dict[str, Any]) -> Dict[str, Any]:
     """
     Задача Celery для парсинга вакансий SuperJob по конфигурации
