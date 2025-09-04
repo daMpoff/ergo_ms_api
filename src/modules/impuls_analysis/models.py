@@ -52,17 +52,6 @@ class ImpulsAnalysis(models.Model):
     p_static = models.FloatField(null=True, blank=True, verbose_name='Pст, %')
     energy_j = models.FloatField(null=True, blank=True, verbose_name='Энергия удара, Дж')
     
-    # Изображения анализа
-    detailed_image = models.ImageField(
-        upload_to='impuls_analysis/analyses/',
-        null=True, blank=True,
-        verbose_name='Подробный график'
-    )
-    plain_image = models.ImageField(
-        upload_to='impuls_analysis/analyses/',
-        null=True, blank=True,
-        verbose_name='Базовый график'
-    )
     
     error_message = models.TextField(blank=True, verbose_name='Сообщение об ошибке')
     
@@ -77,39 +66,26 @@ class ImpulsAnalysis(models.Model):
     def __str__(self):
         return f"{self.title} ({self.get_status_display()})"
     
-    def get_detailed_image_upload_path(self, filename):
-        """Генерирует путь для подробного изображения с UUID"""
-        ext = filename.split('.')[-1]
-        return f'impuls_analysis/analyses/{self.id}_detailed.{ext}'
-    
-    def get_plain_image_upload_path(self, filename):
-        """Генерирует путь для базового изображения с UUID"""
-        ext = filename.split('.')[-1]
-        return f'impuls_analysis/analyses/{self.id}_plain.{ext}'
     
     def delete_analysis_files(self):
-        """Удаляет файлы анализа (изображения)"""
+        """Удаляет файлы анализа (изображения) по UUID"""
         import os
         from django.conf import settings
         
         files_deleted = 0
-        if self.detailed_image:
-            try:
-                file_path = os.path.join(settings.MEDIA_ROOT, self.detailed_image.name)
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-                    files_deleted += 1
-            except Exception:
-                pass
         
-        if self.plain_image:
-            try:
-                file_path = os.path.join(settings.MEDIA_ROOT, self.plain_image.name)
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-                    files_deleted += 1
-            except Exception:
-                pass
+        # Ищем и удаляем изображения по UUID
+        analysis_dir = os.path.join(settings.MEDIA_ROOT, 'impuls_analysis', 'analyses')
+        if os.path.exists(analysis_dir):
+            for filename in os.listdir(analysis_dir):
+                if filename.startswith(str(self.id)):
+                    try:
+                        file_path = os.path.join(analysis_dir, filename)
+                        if os.path.isfile(file_path):
+                            os.remove(file_path)
+                            files_deleted += 1
+                    except Exception:
+                        pass
         
         return files_deleted
     

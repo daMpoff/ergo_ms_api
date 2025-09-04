@@ -64,3 +64,6 @@ class Command(BaseCommand):
 		self.stdout.write(self.style.SUCCESS(
 			f'Задача анализа запущена (task_id={async_result.id}). Протокол: {protocol_number}, user_id={user_id}'
 		))
+		self.stdout.write(self.style.WARNING(
+			'Примечание: После завершения анализа будет автоматически создан Word протокол и сохранен в папке media/impuls_analysis/protocols/'
+		))

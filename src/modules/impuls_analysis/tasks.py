@@ -21,6 +21,7 @@ from src.modules.impuls_analysis.models import (
     ImpulsFile,
 )
 from src.modules.impuls_analysis.utils import ImpulsExcelProcessor, run_protocol_analysis
+from src.modules.impuls_analysis.word_processor import generate_protocol_document
 
 # Получаем логгеры
 logger = logging.getLogger('impuls_analysis')
@@ -164,8 +165,6 @@ def create_analysis_by_protocol(self, protocol_number: str, user_id: int, title:
         analysis.protocol_number = results['protocol_number']
         analysis.p_static = results['p_static']
         analysis.energy_j = results['energy_j']
-        analysis.detailed_image = results['detailed_image']
-        analysis.plain_image = results['plain_image']
         analysis.status = 'completed'
         analysis.completed_at = timezone.now()
         analysis.save()
@@ -189,13 +188,15 @@ def create_analysis_by_protocol(self, protocol_number: str, user_id: int, title:
         if extremum_objects:
             ImpulsExtremum.objects.bulk_create(extremum_objects, batch_size=100)
 
+        # Генерируем Word протокол
+        protocol_path = generate_protocol_document(protocol_number, str(analysis.id))
+        
         analysis_logger.info(f"Анализ создан {analysis.id} для протокола {protocol_number}, экстремумов: {len(extremum_objects)}")
         return {
             'analysis_id': str(analysis.id), 
             'protocol_number': protocol_number, 
             'extrema_count': len(extremum_objects),
-            'detailed_image': analysis.detailed_image.url if analysis.detailed_image else None,
-            'plain_image': analysis.plain_image.url if analysis.plain_image else None,
+            'protocol_path': protocol_path,
         }
 
     except Exception as e:

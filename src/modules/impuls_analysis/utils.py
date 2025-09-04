@@ -814,11 +814,11 @@ def run_protocol_analysis(protocol_number: str, analysis_id: str = None) -> Dict
 		plt.fill_between(v[i0:i1 + 1], 0, f[i0:i1 + 1], alpha=0.25)
 		h = float(np.max(f[i0:i1 + 1]) + 150000.0)
 		max_h_used = max(max_h_used, h)
-		plt.vlines(v[i0], 0, h, colors='gray', linestyles='--', alpha=0.7)
-		plt.vlines(v[i1], 0, h, colors='gray', linestyles='--', alpha=0.7)
+		plt.vlines(v[i0], 0, h, colors='black', linestyles='--', alpha=0.7)
+		plt.vlines(v[i1], 0, h, colors='black', linestyles='--', alpha=0.7)
 		xm = (v[i0] + v[i1]) / 2.0
 		plt.annotate('', xy=(v[i1], h), xytext=(v[i0], h),
-		            arrowprops=dict(arrowstyle='<->', lw=1, color='gray', alpha=0.8))
+		            arrowprops=dict(arrowstyle='<->', lw=1, color='black', alpha=0.8))
 		t_offset = 0.02 * max(float(np.max(f)), 1.0)
 		plt.text(xm, h + t_offset, 'T', ha='center', va='bottom', fontsize=10)
 		S = float(np.trapz(f[i0:i1 + 1], v[i0:i1 + 1]))
@@ -846,10 +846,12 @@ def run_protocol_analysis(protocol_number: str, analysis_id: str = None) -> Dict
 					'v_start': v_start, 'v_end': v_end,
 				})
 	for k, S, xm in areas:
-		plt.text(xm, max(ON_THR * 1.1, float(np.max(f)) * 0.08), f'S{k}', ha='center', va='bottom', fontsize=9)
+		plt.text(xm, max(ON_THR * 1.1, float(np.max(f)) * 0.01), f'S{k}', 
+           ha='center', va='bottom', fontsize=9)
+          
 	plt.xlabel('Время, с')
 	plt.ylabel('Сила удара, Н')
-	plt.title(f'Энергия удара A={energy_j} Дж, Протокол {protocol_number}')
+	plt.title(f'Энергия удара A={energy_j} Дж')
 	upper = max(1000000.0, max_h_used * 1.08, float(np.max(f)) * 1.05)
 	plt.ylim(0, upper)
 	plt.yticks(np.arange(0, 1000001, 100000))
@@ -869,7 +871,7 @@ def run_protocol_analysis(protocol_number: str, analysis_id: str = None) -> Dict
 	plt.plot(v, f, linewidth=1.5, label=f'Pst={p_static}%')
 	plt.xlabel('Время, с')
 	plt.ylabel('Сила удара, Н')
-	plt.title(f'Энергия удара A={energy_j} Дж, Протокол {protocol_number}')
+	plt.title(f'Энергия удара A={energy_j} Дж')
 	plt.ylim(0, 1000000.0)
 	plt.yticks(np.arange(0, 1000001, 100000))
 	plt.gca().yaxis.set_major_formatter(fmt_int)
@@ -883,11 +885,28 @@ def run_protocol_analysis(protocol_number: str, analysis_id: str = None) -> Dict
 	plain_buffer.seek(0)
 	plt.close()
 
+	# Сохраняем изображения в файловую систему
+	from django.conf import settings
+	import os
+	
+	analyses_dir = os.path.join(settings.MEDIA_ROOT, 'impuls_analysis', 'analyses')
+	os.makedirs(analyses_dir, exist_ok=True)
+	
+	detailed_path = os.path.join(analyses_dir, f'{analysis_id}_detailed.png')
+	plain_path = os.path.join(analyses_dir, f'{analysis_id}_plain.png')
+	
+	# Сохраняем файлы
+	with open(detailed_path, 'wb') as f:
+		f.write(detailed_buffer.getvalue())
+	
+	with open(plain_path, 'wb') as f:
+		f.write(plain_buffer.getvalue())
+
 	return {
 		'protocol_number': protocol_number,
 		'p_static': p_static,
 		'energy_j': energy_j,
-		'detailed_image': ContentFile(detailed_buffer.getvalue(), name=f'{analysis_id}_detailed.png'),
-		'plain_image': ContentFile(plain_buffer.getvalue(), name=f'{analysis_id}_plain.png'),
+		'detailed_image_path': detailed_path,
+		'plain_image_path': plain_path,
 		'pulse_maxima': pulse_rows,
 	}
