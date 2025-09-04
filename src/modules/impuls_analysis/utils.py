@@ -5,13 +5,19 @@
 
 import logging
 import re
+import io
+
 from datetime import datetime
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Iterable
 
 from openpyxl import load_workbook
 from openpyxl.cell.cell import Cell
 
-from .models import ImpulsAnalysis
+from src.modules.impuls_analysis.models import (
+    ImpulsAnalysis,
+    ImpulsForceRecord,
+    ImpulsPlanRecord,
+)
 
 logger = logging.getLogger('impuls_analysis')
 
@@ -59,18 +65,6 @@ class ImpulsExcelProcessor:
         sheets_data: List[Dict[str, Any]] = []
 
         for ws in wb.worksheets:
-            print(ws.title)
-            sheet_title: str = ws.title or ''
-
-            # Из названия листа извлекаем число до пробела (например, "25 Дж" -> 25)
-            sheet_energy_value: Optional[float] = None
-            m = re.search(r"(-?\d+(?:[\.,]\d+)?)", sheet_title)
-            if m:
-                try:
-                    sheet_energy_value = float(m.group(1).replace(',', '.'))
-                except ValueError:
-                    sheet_energy_value = None
-
             # Общие значения для листа
             energy_j = self._get_numeric(ws, 'C5')  # Энергия удара, Дж
             velocity_ms = self._get_numeric(ws, 'D5')  # Скорость удара, м/с
@@ -79,14 +73,18 @@ class ImpulsExcelProcessor:
             # Сканируем протоколы: номера в G2, K2, O2, ... (через каждые 3 столбца)
             # Соответствующие проценты: G4, K4, O4, ...
             # Блок данных для каждого протокола: 3 столбца, начиная с F, пропуск 1 столбца, затем J, ...
-            protocol_header_cols = self._iter_cols(start_col='G', step=4)  # G,K,O,...
-            data_block_start_cols = self._iter_cols(start_col='F', step=4)  # F,J,N,...
+            protocol_header_cols = self._iter_cols(start_col='G', step=4) # G,K,O,...
+            data_block_start_cols  = self._iter_cols(start_col='F', step=4) # F,J,N,...
 
             protocols: List[Dict[str, Any]] = []
+            # Жесткие границы листа для предотвращения бесконечных обходов
+            max_row = ws.max_row or 0
+            max_col = ws.max_column or 0
 
             for (hdr_col_letter, data_col_letter) in zip(protocol_header_cols, data_block_start_cols):
-                # Ограничим количество итераций, чтобы не уйти в бесконечный цикл: максимум 100 блоков
-                if len(protocols) >= 100:
+                # Прерываем, если заголовочный столбец вышел за пределы фактически используемых столбцов
+                hdr_col_idx = self._col_letter_to_index(hdr_col_letter)
+                if hdr_col_idx > max_col:
                     break
 
                 header_cell_addr = f"{hdr_col_letter}2"
@@ -108,6 +106,13 @@ class ImpulsExcelProcessor:
                 force_col = self._next_col_letter(time_col)
                 freq_col = self._next_col_letter(force_col)
 
+                # Если любой из столбцов блока выходит за пределы заполненных столбцов — прекращаем обработку
+                time_idx = self._col_letter_to_index(time_col)
+                force_idx = self._col_letter_to_index(force_col)
+                freq_idx = self._col_letter_to_index(freq_col)
+                if max(time_idx, force_idx, freq_idx) > max_col:
+                    break
+
                 # Заголовки ожидаются на строке 5 для двух последних столбцов, время с 6-й строки
                 # Данные идут построчно до первой полностью пустой тройки ячеек
                 rows: List[Dict[str, Optional[float]]] = []
@@ -115,7 +120,7 @@ class ImpulsExcelProcessor:
                 empty_rows = 0
                 max_empty_rows = 50  # страховка на случай редких пустых вставок
 
-                while True:
+                while row_idx <= max_row:
                     t_val = self._get_numeric(ws, f"{time_col}{row_idx}")
                     f_val = self._get_numeric(ws, f"{force_col}{row_idx}")
                     fr_val = self._get_numeric(ws, f"{freq_col}{row_idx}")
@@ -151,8 +156,6 @@ class ImpulsExcelProcessor:
                 })
 
             sheets_data.append({
-                'sheet_title': sheet_title,
-                'sheet_energy_value': sheet_energy_value,
                 'globals': {
                     'impact_energy_j': energy_j,
                     'impact_velocity_ms': velocity_ms,
@@ -331,6 +334,202 @@ class ImpulsExcelProcessor:
         """
         # TODO: Реализовать валидацию Excel файла
         return True
+
+    # ====== Публичные функции парсинга для сохранения в БД ======
+
+    def parse_force_records(self, file_path: str) -> List[Dict[str, Any]]:
+        """
+        Парсит файл расчета силы в плоские записи по образцу ноутбука:
+        [protocol_number, pct_static, v, p, f, energy_j, velocity_ms, force_n]
+        """
+        wb = load_workbook(filename=file_path, data_only=True, read_only=True)
+        records: List[Dict[str, Any]] = []
+        try:
+            for ws in wb.worksheets:
+                energy_j = self._get_numeric(ws, 'C5')
+                velocity_ms = self._get_numeric(ws, 'D5')
+                force_n = self._get_numeric(ws, 'E5')
+
+                # собрать номера протоколов и проценты
+                protocol_numbers = self._values_by_step(ws, 'G2', step_cols=4, stop_when_empty=True)
+                protocol_numbers = [self._clean_protocol_number(str(n)) for n in protocol_numbers]
+                pct_static_values = self._values_by_step(ws, 'G4', step_cols=4, stop_when_empty=True)
+                pct_static_values = [self._extract_percent_from_text(str(v)) for v in pct_static_values]
+
+                # собрать матрицу F..H, J..L, ... со срезами по фактически заполненным ячейкам
+                matrix = self._read_step_blocks(ws, start_col_letter='F', start_row=6, block_width=3, gap=1)
+
+                if not matrix:
+                    continue
+
+                n_rows = len(matrix)
+                n_cols = len(matrix[0])
+                n_blocks_in_matrix = n_cols // 3
+                n_blocks = min(len(protocol_numbers), len(pct_static_values), n_blocks_in_matrix)
+
+                for b in range(n_blocks):
+                    pnum = protocol_numbers[b]
+                    pct = pct_static_values[b]
+                    c0, c1, c2 = b * 3, b * 3 + 1, b * 3 + 2
+                    for r in range(n_rows):
+                        v_val = matrix[r][c0]
+                        p_val = matrix[r][c1]
+                        f_val = matrix[r][c2]
+                        # можно пропускать полностью пустые тройки
+                        if v_val in (None, '') and p_val in (None, '') and f_val in (None, ''):
+                            continue
+                        records.append({
+                            'sheet_title': getattr(ws, 'title', '') or '',
+                            'protocol_number': pnum,
+                            'pct_static': pct,
+                            'v': self._to_float(v_val),
+                            'p': self._to_float(p_val),
+                            'f': self._to_float(f_val),
+                            'energy_j': energy_j,
+                            'velocity_ms': velocity_ms,
+                            'force_n': force_n,
+                        })
+        finally:
+            try:
+                wb.close()
+            except Exception:
+                pass
+        return records
+
+    def parse_plan_records(self, file_path: str) -> List[Dict[str, Any]]:
+        """
+        Парсит файл плана эксперимента в записи по образцу ноутбука.
+        Берём блоки строк (каждые 3 строки), протоколы из N:X, значения p_static_value из той же строки.
+        """
+        wb = load_workbook(filename=file_path, data_only=True, read_only=True)
+        records: List[Dict[str, Any]] = []
+        try:
+            ws = wb.active
+
+            def parse_pct(text):
+                if text is None:
+                    return None
+                m = re.search(r"\(([\d.,]+)\s*%?\)", str(text))
+                return float(m.group(1).replace(',', '.')) if m else None
+
+            data_start_row = 8
+            header_start_row = 7
+            step = 3
+
+            from openpyxl.utils.cell import column_index_from_string, get_column_letter
+
+            data_min_c = column_index_from_string('C')
+            data_max_c = column_index_from_string('V')
+            prot_min_c = column_index_from_string('N')
+            prot_max_c = column_index_from_string('X')
+
+            # Заголовки данных C..M из 5 строки
+            data_headers = [ws.cell(row=5, column=c).value or get_column_letter(c)
+                            for c in range(column_index_from_string('C'), column_index_from_string('M') + 1)]
+
+            # Pст проценты из N5:X5
+            pstat_labels_row = 5
+            pstat_labels = next(ws.iter_rows(min_row=pstat_labels_row, max_row=pstat_labels_row,
+                                             min_col=prot_min_c, max_col=prot_max_c, values_only=True))
+            pstat_pct_by_col = {prot_min_c + i: parse_pct(v) for i, v in enumerate(pstat_labels)}
+
+            r_data, r_head = data_start_row, header_start_row
+            while r_data <= ws.max_row:
+                prot_row = next(ws.iter_rows(min_row=r_head, max_row=r_head,
+                                             min_col=prot_min_c, max_col=prot_max_c,
+                                             values_only=True))
+                data_row = next(ws.iter_rows(min_row=r_data, max_row=r_data,
+                                             min_col=data_min_c, max_col=data_max_c,
+                                             values_only=True))
+                pstatic_values_row = next(ws.iter_rows(min_row=r_data, max_row=r_data,
+                                                       min_col=prot_min_c, max_col=prot_max_c,
+                                                       values_only=True))
+
+                if all(p in (None, '') for p in prot_row) and all(v in (None, '') for v in data_row):
+                    break
+                if all(v in (None, '') for v in data_row):
+                    break
+
+                for i, p in enumerate(prot_row):
+                    if p in (None, ''):
+                        continue
+                    col_idx = prot_min_c + i
+                    rec: Dict[str, Any] = {
+                        'protocol_number': self._clean_protocol_number(str(p)),
+                        'p_static': pstat_pct_by_col.get(col_idx),
+                        'p_static_value': self._to_float(pstatic_values_row[i]),
+                    }
+                    # сопоставляем только C..M
+                    values = list(data_row)[:len(data_headers)]
+                    for name, val in zip(data_headers, values):
+                        rec[name] = self._to_float(val)
+                    records.append(rec)
+
+                r_data += step
+                r_head += step
+        finally:
+            try:
+                wb.close()
+            except Exception:
+                pass
+        return records
+
+    # ====== Низкоуровневые помощники из ноутбука ======
+
+    def _values_by_step(self, ws, start_addr: str, step_cols: int = 4, stop_when_empty: bool = True, max_col: Optional[int] = None) -> List[Any]:
+        from openpyxl.utils.cell import coordinate_from_string, column_index_from_string, get_column_letter
+        col_letter, row = coordinate_from_string(start_addr)
+        col = column_index_from_string(col_letter)
+        vals = []
+        while True:
+            addr = f"{get_column_letter(col)}{row}"
+            v = ws[addr].value
+            if stop_when_empty and (v is None or v == ""):
+                break
+            vals.append(v)
+            col += step_cols
+            if max_col and col > max_col:
+                break
+        return vals
+
+    def _read_step_blocks(self, ws, start_col_letter: str = 'F', start_row: int = 6, block_width: int = 3, gap: int = 1) -> List[List[Any]]:
+        from openpyxl.utils.cell import column_index_from_string
+        start_col = column_index_from_string(start_col_letter)
+        step = block_width + gap
+        col_indices: List[int] = []
+        c = start_col
+        while c <= ws.max_column:
+            for i in range(block_width):
+                if c + i <= ws.max_column:
+                    col_indices.append(c + i)
+            c += step
+        if not col_indices:
+            return []
+        min_c, max_c = col_indices[0], col_indices[-1]
+        offset = min_c
+        data: List[List[Any]] = []
+        last_nonempty_row = -1
+        rightmost_used_idx = -1
+        for r, row_vals in enumerate(
+            ws.iter_rows(min_row=start_row, max_row=ws.max_row, min_col=min_c, max_col=max_c, values_only=True),
+            start=start_row,
+        ):
+            picked = [row_vals[c - offset] for c in col_indices]
+            any_nonempty = False
+            for j, v in enumerate(picked):
+                if v not in (None, ''):
+                    any_nonempty = True
+                    if j > rightmost_used_idx:
+                        rightmost_used_idx = j
+            data.append(picked)
+            if any_nonempty:
+                last_nonempty_row = r
+        if last_nonempty_row == -1 or rightmost_used_idx == -1:
+            return []
+        rows_to = last_nonempty_row - start_row + 1
+        cols_to = rightmost_used_idx + 1
+        data = [row[:cols_to] for row in data[:rows_to]]
+        return data
 
 
 class ImpulsProtocolGenerator:
@@ -535,3 +734,160 @@ class ImpulsDataAnalyzer:
                 'complexity_level': 'unknown',
             }
         }
+
+
+def run_protocol_analysis(protocol_number: str, analysis_id: str = None) -> Dict[str, Any]:
+	"""
+	Выполняет анализ по номеру протокола: строит 2 графика и
+	возвращает результаты (пути к изображениям и данные экстремумов).
+	Изображения сохраняются в media/impuls_analysis/analyses с UUID-именами.
+	"""
+	import os  # локальный импорт, чтобы избежать избыточных зависимостей при импорте модуля
+	import io
+	import numpy as np
+	import pandas as pd
+	import matplotlib
+	matplotlib.use('Agg')
+	import matplotlib.pyplot as plt
+	from matplotlib.ticker import FuncFormatter
+	from django.conf import settings
+	from django.core.files.base import ContentFile
+	from src.modules.impuls_analysis.models import ImpulsForceRecord, ImpulsPlanRecord
+
+	force_qs = ImpulsForceRecord.objects.filter(protocol_number=protocol_number)
+	plan_qs = ImpulsPlanRecord.objects.filter(protocol_number=protocol_number)
+	if not force_qs.exists() or not plan_qs.exists():
+		raise ValueError('Для указанного протокола должны существовать записи в обеих таблицах: ImpulsForceRecord и ImpulsPlanRecord.')
+
+	force_df = pd.DataFrame(list(force_qs.values('v', 'f', 'pct_static', 'energy_j')))
+	if force_df.empty:
+		raise ValueError('Не удалось сформировать данные по силе (пустой набор).')
+
+	force_df = force_df[['v', 'f', 'pct_static', 'energy_j']].dropna(subset=['v', 'f']).sort_values('v')
+	v = force_df['v'].to_numpy()
+	f = force_df['f'].to_numpy()
+	p_static = int(round(float(force_df['pct_static'].dropna().mean()))) if force_df['pct_static'].notna().any() else 0
+	energy_j = int(round(float(force_df['energy_j'].dropna().mean()))) if force_df['energy_j'].notna().any() else 0
+
+	# Поиск максимумов
+	try:
+		from scipy.signal import find_peaks  # type: ignore
+		peaks, _ = find_peaks(f, prominence=1e-6)
+	except Exception:
+		dy = np.gradient(f, v)
+		s = np.sign(dy)
+		peaks = np.where((s[:-1] > 0) & (s[1:] < 0))[0] + 1
+
+	MIN_F = 1000.0
+	peaks = peaks[f[peaks] >= MIN_F]
+	peaks = peaks[f[peaks] >= 0]
+
+	ON_THR = 1000.0
+	OFF_THR = 1000.0
+	above_on = f >= ON_THR
+	above_off = f >= OFF_THR
+	starts = np.where((~above_on[:-1]) & (above_on[1:]))[0] + 1
+	stops = np.where((above_off[:-1]) & (~above_off[1:]))[0] + 1
+	if len(above_on) > 0 and above_on[0]:
+		starts = np.r_[0, starts]
+	if len(starts) and len(stops):
+		if stops[0] < starts[0]:
+			stops = stops[1:]
+		if len(starts) > len(stops):
+			stops = np.r_[stops, len(f) - 1]
+	elif len(starts) and not len(stops):
+		stops = np.array([len(f) - 1])
+	elif len(stops) and not len(starts):
+		starts = np.array([0])
+	pulse_windows = [(s_i, e_i) for s_i, e_i in zip(starts, stops) if e_i - s_i > 2]
+
+	fmt_int = FuncFormatter(lambda val, pos: f'{int(val):,}'.replace(',', ' '))
+
+	max_h_used = 0.0
+	areas: List[tuple] = []
+	pulse_rows: List[Dict[str, Any]] = []
+	
+	# Подробный график
+	plt.figure(figsize=(7, 5))
+	plt.plot(v, f, linewidth=1.5, label=f'Pst={p_static}%')
+	for k, (i0, i1) in enumerate(pulse_windows, 1):
+		plt.fill_between(v[i0:i1 + 1], 0, f[i0:i1 + 1], alpha=0.25)
+		h = float(np.max(f[i0:i1 + 1]) + 150000.0)
+		max_h_used = max(max_h_used, h)
+		plt.vlines(v[i0], 0, h, colors='gray', linestyles='--', alpha=0.7)
+		plt.vlines(v[i1], 0, h, colors='gray', linestyles='--', alpha=0.7)
+		xm = (v[i0] + v[i1]) / 2.0
+		plt.annotate('', xy=(v[i1], h), xytext=(v[i0], h),
+		            arrowprops=dict(arrowstyle='<->', lw=1, color='gray', alpha=0.8))
+		t_offset = 0.02 * max(float(np.max(f)), 1.0)
+		plt.text(xm, h + t_offset, 'T', ha='center', va='bottom', fontsize=10)
+		S = float(np.trapz(f[i0:i1 + 1], v[i0:i1 + 1]))
+		duration_v = float(v[i1] - v[i0])
+		v_start, v_end = float(v[i0]), float(v[i1])
+		in_pulse_max = peaks[(peaks >= i0) & (peaks <= i1)]
+		for j, p in enumerate(in_pulse_max, 1):
+			plt.scatter(v[p], f[p], c='r', s=40)
+			plt.annotate(f'F{j}', xy=(v[p], f[p]), xytext=(v[p], f[p] + 50000.0),
+			            arrowprops=dict(arrowstyle='->', lw=1), ha='center', fontsize=9)
+		areas.append((k, S, xm))
+		if len(in_pulse_max) == 0:
+			pulse_rows.append({
+				'pulse_id': k, 'extremum_id': None, 'extremum_type': None,
+				'v': None, 'f': None,
+				'duration_v': duration_v, 'area': S,
+				'v_start': v_start, 'v_end': v_end,
+			})
+		else:
+			for j, p in enumerate(in_pulse_max, 1):
+				pulse_rows.append({
+					'pulse_id': k, 'extremum_id': j, 'extremum_type': 'max',
+					'v': float(v[p]), 'f': float(f[p]),
+					'duration_v': duration_v, 'area': S,
+					'v_start': v_start, 'v_end': v_end,
+				})
+	for k, S, xm in areas:
+		plt.text(xm, max(ON_THR * 1.1, float(np.max(f)) * 0.08), f'S{k}', ha='center', va='bottom', fontsize=9)
+	plt.xlabel('Время, с')
+	plt.ylabel('Сила удара, Н')
+	plt.title(f'Энергия удара A={energy_j} Дж, Протокол {protocol_number}')
+	upper = max(1000000.0, max_h_used * 1.08, float(np.max(f)) * 1.05)
+	plt.ylim(0, upper)
+	plt.yticks(np.arange(0, 1000001, 100000))
+	plt.gca().yaxis.set_major_formatter(fmt_int)
+	plt.grid(True, alpha=0.3)
+	plt.legend()
+	plt.tight_layout()
+	
+	# Сохранение подробного графика в буфер
+	detailed_buffer = io.BytesIO()
+	plt.savefig(detailed_buffer, format='png', dpi=150)
+	detailed_buffer.seek(0)
+	plt.close()
+
+	# Базовый график
+	plt.figure(figsize=(7, 5))
+	plt.plot(v, f, linewidth=1.5, label=f'Pst={p_static}%')
+	plt.xlabel('Время, с')
+	plt.ylabel('Сила удара, Н')
+	plt.title(f'Энергия удара A={energy_j} Дж, Протокол {protocol_number}')
+	plt.ylim(0, 1000000.0)
+	plt.yticks(np.arange(0, 1000001, 100000))
+	plt.gca().yaxis.set_major_formatter(fmt_int)
+	plt.grid(True, alpha=0.3)
+	plt.legend()
+	plt.tight_layout()
+	
+	# Сохранение базового графика в буфер
+	plain_buffer = io.BytesIO()
+	plt.savefig(plain_buffer, format='png', dpi=150)
+	plain_buffer.seek(0)
+	plt.close()
+
+	return {
+		'protocol_number': protocol_number,
+		'p_static': p_static,
+		'energy_j': energy_j,
+		'detailed_image': ContentFile(detailed_buffer.getvalue(), name=f'{analysis_id}_detailed.png'),
+		'plain_image': ContentFile(plain_buffer.getvalue(), name=f'{analysis_id}_plain.png'),
+		'pulse_maxima': pulse_rows,
+	}

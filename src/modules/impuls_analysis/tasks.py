@@ -12,8 +12,15 @@ from celery import shared_task
 from django.conf import settings
 from django.core.files.base import ContentFile
 from django.utils import timezone
-from .models import ImpulsAnalysis, ImpulsFile, ImpulsProtocol
-from .utils import ImpulsExcelProcessor, ImpulsProtocolGenerator
+from src.modules.impuls_analysis.models import (
+    ImpulsForceRecord,
+    ImpulsPlanRecord,
+    ImpulsAnalysis,
+    ImpulsExtremum,
+    ImpulsProtocol,
+    ImpulsFile,
+)
+from src.modules.impuls_analysis.utils import ImpulsExcelProcessor, run_protocol_analysis
 
 # Получаем логгеры
 logger = logging.getLogger('impuls_analysis')
@@ -22,147 +29,190 @@ protocol_logger = logging.getLogger('celery.module.impuls_analysis.protocol_gene
 analysis_logger = logging.getLogger('celery.module.impuls_analysis.data_analysis')
 
 
-@shared_task(bind=True, name='src.modules.impuls_analysis.tasks.process_excel_files')
-def process_excel_files(self, analysis_id: str):
+@shared_task(bind=True, name='src.modules.impuls_analysis.tasks.import_impuls_excel')
+def import_impuls_excel(self, file_path: str, file_type: str):
     """
-    Задача для обработки загруженных Excel файлов
-    
-    Args:
-        analysis_id: ID анализа импульса
+    Импортирует один Excel-файл в соответствующую таблицу без привязки к анализам.
+    file_type: 'force' | 'plan'
     """
     try:
-        analysis = ImpulsAnalysis.objects.get(id=analysis_id)
-        analysis.status = 'processing'
-        analysis.task_id = self.request.id
-        analysis.save()
-        
-        excel_logger.info(f"Начало обработки Excel файлов для анализа {analysis_id}")
-        
-        # Получаем загруженные файлы
-        files = analysis.files.all()
-        if not files.exists():
-            raise ValueError("Нет загруженных файлов для обработки")
-        
-        # Обрабатываем каждый файл
+        excel_logger.info(f"Импорт файла: {file_path} (type={file_type})")
         processor = ImpulsExcelProcessor()
-        processed_data = {}
-        
-        for file_obj in files:
-            excel_logger.info(f"Обработка файла: {file_obj.original_filename}")
-            
-            # Обрабатываем Excel файл (заглушка - будет реализована позже)
-            file_data = processor.process_file(file_obj.file.path, file_obj.file_type)
-            processed_data[file_obj.file_type] = file_data
-            
-            excel_logger.info(f"Файл {file_obj.original_filename} успешно обработан")
-        
-        # Сохраняем результаты обработки
-        analysis.analysis_results = {
-            'processed_files': len(files),
-            'file_types': list(processed_data.keys()),
-            'processing_completed_at': timezone.now().isoformat(),
-            'processed_data': processed_data
-        }
-        analysis.status = 'completed'
-        analysis.save()
-        
-        excel_logger.info(f"Обработка Excel файлов для анализа {analysis_id} завершена успешно")
-        
-        # Запускаем задачу генерации протокола
-        generate_protocol.delay(analysis_id)
-        
+
+        if file_type == 'force':
+            recs = processor.parse_force_records(file_path)
+            # Оставляем только новые протоколы
+            incoming_protocols = {str(r.get('protocol_number') or '') for r in recs}
+            existing_protocols = set(
+                ImpulsForceRecord.objects.filter(protocol_number__in=incoming_protocols)
+                .values_list('protocol_number', flat=True)
+            )
+            filtered = [r for r in recs if str(r.get('protocol_number') or '') not in existing_protocols]
+            bulk = [
+                ImpulsForceRecord(
+                    sheet_title=r.get('sheet_title') or '',
+                    protocol_number=str(r.get('protocol_number') or ''),
+                    pct_static=r.get('pct_static'),
+                    v=r.get('v'), p=r.get('p'), f=r.get('f'),
+                    energy_j=r.get('energy_j'), velocity_ms=r.get('velocity_ms'), force_n=r.get('force_n'),
+                ) for r in filtered
+            ]
+            created = 0
+            if bulk:
+                ImpulsForceRecord.objects.bulk_create(bulk, batch_size=1000)
+                created = len(bulk)
+            excel_logger.info(
+                f"Импорт force завершен. Протоколов входящих: {len(incoming_protocols)}, уже существующих: {len(existing_protocols)}, добавлено записей: {created}"
+            )
+            return {'type': 'force', 'protocols_incoming': len(incoming_protocols), 'protocols_existing': len(existing_protocols), 'records_created': created}
+
+        elif file_type == 'plan':
+            recs = processor.parse_plan_records(file_path)
+            incoming_protocols = {str(r.get('protocol_number') or '') for r in recs}
+            existing_protocols = set(
+                ImpulsPlanRecord.objects.filter(protocol_number__in=incoming_protocols)
+                .values_list('protocol_number', flat=True)
+            )
+            filtered = [r for r in recs if str(r.get('protocol_number') or '') not in existing_protocols]
+            bulk = []
+            for r in filtered:
+                bulk.append(ImpulsPlanRecord(
+                    protocol_number=str(r.get('protocol_number') or ''),
+                    p_static=r.get('p_static'),
+                    p_static_value=r.get('p_static_value'),
+                    l1_l2_ratio=(int(r.get('L1/L2')) if r.get('L1/L2') is not None else None),
+                    l1_m=r.get('L1 (м)'), d1_m=r.get('d1 (м)'), m1_kg=r.get('m1 (кг)'),
+                    l2_m=r.get('L2 (м)'), d2_m=r.get('d2 (м)'),
+                    t_s=r.get('Т (с)'), a_j=r.get('А, (Дж)'), v_ms=r.get('V, (м/с)'),
+                    c12_kg_s=r.get('С1,2 (кг/с)'), p_n=r.get('Р, (Н)'),
+                ))
+            created = 0
+            if bulk:
+                ImpulsPlanRecord.objects.bulk_create(bulk, batch_size=1000)
+                created = len(bulk)
+            excel_logger.info(
+                f"Импорт plan завершен. Протоколов входящих: {len(incoming_protocols)}, уже существующих: {len(existing_protocols)}, добавлено записей: {created}"
+            )
+            return {'type': 'plan', 'protocols_incoming': len(incoming_protocols), 'protocols_existing': len(existing_protocols), 'records_created': created}
+
+        else:
+            raise ValueError(f"Неизвестный тип файла: {file_type}")
+
     except Exception as e:
-        error_msg = f"Ошибка при обработке Excel файлов: {str(e)}"
+        error_msg = f"Ошибка при импорте файла: {str(e)}"
         excel_logger.error(error_msg, exc_info=True)
-        
-        try:
-            analysis = ImpulsAnalysis.objects.get(id=analysis_id)
-            analysis.status = 'failed'
-            analysis.error_message = error_msg
-            analysis.save()
-        except:
-            pass
-        
         raise
 
 
-@shared_task(bind=True, name='src.modules.impuls_analysis.tasks.analyze_impuls_data')
-def analyze_impuls_data(self, analysis_id: str):
+@shared_task(bind=True, name='src.modules.impuls_analysis.tasks.create_analysis_by_protocol')
+def create_analysis_by_protocol(self, protocol_number: str, user_id: int, title: str = None, description: str = None):
     """
-    Задача для анализа данных импульса
-    
-    Args:
-        analysis_id: ID анализа импульса
-    """
-    try:
-        analysis = ImpulsAnalysis.objects.get(id=analysis_id)
-        analysis_logger.info(f"Начало анализа данных импульса для анализа {analysis_id}")
-        
-        # Получаем обработанные данные
-        processed_data = (analysis.analysis_results or {}).get('processed_data', {})
-        if not processed_data:
-            raise ValueError("Нет обработанных данных для анализа")
-        
-        # Анализируем данные (заглушка - будет реализована позже)
-        analysis_results = {
-            'analysis_type': analysis.analysis_type,
-            'analysis_completed_at': timezone.now().isoformat(),
-            'results': {
-                'force_calculation': processed_data.get('force_calculation', {}),
-                'experiment_plan': processed_data.get('experiment_plan', {}),
-            }
-        }
-        
-        # Обновляем результаты анализа
-        merged = (analysis.analysis_results or {}).copy()
-        merged.update(analysis_results)
-        analysis.analysis_results = merged
-        analysis.save()
-        
-        analysis_logger.info(f"Анализ данных импульса для анализа {analysis_id} завершен успешно")
-        
-    except Exception as e:
-        error_msg = f"Ошибка при анализе данных импульса: {str(e)}"
-        analysis_logger.error(error_msg, exc_info=True)
-        raise
-
-
-@shared_task(bind=True, name='src.modules.impuls_analysis.tasks.generate_protocol')
-def generate_protocol(self, analysis_id: str):
-    """
-    Задача для генерации протокола анализа
-    
-    Args:
-        analysis_id: ID анализа импульса
+    Создает ImpulsAnalysis по номеру протокола:
+    - проверяет наличие данных в обеих таблицах
+    - строит 2 графика и сохраняет в media/impuls_analysis/analyses с UUID-именами
+    - сохраняет экстремумы в отдельную таблицу ImpulsExtremum
     """
     try:
-        analysis = ImpulsAnalysis.objects.get(id=analysis_id)
-        protocol_logger.info(f"Начало генерации протокола для анализа {analysis_id}")
+        analysis_logger.info(f"Запуск анализа протокола {protocol_number} (user_id={user_id})")
+
+        # Проверка наличия данных
+        if not ImpulsForceRecord.objects.filter(protocol_number=protocol_number).exists() or \
+           not ImpulsPlanRecord.objects.filter(protocol_number=protocol_number).exists():
+            raise ValueError("Для указанного протокола должны существовать записи в ImpulsForceRecord и ImpulsPlanRecord.")
+
+        # Создание записи анализа
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        user = User.objects.filter(id=user_id).first()
+        if user is None:
+            raise ValueError(f"Пользователь не найден (id={user_id})")
+
+        # Проверяем, существует ли уже анализ для этого протокола и пользователя
+        existing_analysis = ImpulsAnalysis.objects.filter(
+            user=user, 
+            protocol_number=protocol_number
+        ).first()
         
-        # Проверяем, что анализ завершен
-        if analysis.status != 'completed':
-            raise ValueError(f"Анализ должен быть завершен, текущий статус: {analysis.status}")
-        
-        # Генерируем протокол (заглушка - будет реализована позже)
-        generator = ImpulsProtocolGenerator()
-        protocol_content = generator.generate_protocol(analysis)
-        
-        # Создаем файл протокола
-        filename = f"protocol_{analysis_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
-        protocol_file = ContentFile(protocol_content, name=filename)
-        
-        # Сохраняем протокол
-        protocol = ImpulsProtocol.objects.create(
-            analysis=analysis,
-            protocol_file=protocol_file
+        if existing_analysis:
+            analysis_logger.info(f"Удаляем существующий анализ для протокола {protocol_number} (user_id={user_id}): {existing_analysis.id}")
+            
+            # Удаляем файлы анализа
+            files_deleted = existing_analysis.delete_analysis_files()
+            analysis_logger.info(f"Удалено файлов: {files_deleted}")
+            
+            # Удаляем экстремумы (каскадное удаление)
+            extrema_count = existing_analysis.extrema.count()
+            
+            # Удаляем сам анализ
+            existing_analysis.delete()
+            analysis_logger.info(f"Удален анализ {existing_analysis.id} с {extrema_count} экстремумами")
+
+        # Создаем анализ с временным статусом
+        analysis = ImpulsAnalysis.objects.create(
+            user=user,
+            title=title or f"Протокол {protocol_number}",
+            description=description or f"Анализ по протоколу {protocol_number}",
+            analysis_type='standard',
+            status='processing',
+            protocol_number=protocol_number,
         )
+
+        # Запуск утилиты анализа с ID анализа
+        results = run_protocol_analysis(protocol_number, str(analysis.id))
+
+        # Обновляем анализ с результатами
+        analysis.protocol_number = results['protocol_number']
+        analysis.p_static = results['p_static']
+        analysis.energy_j = results['energy_j']
+        analysis.detailed_image = results['detailed_image']
+        analysis.plain_image = results['plain_image']
+        analysis.status = 'completed'
+        analysis.completed_at = timezone.now()
+        analysis.save()
+
+        # Сохраняем экстремумы в отдельную таблицу
+        extremum_objects = []
+        for pulse_data in results['pulse_maxima']:
+            extremum_objects.append(ImpulsExtremum(
+                analysis=analysis,
+                pulse_id=pulse_data['pulse_id'],
+                extremum_id=pulse_data['extremum_id'],
+                extremum_type=pulse_data['extremum_type'] or 'max',
+                v=pulse_data['v'],
+                f=pulse_data['f'],
+                duration_v=pulse_data['duration_v'],
+                area=pulse_data['area'],
+                v_start=pulse_data['v_start'],
+                v_end=pulse_data['v_end'],
+            ))
         
-        protocol_logger.info(f"Протокол для анализа {analysis_id} успешно сгенерирован: {protocol.id}")
-        
+        if extremum_objects:
+            ImpulsExtremum.objects.bulk_create(extremum_objects, batch_size=100)
+
+        analysis_logger.info(f"Анализ создан {analysis.id} для протокола {protocol_number}, экстремумов: {len(extremum_objects)}")
+        return {
+            'analysis_id': str(analysis.id), 
+            'protocol_number': protocol_number, 
+            'extrema_count': len(extremum_objects),
+            'detailed_image': analysis.detailed_image.url if analysis.detailed_image else None,
+            'plain_image': analysis.plain_image.url if analysis.plain_image else None,
+        }
+
     except Exception as e:
-        error_msg = f"Ошибка при генерации протокола: {str(e)}"
-        protocol_logger.error(error_msg, exc_info=True)
+        error_msg = f"Ошибка при создании анализа по протоколу {protocol_number}: {str(e)}"
+        analysis_logger.error(error_msg, exc_info=True)
+        # Обновляем статус анализа на ошибку
+        try:
+            if 'analysis' in locals():
+                analysis.status = 'failed'
+                analysis.error_message = str(e)
+                analysis.completed_at = timezone.now()
+                analysis.save()
+        except Exception:
+            pass
         raise
+
+
 
 
 @shared_task(bind=True, name='src.modules.impuls_analysis.tasks.bulk_download_protocols')

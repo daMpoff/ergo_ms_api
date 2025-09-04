@@ -47,8 +47,23 @@ class ImpulsAnalysis(models.Model):
     started_at = models.DateTimeField(null=True, blank=True, verbose_name='Начало обработки')
     completed_at = models.DateTimeField(null=True, blank=True, verbose_name='Завершение обработки')
     
-    # Результаты анализа
-    analysis_results = models.JSONField(null=True, blank=True, verbose_name='Результаты анализа')
+    # Параметры протокола
+    protocol_number = models.CharField(max_length=64, null=True, blank=True, verbose_name='Номер протокола')
+    p_static = models.FloatField(null=True, blank=True, verbose_name='Pст, %')
+    energy_j = models.FloatField(null=True, blank=True, verbose_name='Энергия удара, Дж')
+    
+    # Изображения анализа
+    detailed_image = models.ImageField(
+        upload_to='impuls_analysis/analyses/',
+        null=True, blank=True,
+        verbose_name='Подробный график'
+    )
+    plain_image = models.ImageField(
+        upload_to='impuls_analysis/analyses/',
+        null=True, blank=True,
+        verbose_name='Базовый график'
+    )
+    
     error_message = models.TextField(blank=True, verbose_name='Сообщение об ошибке')
     
     # Celery task
@@ -61,6 +76,42 @@ class ImpulsAnalysis(models.Model):
     
     def __str__(self):
         return f"{self.title} ({self.get_status_display()})"
+    
+    def get_detailed_image_upload_path(self, filename):
+        """Генерирует путь для подробного изображения с UUID"""
+        ext = filename.split('.')[-1]
+        return f'impuls_analysis/analyses/{self.id}_detailed.{ext}'
+    
+    def get_plain_image_upload_path(self, filename):
+        """Генерирует путь для базового изображения с UUID"""
+        ext = filename.split('.')[-1]
+        return f'impuls_analysis/analyses/{self.id}_plain.{ext}'
+    
+    def delete_analysis_files(self):
+        """Удаляет файлы анализа (изображения)"""
+        import os
+        from django.conf import settings
+        
+        files_deleted = 0
+        if self.detailed_image:
+            try:
+                file_path = os.path.join(settings.MEDIA_ROOT, self.detailed_image.name)
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                    files_deleted += 1
+            except Exception:
+                pass
+        
+        if self.plain_image:
+            try:
+                file_path = os.path.join(settings.MEDIA_ROOT, self.plain_image.name)
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                    files_deleted += 1
+            except Exception:
+                pass
+        
+        return files_deleted
     
     def update_status(self, status, **kwargs):
         """Обновляет статус анализа"""
@@ -151,3 +202,105 @@ class ImpulsProtocol(models.Model):
         if not self.file_size and self.protocol_file:
             self.file_size = self.protocol_file.size
         super().save(*args, **kwargs)
+
+
+class ImpulsForceRecord(models.Model):
+    """
+    Запись замеров из файла "Расчет силы" (force_file)
+    """
+    id = models.AutoField(primary_key=True)
+    sheet_title = models.CharField(max_length=255, verbose_name='Лист', blank=True, default='')
+    protocol_number = models.CharField(max_length=64, verbose_name='Номер протокола')
+    pct_static = models.FloatField(null=True, blank=True, verbose_name='Pст, %')
+    v = models.FloatField(null=True, blank=True, verbose_name='v')
+    p = models.FloatField(null=True, blank=True, verbose_name='p')
+    f = models.FloatField(null=True, blank=True, verbose_name='f')
+    energy_j = models.FloatField(null=True, blank=True, verbose_name='Энергия удара, Дж')
+    velocity_ms = models.FloatField(null=True, blank=True, verbose_name='Скорость удара, м/с')
+    force_n = models.FloatField(null=True, blank=True, verbose_name='Сила удара (P), Н')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Создано')
+
+    class Meta:
+        verbose_name = 'Запись расчета силы'
+        verbose_name_plural = 'Записи расчета силы'
+        indexes = [
+            models.Index(fields=['protocol_number']),
+        ]
+
+
+class ImpulsPlanRecord(models.Model):
+    """
+    Параметры протоколов из файла плана эксперимента (plan_file)
+    """
+    id = models.AutoField(primary_key=True)
+    protocol_number = models.CharField(max_length=64, verbose_name='Номер протокола')
+    p_static = models.FloatField(null=True, blank=True, verbose_name='Pст, %')
+    p_static_value = models.FloatField(null=True, blank=True, verbose_name='Pст значение')
+    l1_l2_ratio = models.IntegerField(null=True, blank=True, verbose_name='L1/L2')
+    l1_m = models.FloatField(null=True, blank=True, verbose_name='L1 (м)')
+    d1_m = models.FloatField(null=True, blank=True, verbose_name='d1 (м)')
+    m1_kg = models.FloatField(null=True, blank=True, verbose_name='m1 (кг)')
+    l2_m = models.FloatField(null=True, blank=True, verbose_name='L2 (м)')
+    d2_m = models.FloatField(null=True, blank=True, verbose_name='d2 (м)')
+    t_s = models.FloatField(null=True, blank=True, verbose_name='Т (с)')
+    a_j = models.FloatField(null=True, blank=True, verbose_name='А, (Дж)')
+    v_ms = models.FloatField(null=True, blank=True, verbose_name='V, (м/с)')
+    c12_kg_s = models.FloatField(null=True, blank=True, verbose_name='С1,2 (кг/с)')
+    p_n = models.FloatField(null=True, blank=True, verbose_name='Р, (Н)')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Создано')
+
+    class Meta:
+        verbose_name = 'Запись плана эксперимента'
+        verbose_name_plural = 'Записи плана эксперимента'
+        indexes = [
+            models.Index(fields=['protocol_number']),
+        ]
+
+
+class ImpulsExtremum(models.Model):
+    """
+    Модель для хранения экстремумов (максимумов) импульсов
+    """
+    EXTREMUM_TYPE_CHOICES = [
+        ('max', 'Максимум'),
+        ('min', 'Минимум'),
+    ]
+    
+    id = models.AutoField(primary_key=True)
+    analysis = models.ForeignKey(
+        ImpulsAnalysis, 
+        on_delete=models.CASCADE, 
+        related_name='extrema',
+        verbose_name='Анализ'
+    )
+    pulse_id = models.IntegerField(verbose_name='Номер импульса')
+    extremum_id = models.IntegerField(null=True, blank=True, verbose_name='Номер экстремума в импульсе')
+    extremum_type = models.CharField(
+        max_length=10, 
+        choices=EXTREMUM_TYPE_CHOICES, 
+        verbose_name='Тип экстремума'
+    )
+    
+    # Координаты экстремума
+    v = models.FloatField(null=True, blank=True, verbose_name='Время, с')
+    f = models.FloatField(null=True, blank=True, verbose_name='Сила, Н')
+    
+    # Параметры импульса
+    duration_v = models.FloatField(verbose_name='Длительность импульса, с')
+    area = models.FloatField(verbose_name='Площадь импульса')
+    v_start = models.FloatField(verbose_name='Время начала импульса, с')
+    v_end = models.FloatField(verbose_name='Время окончания импульса, с')
+    
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Создано')
+    
+    class Meta:
+        verbose_name = 'Экстремум импульса'
+        verbose_name_plural = 'Экстремумы импульса'
+        ordering = ['analysis', 'pulse_id', 'extremum_id']
+        indexes = [
+            models.Index(fields=['analysis', 'pulse_id']),
+            models.Index(fields=['analysis', 'extremum_type']),
+        ]
+    
+    def __str__(self):
+        return f"Экстремум {self.get_extremum_type_display()} в импульсе {self.pulse_id} (анализ {self.analysis.id})"
