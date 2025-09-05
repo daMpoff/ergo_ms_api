@@ -21,7 +21,7 @@ from openpyxl import load_workbook
 import pandas as pd
 import tempfile, os, openpyxl, csv
 
-from src.modules.bi_analysis.bi_datasets.models import Dataset, FileUpload, DataSetTable, DataSetField
+from src.modules.bi_analysis.bi_datasets.models import Dataset, FileUpload, DataSetTable, DataSetField, DatasetParam
 from src.modules.bi_analysis.bi_datasets.serializers import (
     DatasetDetailSerializer,
     DatasetSerializer,
@@ -30,7 +30,8 @@ from src.modules.bi_analysis.bi_datasets.serializers import (
     DataSetFieldSerializer,
     DatasetShortSerializer, 
     DatasetUpdateSerializer,
-    DatasetDetailFullSerializer
+    DatasetDetailFullSerializer,
+    DatasetParamSerializer
 )
 
 from src.modules.bi_analysis.services.services import (
@@ -66,7 +67,14 @@ class DatasetListCreateView(generics.ListCreateAPIView):
             return Dataset.objects.none()
         return (Dataset.objects
             .filter(owner=self.request.user)
+            .only('id', 'name', 'created_at', 'owner')
             .order_by('-created_at'))
+
+    def get_serializer_class(self):
+        # Для списка отдаём короткий сериализатор, чтобы не тянуть связанные таблицы/поля
+        if self.request and self.request.method == 'GET':
+            return DatasetShortSerializer
+        return DatasetSerializer
 
     @transaction.atomic
     def perform_create(self, serializer):
@@ -104,6 +112,26 @@ class DatasetListCreateView(generics.ListCreateAPIView):
                 if obj and 'aggregation' in field:
                     obj.aggregation = field['aggregation']
                     obj.save(update_fields=['aggregation'])
+        params_data = self.request.data.get('params')
+        if params_data is not None:
+            # поддержка формата из фронта: [{name,type,defaultValue,sourceUsage,...}]
+            try:
+                items = []
+                for i, p in enumerate(params_data or []):
+                    if not isinstance(p, dict):
+                        continue
+                    items.append({
+                        'name': p.get('name'),
+                        'type': p.get('type') or 'string',
+                        'default_value': p.get('defaultValue', p.get('default')),
+                        'source_usage': p.get('sourceUsage', False),
+                        'order': p.get('order', i),
+                        'description': p.get('description', ''),
+                    })
+                dataset.set_params_items(items)
+            except Exception as e:
+                # не прерываем создание датасета из-за параметров
+                print(f"[DatasetListCreateView] params save failed: {e}")
         
 class DatasetRemoveRelationView(APIView):
     """
@@ -505,6 +533,27 @@ class DataSetFieldViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(dataset_id=dataset_id)
         print(f"!!! RESULT COUNT={queryset.count()}")
         return queryset
+
+# ==============================================================================
+# DatasetParam endpoints
+# ==============================================================================
+
+from src.core.utils.mixins import SwaggerSafeMixin
+
+class DatasetParamViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
+    serializer_class = DatasetParamSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        base = DatasetParam.objects.select_related('dataset')
+        user = self.get_safe_user()
+        if user is None:
+            return base.none()
+        qs = base.filter(dataset__owner=user)
+        dataset_id = self.request.query_params.get('dataset')
+        if dataset_id:
+            qs = qs.filter(dataset_id=dataset_id)
+        return qs.order_by('order', 'id')
 
 # ==============================================================================
 # FileUpload endpoints

@@ -60,12 +60,71 @@ class Dataset(models.Model):
         related_name='datasets'
     )
     table_ref   = models.CharField(max_length=255, blank=True, null=True)
+    params      = models.JSONField(null=True, blank=True, default=list)
 
     def fields_for_current_dataset(self):
         return self.fields.all()
     
     def __str__(self):
         return self.name
+
+    # -----------------------------
+    # Параметры датасета (work with DatasetParam)
+    # -----------------------------
+    def get_params_items(self):
+        """Вернуть параметры как список словарей в стабильном порядке."""
+        qs = getattr(self, 'params_items', None)
+        if qs is None:
+            return []
+        return list(
+            qs.order_by('order', 'id').values(
+                'id', 'name', 'type', 'default_value', 'source_usage', 'order', 'description'
+            )
+        )
+
+    def set_params_items(self, items):
+        """
+        Идемпотентно применяет список параметров к датасету.
+        Формат items: [{name, type, default_value, source_usage, order, description}].
+        Upsert по имени; отсутствующие — удаляются.
+        """
+        from django.db import transaction
+        from .models import DatasetParam  # локальный импорт для избежания циклов
+
+        items = items or []
+        with transaction.atomic():
+            existing = {p.name: p for p in self.params_items.all()}
+            keep_names = set()
+
+            for idx, raw in enumerate(items):
+                name = (raw or {}).get('name')
+                if not name:
+                    continue
+                keep_names.add(name)
+                obj = existing.get(name) or DatasetParam(dataset=self, name=name)
+                obj.type = raw.get('type') or obj.type or 'string'
+                obj.default_value = raw.get('default_value') if 'default_value' in raw else obj.default_value
+                obj.source_usage = bool(raw.get('source_usage', obj.source_usage))
+                obj.order = raw.get('order', obj.order if obj.order is not None else idx)
+                obj.description = raw.get('description', obj.description or "")
+                obj.save()
+
+            # Удаляем параметры, которых больше нет в items
+            self.params_items.exclude(name__in=list(keep_names)).delete()
+
+    def params_as_json(self):
+        """
+        Совместимость: получить параметры в JSON-формате как раньше в поле `params`.
+        """
+        return [
+            {
+                'name': p['name'],
+                'type': p['type'],
+                'default': p['default_value'],
+                'sourceUsage': p['source_usage'],
+            }
+            for p in self.get_params_items()
+        ]
 
 
 class DataSetTable(models.Model):
@@ -145,3 +204,34 @@ class DataSetField(models.Model):
 
     def __str__(self):
         return f"{self.dataset.name}.{self.name}"
+
+
+class DatasetParam(models.Model):
+    """Отдельная сущность параметров датасета."""
+    TYPE_CHOICES_SIMPLE = [
+        ('string', 'Строка'),
+        ('integer', 'Целое'),
+        ('float', 'Дробное'),
+        ('bool', 'Логический'),
+        ('date', 'Дата'),
+        ('date&time', 'Дата и время'),
+    ]
+
+    dataset = models.ForeignKey(
+        Dataset, related_name='params_items', on_delete=models.CASCADE
+    )
+    name = models.CharField(max_length=200)
+    type = models.CharField(max_length=20, choices=TYPE_CHOICES_SIMPLE, default='string')
+    default_value = JSONField(null=True, blank=True)
+    source_usage = models.BooleanField(default=False)
+    order = models.PositiveIntegerField(default=0)
+    description = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['dataset', 'name']),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.dataset_id}:{self.name}"

@@ -1,6 +1,6 @@
 from django.urls import path, include
 
-from src.modules.bi_analysis.bi_datasets.views import DataSetFieldViewSet
+from src.modules.bi_analysis.bi_datasets.views import DataSetFieldViewSet, DatasetParamViewSet
 from src.modules.bi_analysis.bi_datasets.views import (
 DatasetDetailView, DatasetPreviewView,
     DataSetTableViewSet, DataSetFieldViewSet,
@@ -15,6 +15,7 @@ from rest_framework.routers import SimpleRouter
 router = SimpleRouter()
 router.register(r'tables', DataSetTableViewSet, basename='dataset-tables')
 router.register(r'fields', DataSetFieldViewSet, basename='dataset-fields')
+router.register(r'params', DatasetParamViewSet, basename='dataset-params')
 
 urlpatterns = [
     path('upload/', TempUploadView.as_view(), name='temp-upload'),

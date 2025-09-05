@@ -2,7 +2,7 @@ from rest_framework import serializers
 from django.contrib.auth import get_user_model
 
 from src.modules.bi_analysis.bi_connections.models import Connection
-from src.modules.bi_analysis.bi_datasets.models import FileUpload, Dataset, DataSetTable, DataSetField
+from src.modules.bi_analysis.bi_datasets.models import FileUpload, Dataset, DataSetTable, DataSetField, DatasetParam
 
 import os
 import pandas as pd
@@ -91,14 +91,32 @@ class DataSetFieldSerializer(serializers.ModelSerializer):
 
 class DatasetUpdateSerializer(serializers.ModelSerializer):
     fields = DataSetFieldSerializer(many=True, required=False)
+    params = serializers.JSONField(required=False, allow_null=True)
 
     class Meta:
         model  = Dataset
-        fields = ['id', 'name', 'description', "connection", 'fields']
+        fields = ['id', 'name', 'description', "connection", 'fields', 'params']
         read_only_fields = ['id', 'connection']
 
     def update(self, instance, validated_data):
-        instance = super().update(instance, {k: v for k, v in validated_data.items() if k != 'fields'})
+        non_nested = {k: v for k, v in validated_data.items() if k not in ('fields', 'params')}
+        instance = super().update(instance, non_nested)
+
+        params_data = self.initial_data.get('params', None)
+        if params_data is not None:
+            items = []
+            for i, p in enumerate(params_data or []):
+                if not isinstance(p, dict):
+                    continue
+                items.append({
+                    'name': p.get('name'),
+                    'type': p.get('type') or 'string',
+                    'default_value': p.get('defaultValue', p.get('default')),
+                    'source_usage': p.get('sourceUsage', False),
+                    'order': p.get('order', i),
+                    'description': p.get('description', ''),
+                })
+            instance.set_params_items(items)
         fields_data = self.initial_data.get('fields', [])
         if fields_data:
             for field_data in fields_data:
@@ -113,6 +131,7 @@ class DatasetUpdateSerializer(serializers.ModelSerializer):
 class DatasetDetailSerializer(serializers.ModelSerializer):
     tables = DataSetTableSerializer(many=True, read_only=True)
     fields = DataSetFieldSerializer(many=True, read_only=True)
+    params = serializers.JSONField(required=False, allow_null=True)
 
     class Meta:
         model = Dataset
@@ -123,12 +142,14 @@ class DatasetDetailSerializer(serializers.ModelSerializer):
             'created_at',
             'tables',
             'fields',
+            'params',
         ]
 
 # --- Detail сериализаторы ---
 class DatasetDetailFullSerializer(serializers.ModelSerializer):
     tables  = DataSetTableSerializer(many=True, read_only=True)
     fields  = DataSetFieldSerializer(many=True, read_only=True)
+    params = serializers.JSONField(required=False, allow_null=True)
     class Meta:
         model  = Dataset
         fields = '__all__'
@@ -150,6 +171,7 @@ class DatasetShortSerializer(serializers.ModelSerializer):
 class DatasetSerializer(serializers.ModelSerializer):
     tables = DataSetTableSerializer(many=True, read_only=True)
     fields = DataSetFieldSerializer(many=True, read_only=True)
+    params = serializers.JSONField(required=False, allow_null=True)
 
     owner = serializers.PrimaryKeyRelatedField(
         read_only=True,
@@ -176,8 +198,16 @@ class DatasetSerializer(serializers.ModelSerializer):
             'table_ref',
             'tables',
             'fields',
+            'params',
         ]
         read_only_fields = ['id', 'created_at', 'owner']
+
+
+class DatasetParamSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DatasetParam
+        fields = ['id', 'dataset', 'name', 'type', 'default_value', 'source_usage', 'order', 'description', 'created_at']
+        read_only_fields = ['id', 'created_at']
 
 # --- File upload сериализатор ---
 class FileUploadSerializer(serializers.ModelSerializer):
