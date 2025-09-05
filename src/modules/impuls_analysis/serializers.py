@@ -105,6 +105,31 @@ class ImpulsFileUploadSerializer(serializers.Serializer):
         return attrs
 
 
+class ImpulsMultipleFileUploadSerializer(serializers.Serializer):
+    """Сериализатор для загрузки множественных файлов"""
+    force_calculation_files = serializers.ListField(
+        child=serializers.FileField(),
+        required=False,
+        help_text="Список Excel файлов с расчетом силы"
+    )
+    experiment_plan_files = serializers.ListField(
+        child=serializers.FileField(),
+        required=False,
+        help_text="Список Excel файлов с планом эксперимента"
+    )
+    
+    def validate(self, attrs):
+        """Проверяем, что загружен хотя бы один файл"""
+        force_files = attrs.get('force_calculation_files', [])
+        plan_files = attrs.get('experiment_plan_files', [])
+        
+        if not force_files and not plan_files:
+            raise serializers.ValidationError(
+                "Необходимо загрузить хотя бы один файл"
+            )
+        return attrs
+
+
 class ImpulsAnalysisBulkDownloadSerializer(serializers.Serializer):
     """Сериализатор для массового скачивания протоколов"""
     analysis_ids = serializers.ListField(

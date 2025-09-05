@@ -27,6 +27,7 @@ from src.modules.impuls_analysis.serializers import (
     ImpulsFileSerializer,
     ImpulsProtocolSerializer,
     ImpulsFileUploadSerializer,
+    ImpulsMultipleFileUploadSerializer,
     ImpulsAnalysisBulkDownloadSerializer
 )
 from src.modules.impuls_analysis.tasks import create_analysis_by_protocol, import_impuls_excel
@@ -40,6 +41,13 @@ class ImpulsAnalysisPagination(PageNumberPagination):
     page_size = 20
     page_size_query_param = 'page_size'
     max_page_size = 100
+
+
+class ImpulsProtocolPagination(PageNumberPagination):
+    """Пагинация для протоколов импульса"""
+    page_size = 10
+    page_size_query_param = 'page_size'
+    max_page_size = 50
 
 
 class ImpulsAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
@@ -135,6 +143,73 @@ class ImpulsAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
                 )
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['post'])
+    def upload_multiple_files(self, request):
+        """Загрузка множественных файлов для импорта данных"""
+        serializer = ImpulsMultipleFileUploadSerializer(data=request.data)
+        if serializer.is_valid():
+            try:
+                task_ids = []
+                
+                # Обрабатываем файлы расчета силы
+                force_files = request.FILES.getlist('force_calculation_files')
+                for force_file in force_files:
+                    # Сохраняем файл в media директорию
+                    upload_dir = os.path.join(settings.MEDIA_ROOT, 'impuls_analysis', 'input_files')
+                    os.makedirs(upload_dir, exist_ok=True)
+                    
+                    file_path = os.path.join(upload_dir, force_file.name)
+                    with open(file_path, 'wb') as f:
+                        for chunk in force_file.chunks():
+                            f.write(chunk)
+                    
+                    # Запускаем импорт данных из файла
+                    task = import_impuls_excel.delay(file_path, 'force')
+                    task_ids.append(task.id)
+                    logger.info(f'Запущен импорт force файла {force_file.name}, задача: {task.id}')
+
+                # Обрабатываем файлы плана эксперимента
+                plan_files = request.FILES.getlist('experiment_plan_files')
+                for plan_file in plan_files:
+                    # Сохраняем файл в media директорию
+                    upload_dir = os.path.join(settings.MEDIA_ROOT, 'impuls_analysis', 'input_files')
+                    os.makedirs(upload_dir, exist_ok=True)
+                    
+                    file_path = os.path.join(upload_dir, plan_file.name)
+                    with open(file_path, 'wb') as f:
+                        for chunk in plan_file.chunks():
+                            f.write(chunk)
+                    
+                    # Запускаем импорт данных из файла
+                    task = import_impuls_excel.delay(file_path, 'plan')
+                    task_ids.append(task.id)
+                    logger.info(f'Запущен импорт plan файла {plan_file.name}, задача: {task.id}')
+
+                total_files = len(force_files) + len(plan_files)
+                logger.info(f'Запущен импорт {total_files} файлов, задач: {len(task_ids)}')
+
+                return Response({
+                    'success': True,
+                    'message': f'Загружено {total_files} файлов и запущен импорт',
+                    'task_ids': task_ids,
+                    'files_processed': {
+                        'force_files': len(force_files),
+                        'plan_files': len(plan_files)
+                    }
+                }, status=status.HTTP_200_OK)
+
+            except Exception as e:
+                logger.error(f'Ошибка при загрузке множественных файлов: {str(e)}')
+                return Response(
+                    {'success': False, 'error': f'Ошибка при загрузке файлов: {str(e)}'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+        else:
+            return Response({
+                'success': False,
+                'errors': serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=['get'])
     def protocols(self, request, pk=None):
@@ -234,48 +309,132 @@ class ImpulsAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def available_protocols(self, request):
         """Получить протоколы, готовые для создания анализа"""
-        # Получаем протоколы, которые заполнены в обеих таблицах
-        force_records = ImpulsForceRecord.objects.values_list('protocol_number', flat=True).distinct()
-        plan_records = ImpulsPlanRecord.objects.values_list('protocol_number', flat=True).distinct()
-        
-        # Находим пересечение - протоколы, которые есть в обеих таблицах
-        available_protocols = set(force_records) & set(plan_records)
-        
-        protocols_data = []
-        for protocol_number in available_protocols:
-            # Получаем данные из обеих таблиц
-            force_record = ImpulsForceRecord.objects.filter(protocol_number=protocol_number).first()
-            plan_record = ImpulsPlanRecord.objects.filter(protocol_number=protocol_number).first()
+        try:
+            # Получаем параметры пагинации
+            page_size = int(request.query_params.get('page_size', 10))
+            page = int(request.query_params.get('page', 1))
             
-            protocols_data.append({
-                'protocol_number': protocol_number,
-                'force_data': {
-                    'pct_static': force_record.pct_static if force_record else None,
-                    'energy_j': force_record.energy_j if force_record else None,
-                    'velocity_ms': force_record.velocity_ms if force_record else None,
-                    'force_n': force_record.force_n if force_record else None,
-                },
-                'plan_data': {
-                    'p_static': plan_record.p_static if plan_record else None,
-                    'p_static_value': plan_record.p_static_value if plan_record else None,
-                    'l1_l2_ratio': plan_record.l1_l2_ratio if plan_record else None,
-                    'l1_m': plan_record.l1_m if plan_record else None,
-                    'd1_m': plan_record.d1_m if plan_record else None,
-                    'm1_kg': plan_record.m1_kg if plan_record else None,
-                    'l2_m': plan_record.l2_m if plan_record else None,
-                    'd2_m': plan_record.d2_m if plan_record else None,
-                    't_s': plan_record.t_s if plan_record else None,
-                    'a_j': plan_record.a_j if plan_record else None,
-                    'v_ms': plan_record.v_ms if plan_record else None,
-                    'c12_kg_s': plan_record.c12_kg_s if plan_record else None,
-                    'p_n': plan_record.p_n if plan_record else None,
+            # Получаем параметры сортировки
+            sort_field = request.query_params.get('sort_field', 'protocol_number')
+            sort_direction = request.query_params.get('sort_direction', 'asc')
+            
+            # Ограничиваем размер страницы
+            page_size = min(page_size, 50)  # Максимум 50 элементов на странице
+            
+            # Получаем все протоколы из обеих таблиц без ограничений
+            force_records = ImpulsForceRecord.objects.values_list('protocol_number', flat=True).distinct()
+            plan_records = ImpulsPlanRecord.objects.values_list('protocol_number', flat=True).distinct()
+            
+            # Преобразуем в списки для обработки
+            force_protocols = list(force_records)
+            plan_protocols = list(plan_records)
+            
+            logger.info(f'Найдено {len(force_protocols)} протоколов в force_records и {len(plan_protocols)} в plan_records')
+            
+            # Находим пересечение - протоколы, которые есть в обеих таблицах
+            available_protocols = set(force_protocols) & set(plan_protocols)
+            
+            logger.info(f'Доступных протоколов для анализа: {len(available_protocols)}')
+            
+            # Сортируем протоколы согласно параметрам сортировки
+            if sort_field == 'protocol_number':
+                # Специальная сортировка для номера протокола
+                sorted_protocols = sorted(available_protocols, key=lambda x: (int(x) if x.isdigit() else float('inf'), x))
+            else:
+                # Для других полей нужно получить данные и сортировать по ним
+                protocols_with_data = []
+                for protocol_number in available_protocols:
+                    force_record = ImpulsForceRecord.objects.filter(protocol_number=protocol_number).first()
+                    plan_record = ImpulsPlanRecord.objects.filter(protocol_number=protocol_number).first()
+                    
+                    # Получаем значение для сортировки
+                    sort_value = None
+                    if sort_field.startswith('force_data.'):
+                        field_name = sort_field.split('.')[1]
+                        sort_value = getattr(force_record, field_name, None) if force_record else None
+                    elif sort_field.startswith('plan_data.'):
+                        field_name = sort_field.split('.')[1]
+                        sort_value = getattr(plan_record, field_name, None) if plan_record else None
+                    
+                    protocols_with_data.append({
+                        'protocol_number': protocol_number,
+                        'sort_value': sort_value if sort_value is not None else float('inf')
+                    })
+                
+                # Сортируем по значению
+                sorted_protocols = sorted(protocols_with_data, key=lambda x: x['sort_value'])
+                sorted_protocols = [p['protocol_number'] for p in sorted_protocols]
+            
+            # Применяем направление сортировки
+            if sort_direction == 'desc':
+                sorted_protocols = sorted_protocols[::-1]
+            
+            # Применяем пагинацию
+            total_count = len(sorted_protocols)
+            start_index = (page - 1) * page_size
+            end_index = start_index + page_size
+            paginated_protocols = sorted_protocols[start_index:end_index]
+            
+            protocols_data = []
+            for protocol_number in paginated_protocols:
+                # Получаем данные из обеих таблиц
+                force_record = ImpulsForceRecord.objects.filter(protocol_number=protocol_number).first()
+                plan_record = ImpulsPlanRecord.objects.filter(protocol_number=protocol_number).first()
+                
+                protocols_data.append({
+                    'protocol_number': protocol_number,
+                    'force_data': {
+                        'pct_static': force_record.pct_static if force_record else None,
+                        'energy_j': force_record.energy_j if force_record else None,
+                        'velocity_ms': force_record.velocity_ms if force_record else None,
+                        'force_n': force_record.force_n if force_record else None,
+                    },
+                    'plan_data': {
+                        'p_static': plan_record.p_static if plan_record else None,
+                        'p_static_value': plan_record.p_static_value if plan_record else None,
+                        'l1_l2_ratio': plan_record.l1_l2_ratio if plan_record else None,
+                        'l1_m': plan_record.l1_m if plan_record else None,
+                        'd1_m': plan_record.d1_m if plan_record else None,
+                        'm1_kg': plan_record.m1_kg if plan_record else None,
+                        'l2_m': plan_record.l2_m if plan_record else None,
+                        'd2_m': plan_record.d2_m if plan_record else None,
+                        't_s': plan_record.t_s if plan_record else None,
+                        'a_j': plan_record.a_j if plan_record else None,
+                        'v_ms': plan_record.v_ms if plan_record else None,
+                        'c12_kg_s': plan_record.c12_kg_s if plan_record else None,
+                        'p_n': plan_record.p_n if plan_record else None,
+                    }
+                })
+            
+            # Вычисляем информацию о пагинации
+            total_pages = (total_count + page_size - 1) // page_size
+            has_next = page < total_pages
+            has_previous = page > 1
+            
+            logger.info(f'Возвращаем {len(protocols_data)} протоколов (страница {page} из {total_pages})')
+            
+            return Response({
+                'protocols': protocols_data,
+                'count': total_count,
+                'page': page,
+                'page_size': page_size,
+                'total_pages': total_pages,
+                'has_next': has_next,
+                'has_previous': has_previous,
+                'next_page': page + 1 if has_next else None,
+                'previous_page': page - 1 if has_previous else None,
+                'sort': {
+                    'field': sort_field,
+                    'direction': sort_direction
                 }
             })
-        
-        return Response({
-            'protocols': protocols_data,
-            'count': len(protocols_data)
-        })
+            
+        except Exception as e:
+            logger.error(f'Ошибка при получении доступных протоколов: {str(e)}')
+            return Response(
+                {'error': f'Ошибка при получении протоколов: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
     @action(detail=False, methods=['post'])
     def create_from_protocol(self, request):
