@@ -52,14 +52,14 @@ class ImpulsAnalysisSerializer(serializers.ModelSerializer):
         model = ImpulsAnalysis
         fields = [
             'id', 'title', 'description', 'analysis_type', 'analysis_type_display',
-            'status', 'status_display', 'task_id', 'analysis_results', 'error_message',
+            'status', 'status_display', 'task_id', 'error_message',
             'files', 'protocols', 'user_email', 'created_at', 'updated_at',
-            'started_at', 'completed_at'
+            'started_at', 'completed_at', 'protocol_number', 'p_static', 'energy_j'
         ]
         read_only_fields = [
-            'id', 'status', 'task_id', 'analysis_results', 'error_message',
+            'id', 'status', 'task_id', 'error_message',
             'files', 'protocols', 'user_email', 'created_at', 'updated_at',
-            'started_at', 'completed_at'
+            'started_at', 'completed_at', 'protocol_number', 'p_static', 'energy_j'
         ]
 
 
@@ -69,9 +69,9 @@ class ImpulsAnalysisCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = ImpulsAnalysis
         fields = ['title', 'description', 'analysis_type']
-        read_only_fields = ['id', 'status', 'task_id', 'analysis_results', 'error_message', 
+        read_only_fields = ['id', 'status', 'task_id', 'error_message', 
                            'files', 'protocols', 'user_email', 'created_at', 'updated_at',
-                           'started_at', 'completed_at']
+                           'started_at', 'completed_at', 'protocol_number', 'p_static', 'energy_j']
 
 
 class ImpulsAnalysisUpdateSerializer(serializers.ModelSerializer):
@@ -80,9 +80,9 @@ class ImpulsAnalysisUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = ImpulsAnalysis
         fields = ['title', 'description']
-        read_only_fields = ['id', 'status', 'task_id', 'analysis_results', 'error_message', 
+        read_only_fields = ['id', 'status', 'task_id', 'error_message', 
                            'files', 'protocols', 'user_email', 'created_at', 'updated_at',
-                           'started_at', 'completed_at']
+                           'started_at', 'completed_at', 'protocol_number', 'p_static', 'energy_j']
 
 
 class ImpulsFileUploadSerializer(serializers.Serializer):
