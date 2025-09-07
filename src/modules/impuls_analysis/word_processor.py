@@ -69,13 +69,12 @@ def get_analysis_by_protocol_number(protocol_number: str) -> dict:
                     ia.id,
                     ia.title,
                     ia.description,
-                    ia.analysis_type,
+                    ia.protocol_number,
                     ia.status,
                     ia.created_at,
                     ia.updated_at,
                     ia.started_at,
                     ia.completed_at,
-                    ia.protocol_number,
                     ia.p_static,
                     ia.energy_j,
                     ia.error_message,
@@ -318,14 +317,14 @@ def create_impulse_tables(doc, extrema_df):
         duration_row = table.rows[end_row + 1]
         duration_row.cells[0].text = "Длительность импульса"
         duration_row.cells[1].text = "T, сек"
-        duration = group['duration_v'].iloc[0]
+        duration = float(group['duration_v'].iloc[0])
         duration_row.cells[2].text = format_sig_plain(duration, 2, decimal_comma=True)
 
         # --- Площадь импульса ---
         area_row = table.rows[end_row + 2]
         area_row.cells[0].text = "Площадь импульса"
         area_row.cells[1].text = "S, усл.единиц²"
-        area_row.cells[2].text = f"{group['area'].iloc[0]:.2f}"
+        area_row.cells[2].text = f"{float(group['area'].iloc[0]):.2f}"
 
         # Форматирование всех ячеек таблицы (Times New Roman 14)
         for row in table.rows:
@@ -438,7 +437,7 @@ def create_word_document(analysis_data: dict) -> Document:
     title_paragraph.paragraph_format.line_spacing = 1.0
     title_paragraph.paragraph_format.space_after = Pt(0)
     
-    protocol_number = analysis_data['analysis']['protocol_number'].iloc[0]
+    protocol_number = str(analysis_data['analysis']['protocol_number'].iat[0])
 
     title_run = title_paragraph.add_run(f"ПРОТОКОЛ № {protocol_number} от {current_date} г.")
     title_run.font.name = 'Times New Roman'
@@ -527,11 +526,11 @@ def create_word_document(analysis_data: dict) -> Document:
                 run.bold = True
             paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    m1_kg = analysis_data["plan_records"]["m1_kg"].iloc[0]
-    l1_m = analysis_data["plan_records"]["l1_m"].iloc[0]
-    d1_m = analysis_data["plan_records"]["d1_m"].iloc[0]
-    l2_m = analysis_data["plan_records"]["l2_m"].iloc[0]
-    d2_m = analysis_data["plan_records"]["d2_m"].iloc[0]
+    m1_kg = float(analysis_data["plan_records"]["m1_kg"].iloc[0])
+    l1_m = float(analysis_data["plan_records"]["l1_m"].iloc[0])
+    d1_m = float(analysis_data["plan_records"]["d1_m"].iloc[0])
+    l2_m = float(analysis_data["plan_records"]["l2_m"].iloc[0])
+    d2_m = float(analysis_data["plan_records"]["d2_m"].iloc[0])
 
     # Данные таблицы
     table_data = [
@@ -611,11 +610,11 @@ def create_word_document(analysis_data: dict) -> Document:
                 run.bold = True
             paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
     
-    energy_j = int(analysis_data["analysis"]["energy_j"].iloc[0])
-    v = round(analysis_data["plan_records"]["v_ms"].iloc[0], 1)
-    p_static_value = int(analysis_data["plan_records"]["p_static_value"].iloc[0])
-    p_static = int(analysis_data["plan_records"]["p_static"].iloc[0])
-    p_n = int(analysis_data["plan_records"]["p_n"].iloc[0])
+    energy_j = int(float(analysis_data["analysis"]["energy_j"].iloc[0]))
+    v = round(float(analysis_data["plan_records"]["v_ms"].iloc[0]), 1)
+    p_static_value = int(float(analysis_data["plan_records"]["p_static_value"].iloc[0]))
+    p_static = int(float(analysis_data["plan_records"]["p_static"].iloc[0]))
+    p_n = int(float(analysis_data["plan_records"]["p_n"].iloc[0]))
 
     # Данные таблицы нагружения
     loading_data = [
@@ -659,7 +658,7 @@ def create_word_document(analysis_data: dict) -> Document:
     run5.bold = True
 
     # Получаем пути к изображениям по UUID анализа
-    analysis_id = analysis_data['analysis']['id'].iloc[0]
+    analysis_id = str(analysis_data['analysis']['id'].iloc[0])
     analysis_dir = os.path.join(settings.MEDIA_ROOT, 'impuls_analysis', 'analyses')
     
     detailed_image_path = None

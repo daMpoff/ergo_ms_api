@@ -575,7 +575,7 @@ class ImpulsProtocolGenerator:
 ПРОТОКОЛ АНАЛИЗА ИМПУЛЬСА
 
 Название анализа: {analysis.title}
-Тип анализа: {analysis.get_analysis_type_display()}
+Номер протокола: {analysis.protocol_number or 'Не указан'}
 Дата создания: {analysis.created_at.strftime('%d.%m.%Y %H:%M')}
 Статус: {analysis.get_status_display()}
 
@@ -642,7 +642,7 @@ class ImpulsProtocolGenerator:
         for i, analysis in enumerate(analyses, 1):
             summary_content += f"""
 {i}. {analysis.title}
-   Тип: {analysis.get_analysis_type_display()}
+   Протокол: {analysis.protocol_number or 'Не указан'}
    Статус: {analysis.get_status_display()}
    Дата: {analysis.created_at.strftime('%d.%m.%Y')}
 """

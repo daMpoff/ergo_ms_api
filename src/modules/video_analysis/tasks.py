@@ -102,6 +102,9 @@ def translate_video_analysis(self, video_name, user_id=1, use_gpu=None, analysis
             raise ValueError(f"Анализ с UUID {analysis_uuid} не найден")
         
         logger.info(f"Создан анализ с ID {analysis.id}")
+        logger.info(f"Настройки субтитров анализа: lines={analysis.subtitle_lines_count}, size={analysis.subtitle_font_size}, "
+                   f"font_color={analysis.subtitle_font_color}, bg_color={analysis.subtitle_background_color}, "
+                   f"transparent={analysis.subtitle_background_transparent}")
 
         # --- Пути для результатов ---
         temp_audio_path = Path(results_path) / f'{base_name}_temp_audio.wav'
@@ -165,7 +168,10 @@ def translate_video_analysis(self, video_name, user_id=1, use_gpu=None, analysis
         srt_path, df_subtitles = convert_wav_to_bilingual_subtitles(
             temp_audio_path_str,
             temp_srt_path_str,
-            use_gpu=use_gpu
+            use_gpu=use_gpu,
+            subtitle_lines_count=analysis.subtitle_lines_count,
+            video_path=str(video_path),
+            font_size=analysis.subtitle_font_size
         )
         if not srt_path or df_subtitles is None:
             analysis.status = 'failed'
@@ -234,7 +240,12 @@ def translate_video_analysis(self, video_name, user_id=1, use_gpu=None, analysis
             video_path_abs,
             srt_path_abs,
             output_video_path_abs,
-            str(FFMPEG_PATH)
+            str(FFMPEG_PATH),
+            subtitle_lines_count=analysis.subtitle_lines_count,
+            subtitle_font_size=analysis.subtitle_font_size,
+            subtitle_font_color=analysis.subtitle_font_color,
+            subtitle_background_color=analysis.subtitle_background_color,
+            subtitle_background_transparent=analysis.subtitle_background_transparent
         )
         if not success:
             analysis.status = 'failed'

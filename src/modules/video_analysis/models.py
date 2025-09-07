@@ -50,6 +50,13 @@ class VideoAnalysis(models.Model):
     subtitle_count = models.IntegerField(default=0, verbose_name='Количество субтитров')
     error_message = models.TextField(blank=True, verbose_name='Сообщение об ошибке')
     
+    # Настройки субтитров
+    subtitle_lines_count = models.IntegerField(default=1, verbose_name='Количество строк субтитров одновременно')
+    subtitle_font_size = models.IntegerField(default=24, verbose_name='Размер шрифта субтитров')
+    subtitle_font_color = models.CharField(max_length=7, default='#FFFFFF', verbose_name='Цвет шрифта субтитров')
+    subtitle_background_color = models.CharField(max_length=7, default='#000000', verbose_name='Цвет фона субтитров')
+    subtitle_background_transparent = models.BooleanField(default=False, verbose_name='Прозрачный фон субтитров')
+    
     # Celery task
     task_id = models.CharField(max_length=255, null=True, blank=True, verbose_name='ID задачи Celery')
     

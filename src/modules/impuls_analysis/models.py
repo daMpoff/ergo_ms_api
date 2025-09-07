@@ -10,11 +10,6 @@ class ImpulsAnalysis(models.Model):
     """
     Модель для хранения информации об анализе импульса
     """
-    ANALYSIS_TYPE_CHOICES = [
-        ('standard', 'Стандартный анализ'),
-        ('advanced', 'Расширенный анализ'),
-        ('custom', 'Пользовательский анализ'),
-    ]
     
     STATUS_CHOICES = [
         ('pending', 'Ожидает'),
@@ -28,12 +23,6 @@ class ImpulsAnalysis(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name='Пользователь')
     title = models.CharField(max_length=255, verbose_name='Название')
     description = models.TextField(blank=True, verbose_name='Описание')
-    analysis_type = models.CharField(
-        max_length=20, 
-        choices=ANALYSIS_TYPE_CHOICES, 
-        default='standard', 
-        verbose_name='Тип анализа'
-    )
     status = models.CharField(
         max_length=20, 
         choices=STATUS_CHOICES, 
@@ -103,6 +92,30 @@ class ImpulsAnalysis(models.Model):
         
         self.save()
 
+    def delete(self, using=None, keep_parents=False):
+        """Удаляет связанные файлы протоколов и изображения результатов перед удалением записи анализа."""
+        # Удаляем сгенерированные изображения результатов анализа
+        try:
+            self.delete_analysis_files()
+        except Exception:
+            pass
+
+        # Удаляем файлы протоколов (физические файлы + записи)
+        try:
+            for protocol in list(self.protocols.all()):
+                protocol.delete()
+        except Exception:
+            pass
+
+        # Удаляем загруженные файлы анализа, если есть
+        try:
+            for afile in list(self.files.all()):
+                afile.delete()
+        except Exception:
+            pass
+
+        return super().delete(using=using, keep_parents=keep_parents)
+
 class ImpulsFile(models.Model):
     """
     Модель для хранения файлов анализа импульса
@@ -148,6 +161,16 @@ class ImpulsFile(models.Model):
             self.file_size = self.file.size
         super().save(*args, **kwargs)
 
+    def delete(self, using=None, keep_parents=False):
+        """Удаляет физический файл из хранилища при удалении записи."""
+        try:
+            if self.file:
+                # Удаляем файл с диска, запись удалится ниже
+                self.file.delete(save=False)
+        except Exception:
+            pass
+        return super().delete(using=using, keep_parents=keep_parents)
+
 class ImpulsProtocol(models.Model):
     """
     Модель для хранения сгенерированных протоколов
@@ -178,6 +201,15 @@ class ImpulsProtocol(models.Model):
         if not self.file_size and self.protocol_file:
             self.file_size = self.protocol_file.size
         super().save(*args, **kwargs)
+
+    def delete(self, using=None, keep_parents=False):
+        """Удаляет файл протокола при удалении записи протокола."""
+        try:
+            if self.protocol_file:
+                self.protocol_file.delete(save=False)
+        except Exception:
+            pass
+        return super().delete(using=using, keep_parents=keep_parents)
 
 
 class ImpulsForceRecord(models.Model):

@@ -25,7 +25,8 @@ class VideoAnalysisSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at', 'started_at', 'completed_at',
             'original_video', 'audio_file', 'subtitles_file', 'output_video',
             'duration', 'duration_formatted', 'subtitle_count', 'segments_count', 'error_message',
-            'subtitle_segments'
+            'subtitle_segments', 'subtitle_lines_count', 'subtitle_font_size', 
+            'subtitle_font_color', 'subtitle_background_color', 'subtitle_background_transparent'
         ]
         read_only_fields = fields
     
@@ -61,6 +62,32 @@ class BulkVideoAnalysisCreateSerializer(serializers.Serializer):
         required=False,
         help_text="Список названий для анализов (опционально)"
     )
+    subtitle_lines_count = serializers.IntegerField(
+        default=1, 
+        min_value=1, 
+        max_value=3,
+        help_text="Количество строк субтитров одновременно (1-3)"
+    )
+    subtitle_font_size = serializers.IntegerField(
+        default=24, 
+        min_value=12, 
+        max_value=72,
+        help_text="Размер шрифта субтитров (12-72)"
+    )
+    subtitle_font_color = serializers.CharField(
+        default='#FFFFFF', 
+        max_length=7,
+        help_text="Цвет шрифта субтитров в формате HEX (#FFFFFF)"
+    )
+    subtitle_background_color = serializers.CharField(
+        default='#000000', 
+        max_length=7,
+        help_text="Цвет фона субтитров в формате HEX (#000000)"
+    )
+    subtitle_background_transparent = serializers.BooleanField(
+        default=False,
+        help_text="Прозрачный фон субтитров"
+    )
     
     def validate(self, data):
         videos = data.get('videos', [])
@@ -74,6 +101,20 @@ class BulkVideoAnalysisCreateSerializer(serializers.Serializer):
         return data
 
 
+class VideoAnalysisUpdateSerializer(serializers.ModelSerializer):
+    """Сериализатор для обновления анализа"""
+    
+    class Meta:
+        model = VideoAnalysis
+        fields = ['title', 'description']
+    
+    def validate_title(self, value):
+        """Валидация названия"""
+        if not value or not value.strip():
+            raise serializers.ValidationError("Название не может быть пустым")
+        return value.strip()
+
+
 class VideoAnalysisCreateSerializer(serializers.Serializer):
     """Сериализатор для создания одного анализа"""
     video = serializers.FileField(help_text="Видео файл для анализа")
@@ -82,4 +123,30 @@ class VideoAnalysisCreateSerializer(serializers.Serializer):
         required=False, 
         allow_blank=True,
         help_text="Название анализа (опционально)"
+    )
+    subtitle_lines_count = serializers.IntegerField(
+        default=1, 
+        min_value=1, 
+        max_value=3,
+        help_text="Количество строк субтитров одновременно (1-3)"
+    )
+    subtitle_font_size = serializers.IntegerField(
+        default=24, 
+        min_value=12, 
+        max_value=72,
+        help_text="Размер шрифта субтитров (12-72)"
+    )
+    subtitle_font_color = serializers.CharField(
+        default='#FFFFFF', 
+        max_length=7,
+        help_text="Цвет шрифта субтитров в формате HEX (#FFFFFF)"
+    )
+    subtitle_background_color = serializers.CharField(
+        default='#000000', 
+        max_length=7,
+        help_text="Цвет фона субтитров в формате HEX (#000000)"
+    )
+    subtitle_background_transparent = serializers.BooleanField(
+        default=False,
+        help_text="Прозрачный фон субтитров"
     ) 

@@ -153,7 +153,6 @@ def create_analysis_by_protocol(self, protocol_number: str, user_id: int, title:
             user=user,
             title=title or f"Протокол {protocol_number}",
             description=description or f"Анализ по протоколу {protocol_number}",
-            analysis_type='standard',
             status='processing',
             protocol_number=protocol_number,
         )

@@ -43,7 +43,6 @@ class ImpulsProtocolSerializer(serializers.ModelSerializer):
 class ImpulsAnalysisSerializer(serializers.ModelSerializer):
     """Сериализатор для анализа импульса"""
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    analysis_type_display = serializers.CharField(source='get_analysis_type_display', read_only=True)
     files = ImpulsFileSerializer(many=True, read_only=True)
     protocols = ImpulsProtocolSerializer(many=True, read_only=True)
     user_email = serializers.CharField(source='user.email', read_only=True)
@@ -51,7 +50,7 @@ class ImpulsAnalysisSerializer(serializers.ModelSerializer):
     class Meta:
         model = ImpulsAnalysis
         fields = [
-            'id', 'title', 'description', 'analysis_type', 'analysis_type_display',
+            'id', 'title', 'description',
             'status', 'status_display', 'task_id', 'error_message',
             'files', 'protocols', 'user_email', 'created_at', 'updated_at',
             'started_at', 'completed_at', 'protocol_number', 'p_static', 'energy_j'
@@ -68,7 +67,7 @@ class ImpulsAnalysisCreateSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = ImpulsAnalysis
-        fields = ['title', 'description', 'analysis_type']
+        fields = ['title', 'description']
         read_only_fields = ['id', 'status', 'task_id', 'error_message', 
                            'files', 'protocols', 'user_email', 'created_at', 'updated_at',
                            'started_at', 'completed_at', 'protocol_number', 'p_static', 'energy_j']

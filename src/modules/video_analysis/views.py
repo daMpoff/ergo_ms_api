@@ -18,7 +18,8 @@ from src.modules.video_analysis.models import VideoAnalysis
 from src.modules.video_analysis.serializers import (
     VideoAnalysisSerializer, 
     BulkVideoAnalysisCreateSerializer,
-    VideoAnalysisCreateSerializer
+    VideoAnalysisCreateSerializer,
+    VideoAnalysisUpdateSerializer
 )
 from src.modules.video_analysis.tasks import translate_video_analysis
 
@@ -39,7 +40,7 @@ class VideoAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     
     # Пагинация: поддержка ?page и ?page_size
     class StandardResultsSetPagination(PageNumberPagination):
-        page_size = 20
+        page_size = 5
         page_size_query_param = 'page_size'
         max_page_size = 100
 
@@ -58,7 +59,32 @@ class VideoAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     def retrieve(self, request, *args, **kwargs):
         analysis_id = kwargs.get('pk')
         logger.info(f"Запрос анализа {analysis_id} от пользователя {request.user.username} (ID: {request.user.id})")
-        return super().retrieve(request, *args, **kwargs) 
+        return super().retrieve(request, *args, **kwargs)
+    
+    def update(self, request, *args, **kwargs):
+        """
+        Обновить название и описание анализа.
+        """
+        analysis = self.get_object()
+        serializer = VideoAnalysisUpdateSerializer(analysis, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        
+        # Логируем изменения
+        old_title = analysis.title
+        old_description = analysis.description
+        new_title = serializer.validated_data.get('title', old_title)
+        new_description = serializer.validated_data.get('description', old_description)
+        
+        logger.info(f"Обновление анализа {analysis.id} от пользователя {request.user.username}: "
+                   f"название '{old_title}' -> '{new_title}', "
+                   f"описание '{old_description}' -> '{new_description}'")
+        
+        serializer.save()
+        
+        return Response({
+            'detail': 'Анализ успешно обновлен',
+            'analysis': VideoAnalysisSerializer(analysis).data
+        }, status=status.HTTP_200_OK) 
 
     def create(self, request, *args, **kwargs):
         """
@@ -72,6 +98,13 @@ class VideoAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         uploaded_file = serializer.validated_data['video']
         title = serializer.validated_data.get('title', '')
         
+        # Получаем настройки субтитров
+        subtitle_lines_count = serializer.validated_data.get('subtitle_lines_count', 1)
+        subtitle_font_size = serializer.validated_data.get('subtitle_font_size', 24)
+        subtitle_font_color = serializer.validated_data.get('subtitle_font_color', '#FFFFFF')
+        subtitle_background_color = serializer.validated_data.get('subtitle_background_color', '#000000')
+        subtitle_background_transparent = serializer.validated_data.get('subtitle_background_transparent', False)
+        
         # Если название не задано, используем "Автоматический анализ"
         if not title:
             title = 'Автоматический анализ'
@@ -81,7 +114,12 @@ class VideoAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
             user=user,
             title=title,
             description='Автоматический анализ видео',
-            status='pending'
+            status='pending',
+            subtitle_lines_count=subtitle_lines_count,
+            subtitle_font_size=subtitle_font_size,
+            subtitle_font_color=subtitle_font_color,
+            subtitle_background_color=subtitle_background_color,
+            subtitle_background_transparent=subtitle_background_transparent
         )
 
         # Получаем расширение файла
@@ -188,6 +226,22 @@ class VideoAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         videos = request.FILES.getlist('videos')
         titles = request.data.getlist('titles', [])
         
+        # Получаем настройки субтитров
+        subtitle_lines_count = int(request.data.get('subtitle_lines_count', 1))
+        subtitle_font_size = int(request.data.get('subtitle_font_size', 24))
+        subtitle_font_color = request.data.get('subtitle_font_color', '#FFFFFF')
+        subtitle_background_color = request.data.get('subtitle_background_color', '#000000')
+        subtitle_background_transparent = request.data.get('subtitle_background_transparent', False)
+        
+        # Преобразуем строковые boolean значения
+        if isinstance(subtitle_background_transparent, str):
+            subtitle_background_transparent = subtitle_background_transparent.lower() in ('true', '1', 'yes', 'on')
+        
+        logger.info(f"Получены настройки субтитров: lines={subtitle_lines_count}, size={subtitle_font_size}, "
+                   f"font_color={subtitle_font_color}, bg_color={subtitle_background_color}, "
+                   f"transparent={subtitle_background_transparent}")
+        logger.info(f"Все данные запроса: {dict(request.data)}")
+        
         if not videos:
             return Response({
                 'detail': 'Необходимо загрузить хотя бы один видео файл'
@@ -196,7 +250,12 @@ class VideoAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         # Валидируем данные
         serializer = BulkVideoAnalysisCreateSerializer(data={
             'videos': videos,
-            'titles': titles if titles else []
+            'titles': titles if titles else [],
+            'subtitle_lines_count': subtitle_lines_count,
+            'subtitle_font_size': subtitle_font_size,
+            'subtitle_font_color': subtitle_font_color,
+            'subtitle_background_color': subtitle_background_color,
+            'subtitle_background_transparent': subtitle_background_transparent
         })
         serializer.is_valid(raise_exception=True)
         
@@ -204,6 +263,13 @@ class VideoAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         validated_data = serializer.validated_data
         videos = validated_data['videos']
         titles = validated_data.get('titles', [])
+        
+        # Получаем настройки субтитров
+        subtitle_lines_count = validated_data.get('subtitle_lines_count', 1)
+        subtitle_font_size = validated_data.get('subtitle_font_size', 24)
+        subtitle_font_color = validated_data.get('subtitle_font_color', '#FFFFFF')
+        subtitle_background_color = validated_data.get('subtitle_background_color', '#000000')
+        subtitle_background_transparent = validated_data.get('subtitle_background_transparent', False)
         
         # Создаем папку для загрузки
         media_root = Path(settings.MEDIA_ROOT)
@@ -224,7 +290,12 @@ class VideoAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
                     user=user,
                     title=title,
                     description='Автоматический анализ видео',
-                    status='pending'
+                    status='pending',
+                    subtitle_lines_count=subtitle_lines_count,
+                    subtitle_font_size=subtitle_font_size,
+                    subtitle_font_color=subtitle_font_color,
+                    subtitle_background_color=subtitle_background_color,
+                    subtitle_background_transparent=subtitle_background_transparent
                 )
 
                 # Получаем расширение файла

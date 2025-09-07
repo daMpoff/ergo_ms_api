@@ -59,7 +59,7 @@ class ImpulsAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     pagination_class = ImpulsAnalysisPagination
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ['status', 'analysis_type']
+    filterset_fields = ['status']
     search_fields = ['title', 'description', 'protocol_number']
     ordering_fields = ['created_at', 'updated_at', 'title']
     ordering = ['-created_at']
@@ -259,6 +259,50 @@ class ImpulsAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+    @action(detail=True, methods=['get'])
+    def download_results(self, request, pk=None):
+        """Возвращает прямые ссылки на файлы результатов анализа вместо архива."""
+        analysis = self.get_object()
+
+        try:
+            media_urls = []
+            analysis_dir = os.path.join(settings.MEDIA_ROOT, 'impuls_analysis', 'analyses')
+            if os.path.exists(analysis_dir):
+                for filename in os.listdir(analysis_dir):
+                    if filename.startswith(str(analysis.id)):
+                        file_path = os.path.join(analysis_dir, filename)
+                        if os.path.isfile(file_path):
+                            relative_path = os.path.join('impuls_analysis', 'analyses', filename).replace('\\', '/')
+                            url_path = settings.MEDIA_URL.rstrip('/') + '/' + relative_path
+                            absolute_url = request.build_absolute_uri(url_path)
+                            media_urls.append({
+                                'filename': filename,
+                                'url': absolute_url,
+                            })
+
+            # Также вернем краткую текстовую информацию как отдельный файл-контент (опционально)
+            analysis_info = {
+                'title': analysis.title,
+                'description': analysis.description,
+                'status': analysis.status,
+                'protocol_number': analysis.protocol_number,
+                'p_static': analysis.p_static,
+                'energy_j': analysis.energy_j,
+                'created_at': analysis.created_at,
+                'started_at': analysis.started_at,
+                'completed_at': analysis.completed_at,
+                'error_message': analysis.error_message,
+            }
+
+            return Response({
+                'files': media_urls,
+                'info': analysis_info,
+                'count': len(media_urls),
+            })
+        except Exception as e:
+            logger.error(f'Ошибка при формировании ссылок на результаты анализа {analysis.id}: {str(e)}')
+            return Response({'error': f'Ошибка при получении результатов: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
     @action(detail=False, methods=['post'])
     def bulk_download_protocols(self, request):
         """Массовое скачивание протоколов"""
@@ -311,7 +355,7 @@ class ImpulsAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         """Получить протоколы, готовые для создания анализа"""
         try:
             # Получаем параметры пагинации
-            page_size = int(request.query_params.get('page_size', 10))
+            page_size = int(request.query_params.get('page_size', 1000))  # Увеличиваем лимит по умолчанию
             page = int(request.query_params.get('page', 1))
             
             # Получаем параметры сортировки
@@ -319,7 +363,7 @@ class ImpulsAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
             sort_direction = request.query_params.get('sort_direction', 'asc')
             
             # Ограничиваем размер страницы
-            page_size = min(page_size, 50)  # Максимум 50 элементов на странице
+            page_size = min(page_size, 1000)  # Максимум 1000 элементов на странице
             
             # Получаем все протоколы из обеих таблиц без ограничений
             force_records = ImpulsForceRecord.objects.values_list('protocol_number', flat=True).distinct()
@@ -381,6 +425,15 @@ class ImpulsAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
                 force_record = ImpulsForceRecord.objects.filter(protocol_number=protocol_number).first()
                 plan_record = ImpulsPlanRecord.objects.filter(protocol_number=protocol_number).first()
                 
+                # Проверяем, есть ли уже анализы для этого протокола у текущего пользователя
+                existing_analyses = ImpulsAnalysis.objects.filter(
+                    user=request.user,
+                    protocol_number=protocol_number
+                ).order_by('-created_at')
+                
+                # Получаем информацию о последнем анализе
+                latest_analysis = existing_analyses.first() if existing_analyses.exists() else None
+                
                 protocols_data.append({
                     'protocol_number': protocol_number,
                     'force_data': {
@@ -403,6 +456,16 @@ class ImpulsAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
                         'v_ms': plan_record.v_ms if plan_record else None,
                         'c12_kg_s': plan_record.c12_kg_s if plan_record else None,
                         'p_n': plan_record.p_n if plan_record else None,
+                    },
+                    'analysis_info': {
+                        'has_analysis': existing_analyses.exists(),
+                        'analyses_count': existing_analyses.count(),
+                        'latest_analysis': {
+                            'id': str(latest_analysis.id) if latest_analysis else None,
+                            'title': latest_analysis.title if latest_analysis else None,
+                            'status': latest_analysis.status if latest_analysis else None,
+                            'created_at': latest_analysis.created_at.isoformat() if latest_analysis else None,
+                        } if latest_analysis else None
                     }
                 })
             
@@ -442,7 +505,6 @@ class ImpulsAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         protocol_number = request.data.get('protocol_number')
         title = request.data.get('title', f'Анализ протокола {protocol_number}')
         description = request.data.get('description', '')
-        analysis_type = request.data.get('analysis_type', 'standard')
         
         if not protocol_number:
             return Response(
@@ -466,7 +528,6 @@ class ImpulsAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
                 user=request.user,
                 title=title,
                 description=description,
-                analysis_type=analysis_type,
                 protocol_number=protocol_number,
                 p_static=force_record.pct_static,
                 energy_j=force_record.energy_j,
