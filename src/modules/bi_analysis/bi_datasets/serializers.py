@@ -145,6 +145,14 @@ class DatasetDetailSerializer(serializers.ModelSerializer):
             'params',
         ]
 
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        try:
+            data['params'] = instance.params_as_json()
+        except Exception:
+            pass
+        return data
+
 # --- Detail сериализаторы ---
 class DatasetDetailFullSerializer(serializers.ModelSerializer):
     tables  = DataSetTableSerializer(many=True, read_only=True)
@@ -153,6 +161,14 @@ class DatasetDetailFullSerializer(serializers.ModelSerializer):
     class Meta:
         model  = Dataset
         fields = '__all__'
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        try:
+            data['params'] = instance.params_as_json()
+        except Exception:
+            pass
+        return data
 
 # --- Для списка (list) ---
 class DatasetShortSerializer(serializers.ModelSerializer):
@@ -201,6 +217,14 @@ class DatasetSerializer(serializers.ModelSerializer):
             'params',
         ]
         read_only_fields = ['id', 'created_at', 'owner']
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        try:
+            data['params'] = instance.params_as_json()
+        except Exception:
+            pass
+        return data
 
 
 class DatasetParamSerializer(serializers.ModelSerializer):
