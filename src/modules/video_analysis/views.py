@@ -105,6 +105,12 @@ class VideoAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         subtitle_background_color = serializer.validated_data.get('subtitle_background_color', '#000000')
         subtitle_background_transparent = serializer.validated_data.get('subtitle_background_transparent', False)
         
+        # Получаем настройки TTS
+        tts_enabled = serializer.validated_data.get('tts_enabled', False)
+        tts_volume = serializer.validated_data.get('tts_volume', 0.7)
+        tts_language = serializer.validated_data.get('tts_language', 'fr')
+        tts_voice_model = serializer.validated_data.get('tts_voice_model', 'silero_tts')
+        
         # Если название не задано, используем "Автоматический анализ"
         if not title:
             title = 'Автоматический анализ'
@@ -119,7 +125,11 @@ class VideoAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
             subtitle_font_size=subtitle_font_size,
             subtitle_font_color=subtitle_font_color,
             subtitle_background_color=subtitle_background_color,
-            subtitle_background_transparent=subtitle_background_transparent
+            subtitle_background_transparent=subtitle_background_transparent,
+            tts_enabled=tts_enabled,
+            tts_volume=tts_volume,
+            tts_language=tts_language,
+            tts_voice_model=tts_voice_model
         )
 
         # Получаем расширение файла
@@ -207,6 +217,8 @@ class VideoAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
             abs_path = build_abs(analysis.subtitles_file)
         elif file_type == 'video' and analysis.output_video:
             abs_path = build_abs(analysis.output_video)
+        elif file_type == 'tts_audio' and analysis.tts_audio_file:
+            abs_path = build_abs(analysis.tts_audio_file)
 
         if not abs_path or not abs_path.exists():
             raise Http404('Файл не найден')
@@ -233,9 +245,18 @@ class VideoAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         subtitle_background_color = request.data.get('subtitle_background_color', '#000000')
         subtitle_background_transparent = request.data.get('subtitle_background_transparent', False)
         
+        # Получаем настройки TTS
+        tts_enabled = request.data.get('tts_enabled', False)
+        tts_volume = float(request.data.get('tts_volume', 0.7))
+        tts_language = request.data.get('tts_language', 'fr')
+        tts_voice_model = request.data.get('tts_voice_model', 'silero_tts')
+        
         # Преобразуем строковые boolean значения
         if isinstance(subtitle_background_transparent, str):
             subtitle_background_transparent = subtitle_background_transparent.lower() in ('true', '1', 'yes', 'on')
+        
+        if isinstance(tts_enabled, str):
+            tts_enabled = tts_enabled.lower() in ('true', '1', 'yes', 'on')
         
         logger.info(f"Получены настройки субтитров: lines={subtitle_lines_count}, size={subtitle_font_size}, "
                    f"font_color={subtitle_font_color}, bg_color={subtitle_background_color}, "
@@ -255,7 +276,11 @@ class VideoAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
             'subtitle_font_size': subtitle_font_size,
             'subtitle_font_color': subtitle_font_color,
             'subtitle_background_color': subtitle_background_color,
-            'subtitle_background_transparent': subtitle_background_transparent
+            'subtitle_background_transparent': subtitle_background_transparent,
+            'tts_enabled': tts_enabled,
+            'tts_volume': tts_volume,
+            'tts_language': tts_language,
+            'tts_voice_model': tts_voice_model
         })
         serializer.is_valid(raise_exception=True)
         
@@ -270,6 +295,12 @@ class VideoAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         subtitle_font_color = validated_data.get('subtitle_font_color', '#FFFFFF')
         subtitle_background_color = validated_data.get('subtitle_background_color', '#000000')
         subtitle_background_transparent = validated_data.get('subtitle_background_transparent', False)
+        
+        # Получаем настройки TTS
+        tts_enabled = validated_data.get('tts_enabled', False)
+        tts_volume = validated_data.get('tts_volume', 0.7)
+        tts_language = validated_data.get('tts_language', 'fr')
+        tts_voice_model = validated_data.get('tts_voice_model', 'silero_tts')
         
         # Создаем папку для загрузки
         media_root = Path(settings.MEDIA_ROOT)
@@ -295,7 +326,11 @@ class VideoAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
                     subtitle_font_size=subtitle_font_size,
                     subtitle_font_color=subtitle_font_color,
                     subtitle_background_color=subtitle_background_color,
-                    subtitle_background_transparent=subtitle_background_transparent
+                    subtitle_background_transparent=subtitle_background_transparent,
+                    tts_enabled=tts_enabled,
+                    tts_volume=tts_volume,
+                    tts_language=tts_language,
+                    tts_voice_model=tts_voice_model
                 )
 
                 # Получаем расширение файла

@@ -16,6 +16,9 @@ from src.modules.video_analysis.scripts import (
     convert_wav_to_bilingual_subtitles,
     add_subtitles_to_video,
     preload_models,
+    generate_tts_from_subtitles,
+    combine_tts_audio_segments,
+    add_tts_audio_to_video,
     TRAINED_MODELS_PATH,
     FFMPEG_PATH
 )
@@ -221,6 +224,57 @@ def translate_video_analysis(self, video_name, user_id=1, use_gpu=None, analysis
         final_segments_count = analysis.get_subtitle_segments_count()
         logger.info(f"Всего сегментов в БД для анализа {analysis_uuid}: {final_segments_count}")
 
+        # --- Генерация TTS озвучки (если включена) ---
+        tts_audio_path = None
+        if analysis.tts_enabled:
+            self.update_state(state='GENERATING_TTS', meta={'progress': 70})
+            
+            logger.info("Генерация TTS озвучки...")
+            
+            # Создаем директорию для TTS файлов
+            tts_dir = results_path / 'tts'
+            tts_dir.mkdir(exist_ok=True)
+            
+            # Генерируем TTS из субтитров
+            subtitle_segments_data = analysis.get_subtitle_segments_data()
+            if subtitle_segments_data:
+                # Определяем спикера в зависимости от языка
+                if analysis.tts_language == 'ru':
+                    speaker = 'v3_1_ru'  # Стандартный русский голос
+                elif analysis.tts_language == 'fr':
+                    speaker = 'v3_fr'  # Французский голос (если доступен)
+                elif analysis.tts_language == 'en':
+                    speaker = 'v3_en'  # Английский голос
+                else:
+                    speaker = 'v3_1_ru'  # По умолчанию русский
+                
+                # Генерируем аудио сегменты
+                audio_segments = generate_tts_from_subtitles(
+                    subtitle_segments_data,
+                    str(tts_dir),
+                    language=analysis.tts_language,
+                    speaker=speaker,
+                    volume=analysis.tts_volume
+                )
+                
+                if audio_segments:
+                    # Объединяем сегменты в один файл
+                    tts_combined_path = results_path / f'{base_name}_tts_audio.wav'
+                    
+                    if combine_tts_audio_segments(audio_segments, str(tts_combined_path), duration):
+                        tts_audio_path = str(tts_combined_path)
+                        
+                        # Сохраняем путь к TTS файлу в модели
+                        analysis.tts_audio_file = f'video_analysis/results/{analysis_uuid}/{base_name}_tts_audio.wav'
+                        
+                        logger.info(f"TTS озвучка создана: {tts_audio_path}")
+                    else:
+                        logger.warning("Не удалось объединить TTS аудио сегменты")
+                else:
+                    logger.warning("Не удалось сгенерировать TTS аудио сегменты")
+            else:
+                logger.warning("Нет данных субтитров для генерации TTS")
+
         # --- Добавление субтитров к видео ---
         self.update_state(state='ADDING_SUBTITLES', meta={'progress': 80})
         
@@ -236,22 +290,69 @@ def translate_video_analysis(self, video_name, user_id=1, use_gpu=None, analysis
                           srt_path=str(srt_path_abs), 
                           output_path=str(output_video_path_abs))
         
-        success = add_subtitles_to_video(
-            video_path_abs,
-            srt_path_abs,
-            output_video_path_abs,
-            str(FFMPEG_PATH),
-            subtitle_lines_count=analysis.subtitle_lines_count,
-            subtitle_font_size=analysis.subtitle_font_size,
-            subtitle_font_color=analysis.subtitle_font_color,
-            subtitle_background_color=analysis.subtitle_background_color,
-            subtitle_background_transparent=analysis.subtitle_background_transparent
-        )
-        if not success:
-            analysis.status = 'failed'
-            analysis.error_message = 'Ошибка при добавлении субтитров'
-            analysis.save()
-            return {'status': 'error', 'message': analysis.error_message}
+        # Если есть TTS аудио, сначала создаем видео с субтитрами, затем добавляем TTS
+        if tts_audio_path:
+            # Создаем временное видео с субтитрами
+            temp_video_with_subs = results_path / f'{base_name}_temp_with_subs.mp4'
+            
+            success = add_subtitles_to_video(
+                video_path_abs,
+                srt_path_abs,
+                str(temp_video_with_subs),
+                str(FFMPEG_PATH),
+                subtitle_lines_count=analysis.subtitle_lines_count,
+                subtitle_font_size=analysis.subtitle_font_size,
+                subtitle_font_color=analysis.subtitle_font_color,
+                subtitle_background_color=analysis.subtitle_background_color,
+                subtitle_background_transparent=analysis.subtitle_background_transparent
+            )
+            
+            if not success:
+                analysis.status = 'failed'
+                analysis.error_message = 'Ошибка при добавлении субтитров'
+                analysis.save()
+                return {'status': 'error', 'message': analysis.error_message}
+            
+            # Добавляем TTS аудио к видео с субтитрами
+            self.update_state(state='ADDING_TTS_AUDIO', meta={'progress': 90})
+            
+            success = add_tts_audio_to_video(
+                str(temp_video_with_subs),
+                tts_audio_path,
+                output_video_path_abs,
+                str(FFMPEG_PATH),
+                volume=analysis.tts_volume
+            )
+            
+            # Удаляем временный файл
+            try:
+                temp_video_with_subs.unlink()
+            except:
+                pass
+            
+            if not success:
+                analysis.status = 'failed'
+                analysis.error_message = 'Ошибка при добавлении TTS аудио'
+                analysis.save()
+                return {'status': 'error', 'message': analysis.error_message}
+        else:
+            # Обычное добавление субтитров без TTS
+            success = add_subtitles_to_video(
+                video_path_abs,
+                srt_path_abs,
+                output_video_path_abs,
+                str(FFMPEG_PATH),
+                subtitle_lines_count=analysis.subtitle_lines_count,
+                subtitle_font_size=analysis.subtitle_font_size,
+                subtitle_font_color=analysis.subtitle_font_color,
+                subtitle_background_color=analysis.subtitle_background_color,
+                subtitle_background_transparent=analysis.subtitle_background_transparent
+            )
+            if not success:
+                analysis.status = 'failed'
+                analysis.error_message = 'Ошибка при добавлении субтитров'
+                analysis.save()
+                return {'status': 'error', 'message': analysis.error_message}
 
         # --- Сохраняем пути к файлам в модели (файлы остаются в results папке) ---
         audio_file_path = f'video_analysis/results/{analysis_uuid}/{base_name}_temp_audio.wav'

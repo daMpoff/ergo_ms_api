@@ -57,6 +57,16 @@ class VideoAnalysis(models.Model):
     subtitle_background_color = models.CharField(max_length=7, default='#000000', verbose_name='Цвет фона субтитров')
     subtitle_background_transparent = models.BooleanField(default=False, verbose_name='Прозрачный фон субтитров')
     
+    # Настройки озвучки
+    tts_enabled = models.BooleanField(default=False, verbose_name='Включить озвучку')
+    tts_volume = models.FloatField(default=0.7, verbose_name='Громкость озвучки (0.0-1.0)')
+    tts_language = models.CharField(max_length=10, default='fr', verbose_name='Язык озвучки', 
+                                   help_text='ru - русский, fr - французский')
+    tts_voice_model = models.CharField(max_length=50, default='silero_tts', verbose_name='Модель голоса')
+    
+    # Результат озвучки
+    tts_audio_file = models.CharField(max_length=500, null=True, blank=True, verbose_name='Путь к файлу озвучки')
+    
     # Celery task
     task_id = models.CharField(max_length=255, null=True, blank=True, verbose_name='ID задачи Celery')
     
@@ -102,6 +112,12 @@ class VideoAnalysis(models.Model):
         """Возвращает путь к выходному видео"""
         if self.output_video:
             return str(Path(MEDIA_ROOT) / self.output_video)
+        return None
+    
+    def get_tts_audio_path(self):
+        """Возвращает путь к файлу озвучки"""
+        if self.tts_audio_file:
+            return str(Path(MEDIA_ROOT) / self.tts_audio_file)
         return None
     
     def update_status(self, status, **kwargs):

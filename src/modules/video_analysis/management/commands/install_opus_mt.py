@@ -10,7 +10,7 @@ import requests
 import shutil
 from pathlib import Path
 
-from src.config.settings.static import TRAINED_MODELS_PATH
+from src.config.settings.static import TRAINED_MODELS_PATH, PACKAGES_PATH
 
 from django.core.management.base import BaseCommand, CommandError
 

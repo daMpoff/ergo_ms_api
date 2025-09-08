@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 
 import pandas as pd
+import platform
 
 from vosk import Model, KaldiRecognizer
 from moviepy.editor import VideoFileClip
@@ -23,8 +24,18 @@ logger = logging.getLogger('video_analysis')
 import torch
 from django.apps import apps
 
+# Импорты для GPU batch-обработки vosk
+try:
+    from vosk import BatchModel, BatchRecognizer, GpuInit
+    GPU_VOSK_AVAILABLE = True
+    logger.info("GPU batch-обработка vosk: импорт успешен")
+except ImportError:
+    GPU_VOSK_AVAILABLE = False
+    logger.warning("GPU batch-обработка vosk: импорт недоступен, используется обычная vosk")
+
 # Константы
 FRAME_CHUNK_SIZE = 4000  # Размер блока чтения аудио в фреймах
+BATCH_CHUNK_SIZE = 8000  # Размер блока для batch-обработки GPU
 
 FFMPEG_PATH = Path(PACKAGES_PATH) / 'ffmpeg' / 'bin' / 'ffmpeg.exe'
 
@@ -36,7 +47,52 @@ if not os.path.exists(VIDEO_ANALYSIS_MEDIA_DIR):
 _translation_model = None
 _translation_tokenizer = None
 _vosk_model = None
+_batch_vosk_model = None
+_tts_model = None
 _device = None
+_gpu_initialized = False
+
+
+def _is_vosk_batch_supported() -> bool:
+    """Возвращает True только если среда поддерживает CUDA batch Vosk.
+    На практике официальный batch CUDA доступен лишь на Linux.
+    """
+    if not GPU_VOSK_AVAILABLE:
+        return False
+    if platform.system() != 'Linux':
+        logger.warning(f"Vosk batch CUDA не поддерживается на {platform.system()}. Будет использована обычная модель.")
+        return False
+    if not torch.cuda.is_available():
+        logger.warning("CUDA недоступна. Будет использована обычная модель Vosk.")
+        return False
+    return True
+
+def init_gpu_vosk():
+    """
+    Инициализирует GPU для vosk batch-обработки
+    
+    Возвращает:
+    bool: True если GPU успешно инициализирован, False иначе
+    """
+    global _gpu_initialized
+    
+    if _gpu_initialized:
+        return True
+    
+    if not _is_vosk_batch_supported():
+        logger.info("GPU batch-обработка vosk недоступна")
+        return False
+    
+    try:
+        GpuInit()
+        _gpu_initialized = True
+        logger.info("GPU для vosk успешно инициализирован")
+        return True
+    except Exception as e:
+        logger.warning(f"Не удалось инициализировать GPU для vosk: {e}")
+        _gpu_initialized = False
+        return False
+
 
 def get_device(use_gpu=None):
     """
@@ -102,7 +158,7 @@ def _load_translation_model(translation_model_name=None, use_gpu=None):
 
 def _load_vosk_model(model_path=None):
     """
-    Ленивая загрузка модели Vosk (Vosk не поддерживает GPU напрямую)
+    Ленивая загрузка модели Vosk (обычная версия)
     """
     global _vosk_model
     
@@ -116,6 +172,343 @@ def _load_vosk_model(model_path=None):
     
     return _vosk_model
 
+
+def _load_batch_vosk_model(model_path=None):
+    """
+    Ленивая загрузка batch-модели Vosk для GPU обработки
+    """
+    global _batch_vosk_model
+    
+    if _batch_vosk_model is None and _is_vosk_batch_supported():
+        logger.info("Загрузка batch-модели распознавания речи для GPU...")
+        if model_path is None:
+            model_path = str(Path(TRAINED_MODELS_PATH) / "vosk-model-ru-0.42")
+        
+        # Инициализируем GPU если еще не инициализирован
+        if init_gpu_vosk():
+            try:
+                _batch_vosk_model = BatchModel(model_path)
+                logger.info("Batch-модель распознавания речи для GPU загружена!")
+            except Exception as e:
+                logger.error(f"Ошибка при загрузке batch-модели: {e}. Среда: os={platform.system()}, cuda={torch.cuda.is_available()}")
+                _batch_vosk_model = None
+        else:
+            logger.warning("GPU не инициализирован, batch-модель не загружена")
+    
+    return _batch_vosk_model
+
+
+def _load_tts_model(use_gpu=None, language='ru', speaker='v3_1_ru'):
+    """
+    Ленивая загрузка TTS модели Silero из папки trained_models
+    """
+    global _tts_model
+    
+    # Проверяем, нужно ли загрузить модель заново (другой язык/спикер)
+    if (_tts_model is None or 
+        _tts_model.get('language') != language or 
+        _tts_model.get('speaker') != speaker):
+        logger.info("Загрузка TTS модели Silero...")
+        try:
+            import torch
+            import json
+            
+            device = get_device(use_gpu)
+            
+            # Путь к локальной модели
+            tts_models_dir = Path(TRAINED_MODELS_PATH) / 'silero-tts'
+            model_dir = tts_models_dir / f'{language}_{speaker}'
+            
+            if model_dir.exists():
+                # Загружаем локальную модель
+                logger.info(f"Загрузка локальной TTS модели из {model_dir}")
+                
+                # Читаем конфигурацию
+                config_path = model_dir / 'config.json'
+                if config_path.exists():
+                    with open(config_path, 'r', encoding='utf-8') as f:
+                        config = json.load(f)
+                    logger.info(f"Конфигурация модели: {config}")
+                else:
+                    config = {
+                        'language': language,
+                        'speaker': speaker,
+                        'sample_rate': 48000
+                    }
+                
+                # Загружаем модель с torch.hub (для получения архитектуры)
+                # Используем локальный репозиторий в packages
+                try:
+                    import sys as _sys
+                    local_repo_dir = Path(PACKAGES_PATH) / 'silero-models'
+                    repo_dir = str(local_repo_dir)
+                    src_dir = str(local_repo_dir / 'src')
+                    for p in (repo_dir, src_dir):
+                        if os.path.isdir(p) and p not in _sys.path:
+                            _sys.path.insert(0, p)
+                except Exception as _e:
+                    logger.warning(f"Не удалось подготовить sys.path для локального silero: {_e}")
+
+                model, example_text = torch.hub.load(
+                    repo_or_dir=repo_dir,
+                    model='silero_tts',
+                    language=language,
+                    speaker=speaker,
+                    source='local'
+                )
+                
+                # Загружаем веса из локального файла
+                model_path = model_dir / 'model.pt'
+                if model_path.exists():
+                    try:
+                        state_dict = torch.load(model_path, map_location=device)
+                        model.load_state_dict(state_dict)
+                        logger.info("Загружены локальные веса модели")
+                    except Exception as e:
+                        logger.warning(f"Не удалось загрузить локальные веса: {e}, используем предзагруженную модель")
+                
+                model = model.to(device)
+                _tts_model = {
+                    'model': model,
+                    'device': device,
+                    'sample_rate': config.get('sample_rate', 48000),
+                    'language': config.get('language', language),
+                    'speaker': config.get('speaker', speaker)
+                }
+                
+                logger.info(f"Локальная TTS модель загружена на {device}!")
+                
+            else:
+                # Загружаем модель с torch.hub (fallback)
+                logger.warning(f"Локальная модель не найдена в {model_dir}, загружаем с torch.hub")
+                logger.info("Для установки локальной модели выполните: python manage.py install_tts_model")
+                
+                # Локальный путь также для fallback
+                try:
+                    import sys as _sys
+                    local_repo_dir = Path(PACKAGES_PATH) / 'silero-models'
+                    repo_dir = str(local_repo_dir)
+                    src_dir = str(local_repo_dir / 'src')
+                    for p in (repo_dir, src_dir):
+                        if os.path.isdir(p) and p not in _sys.path:
+                            _sys.path.insert(0, p)
+                except Exception as _e:
+                    logger.warning(f"Не удалось подготовить sys.path для локального silero: {_e}")
+
+                model, example_text = torch.hub.load(
+                    repo_or_dir=repo_dir,
+                    model='silero_tts',
+                    language=language,
+                    speaker=speaker,
+                    source='local'
+                )
+                
+                model = model.to(device)
+                _tts_model = {
+                    'model': model,
+                    'device': device,
+                    'sample_rate': 48000,
+                    'language': language,
+                    'speaker': speaker
+                }
+                
+                logger.info(f"TTS модель Silero загружена с torch.hub на {device}!")
+            
+        except Exception as e:
+            logger.error(f"Ошибка при загрузке TTS модели: {e}")
+            _tts_model = None
+    
+    return _tts_model
+
+
+def generate_tts_audio(text, output_path, language='ru', speaker='v3_1_ru', volume=1.0):
+    """
+    Генерирует аудио из текста с помощью Silero TTS
+    
+    Параметры:
+    text (str): Текст для озвучки
+    output_path (str): Путь для сохранения аудио файла
+    language (str): Язык озвучки ('ru', 'en', 'fr')
+    speaker (str): Голос диктора
+    volume (float): Громкость (0.0-1.0)
+    
+    Возвращает:
+    bool: Успешность операции
+    """
+    try:
+        import torch
+        import torchaudio
+        import numpy as np
+        
+        # Загружаем модель с нужным языком и спикером
+        tts_data = _load_tts_model(language=language, speaker=speaker)
+        if not tts_data:
+            logger.error("TTS модель не загружена")
+            return False
+        
+        model = tts_data['model']
+        device = tts_data['device']
+        sample_rate = tts_data['sample_rate']
+        model_language = tts_data.get('language', language)
+        model_speaker = tts_data.get('speaker', speaker)
+        
+        logger.debug(f"Генерация TTS: язык={model_language}, спикер={model_speaker}, текст='{text[:50]}...'")
+        
+        # Генерируем аудио
+        with torch.no_grad():
+            audio = model.apply_tts(
+                text=text,
+                speaker=model_speaker,
+                sample_rate=sample_rate
+            )
+        
+        # Применяем громкость
+        if volume != 1.0:
+            audio = audio * volume
+        
+        # Ограничиваем значения
+        audio = torch.clamp(audio, -1.0, 1.0)
+        
+        # Сохраняем в файл
+        torchaudio.save(output_path, audio.unsqueeze(0).cpu(), sample_rate)
+        
+        logger.info(f"TTS аудио сохранено: {output_path}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Ошибка при генерации TTS аудио: {e}")
+        return False
+
+
+def generate_tts_from_subtitles(subtitles_data, output_dir, language='ru', speaker='v3_1_ru', volume=1.0):
+    """
+    Генерирует аудио файлы из данных субтитров
+    
+    Параметры:
+    subtitles_data (list): Список словарей с данными субтитров
+    output_dir (str): Директория для сохранения аудио файлов
+    language (str): Язык озвучки
+    speaker (str): Голос диктора
+    volume (float): Громкость
+    
+    Возвращает:
+    list: Список путей к созданным аудио файлам
+    """
+    try:
+        os.makedirs(output_dir, exist_ok=True)
+        audio_files = []
+        
+        for i, subtitle in enumerate(subtitles_data):
+            # Выбираем текст в зависимости от языка
+            if language == 'ru':
+                text = subtitle.get('russian_text', '')
+            else:
+                text = subtitle.get('french_text', '')
+            
+            if not text.strip():
+                continue
+            
+            # Генерируем имя файла
+            audio_filename = f"tts_segment_{i+1:04d}.wav"
+            audio_path = os.path.join(output_dir, audio_filename)
+            
+            # Генерируем аудио
+            if generate_tts_audio(text, audio_path, language, speaker, volume):
+                audio_files.append({
+                    'path': audio_path,
+                    'start_time': subtitle.get('start_time'),
+                    'end_time': subtitle.get('end_time'),
+                    'text': text
+                })
+            else:
+                logger.warning(f"Не удалось сгенерировать аудио для сегмента {i+1}")
+        
+        logger.info(f"Сгенерировано {len(audio_files)} TTS аудио файлов")
+        return audio_files
+        
+    except Exception as e:
+        logger.error(f"Ошибка при генерации TTS из субтитров: {e}")
+        return []
+
+
+def combine_tts_audio_segments(audio_segments, output_path, video_duration=None):
+    """
+    Объединяет TTS аудио сегменты в один файл с правильными временными метками
+    
+    Параметры:
+    audio_segments (list): Список аудио сегментов с временными метками
+    output_path (str): Путь для сохранения объединенного файла
+    video_duration (float): Длительность видео в секундах
+    
+    Возвращает:
+    bool: Успешность операции
+    """
+    try:
+        from pydub import AudioSegment
+        from pydub.silence import Silence
+        
+        if not audio_segments:
+            logger.warning("Нет аудио сегментов для объединения")
+            return False
+        
+        # Определяем общую длительность
+        if video_duration:
+            total_duration_ms = int(video_duration * 1000)
+        else:
+            # Берем время последнего сегмента
+            last_segment = audio_segments[-1]
+            end_time = parse_srt_time_to_seconds(last_segment['end_time'])
+            total_duration_ms = int(end_time * 1000)
+        
+        # Создаем пустой аудио трек
+        combined_audio = AudioSegment.silent(duration=total_duration_ms)
+        
+        # Добавляем каждый сегмент в нужное место
+        for segment in audio_segments:
+            try:
+                # Загружаем аудио сегмент
+                audio = AudioSegment.from_wav(segment['path'])
+                
+                # Парсим время начала
+                start_time_sec = parse_srt_time_to_seconds(segment['start_time'])
+                start_time_ms = int(start_time_sec * 1000)
+                
+                # Накладываем аудио
+                combined_audio = combined_audio.overlay(audio, position=start_time_ms)
+                
+            except Exception as e:
+                logger.warning(f"Не удалось добавить сегмент {segment['path']}: {e}")
+                continue
+        
+        # Сохраняем объединенный файл
+        combined_audio.export(output_path, format="wav")
+        
+        logger.info(f"TTS аудио объединено и сохранено: {output_path}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Ошибка при объединении TTS аудио: {e}")
+        return False
+
+
+def parse_srt_time_to_seconds(srt_time):
+    """
+    Преобразует время SRT в секунды
+    
+    Параметры:
+    srt_time (str): Время в формате HH:MM:SS,mmm
+    
+    Возвращает:
+    float: Время в секундах
+    """
+    try:
+        time_part, ms_part = srt_time.split(',')
+        h, m, s = map(int, time_part.split(':'))
+        ms = int(ms_part)
+        return h * 3600 + m * 60 + s + ms / 1000.0
+    except:
+        return 0.0
+
 def preload_models(translation_model_name=None, vosk_model_path=None, use_gpu=None):
     """
     Предварительная загрузка всех моделей для ускорения последующих операций
@@ -123,11 +516,29 @@ def preload_models(translation_model_name=None, vosk_model_path=None, use_gpu=No
     Параметры:
     translation_model_name (str): Путь к модели перевода
     vosk_model_path (str): Путь к модели Vosk
-    use_gpu (bool): Использовать GPU для моделей перевода
+    use_gpu (bool): Использовать GPU для моделей перевода и vosk
     """
     logger.info("Предварительная загрузка моделей...")
     _load_translation_model(translation_model_name, use_gpu)
+    
+    # Загружаем обычную модель vosk
     _load_vosk_model(vosk_model_path)
+    
+    # Если поддерживается batch и запрошен GPU, загружаем batch-модель
+    if use_gpu and _is_vosk_batch_supported():
+        batch_model = _load_batch_vosk_model(vosk_model_path)
+        if batch_model:
+            logger.info("Batch-модель vosk для GPU успешно загружена")
+        else:
+            logger.warning("Не удалось загрузить batch-модель vosk для GPU")
+    
+    # Загружаем TTS модель
+    tts_model = _load_tts_model(use_gpu)
+    if tts_model:
+        logger.info("TTS модель Silero успешно загружена")
+    else:
+        logger.warning("Не удалось загрузить TTS модель")
+    
     logger.info("Все модели загружены и готовы к использованию!")
 
 def translate_text_ru_to_fr(text, model=None, tokenizer=None, use_gpu=None):
@@ -299,6 +710,191 @@ def split_long_text(text, max_chars_per_line=50):
         segments.append(current_segment.strip())
     
     return segments if segments else [text]
+
+
+class GpuVoskProcessor:
+    """
+    Класс для batch-обработки аудио с помощью GPU-ускоренного vosk
+    """
+    
+    def __init__(self, model_path=None, sample_rate=16000):
+        """
+        Инициализация процессора
+        
+        Args:
+            model_path: Путь к модели vosk
+            sample_rate: Частота дискретизации аудио
+        """
+        self.model_path = model_path
+        self.sample_rate = sample_rate
+        self.batch_model = None
+        self.recognizers = []
+        self.results = []
+        self.ended = set()
+        
+    def initialize(self):
+        """
+        Инициализирует batch-модель и GPU
+        
+        Returns:
+            bool: True если инициализация успешна
+        """
+        if not GPU_VOSK_AVAILABLE:
+            logger.error("GPU batch-обработка vosk недоступна")
+            return False
+            
+        try:
+            # Инициализируем GPU
+            if not init_gpu_vosk():
+                return False
+                
+            # Загружаем batch-модель
+            self.batch_model = _load_batch_vosk_model(self.model_path)
+            if not self.batch_model:
+                logger.error("Не удалось загрузить batch-модель")
+                return False
+                
+            logger.info("GPU vosk процессор успешно инициализирован")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Ошибка при инициализации GPU vosk процессора: {e}")
+            return False
+    
+    def prepare_audio_chunks(self, wav_file_path, chunk_size=BATCH_CHUNK_SIZE):
+        """
+        Подготавливает аудио файл для batch-обработки, разбивая на чанки
+        
+        Args:
+            wav_file_path: Путь к WAV файлу
+            chunk_size: Размер чанка в байтах
+            
+        Returns:
+            list: Список аудио чанков или None при ошибке
+        """
+        try:
+            wf = wave.open(wav_file_path, "rb")
+            
+            # Проверяем формат
+            if wf.getnchannels() != 1 or wf.getsampwidth() != 2 or wf.getcomptype() != "NONE":
+                logger.error("Аудиофайл должен быть в формате WAV mono PCM")
+                wf.close()
+                return None
+            
+            # Проверяем частоту дискретизации
+            if wf.getframerate() != self.sample_rate:
+                logger.warning(f"Частота дискретизации файла ({wf.getframerate()}) не соответствует ожидаемой ({self.sample_rate})")
+            
+            # Читаем весь файл и разбиваем на чанки
+            chunks = []
+            while True:
+                data = wf.readframes(chunk_size)
+                if len(data) == 0:
+                    break
+                chunks.append(data)
+            
+            wf.close()
+            logger.info(f"Аудио разбито на {len(chunks)} чанков для batch-обработки")
+            return chunks
+            
+        except Exception as e:
+            logger.error(f"Ошибка при подготовке аудио чанков: {e}")
+            return None
+    
+    def process_audio_batch(self, audio_chunks):
+        """
+        Обрабатывает аудио чанки с помощью GPU batch-обработки
+        
+        Args:
+            audio_chunks: Список аудио чанков
+            
+        Returns:
+            list: Список результатов распознавания
+        """
+        if not self.batch_model:
+            logger.error("Batch-модель не инициализирована")
+            return []
+        
+        try:
+            # Создаем распознаватели для каждого чанка
+            self.recognizers = [BatchRecognizer(self.batch_model, self.sample_rate) for _ in audio_chunks]
+            self.results = [""] * len(audio_chunks)
+            self.ended = set()
+            
+            total_samples = 0
+            start_time = time.time()
+            
+            # Основной цикл обработки
+            chunk_index = 0
+            while True:
+                # Подаем данные в распознаватели
+                for i, chunk in enumerate(audio_chunks):
+                    if i in self.ended:
+                        continue
+                    
+                    if chunk_index < len(chunk) if isinstance(chunk, (list, bytes)) else False:
+                        # Берем следующую порцию данных из чанка
+                        if isinstance(chunk, bytes):
+                            data_portion = chunk[chunk_index:chunk_index + FRAME_CHUNK_SIZE] if chunk_index < len(chunk) else b""
+                        else:
+                            data_portion = b""
+                        
+                        if len(data_portion) == 0:
+                            self.recognizers[i].FinishStream()
+                            self.ended.add(i)
+                            continue
+                            
+                        self.recognizers[i].AcceptWaveform(data_portion)
+                        total_samples += len(data_portion)
+                    else:
+                        self.recognizers[i].FinishStream()
+                        self.ended.add(i)
+                
+                # Ждем результатов от GPU
+                self.batch_model.Wait()
+                
+                # Получаем и добавляем результаты
+                for i in range(len(audio_chunks)):
+                    result = self.recognizers[i].Result()
+                    if len(result) != 0:
+                        result_data = json.loads(result)
+                        text = result_data.get("text", "")
+                        if text:
+                            self.results[i] = self.results[i] + " " + text if self.results[i] else text
+                
+                # Проверяем, закончили ли обработку всех чанков
+                if len(self.ended) == len(audio_chunks):
+                    break
+                    
+                chunk_index += FRAME_CHUNK_SIZE
+            
+            end_time = time.time()
+            processing_time = end_time - start_time
+            
+            # Логируем статистику производительности
+            audio_duration = total_samples / self.sample_rate / 2  # 16-bit samples
+            speedup = audio_duration / processing_time if processing_time > 0 else 0
+            
+            logger.info(f"GPU batch-обработка завершена:")
+            logger.info(f"  Обработано {audio_duration:.3f} сек аудио за {processing_time:.3f} сек")
+            logger.info(f"  Ускорение: {speedup:.3f}x RT")
+            
+            # Фильтруем пустые результаты и возвращаем
+            filtered_results = [result.strip() for result in self.results if result.strip()]
+            return filtered_results
+            
+        except Exception as e:
+            logger.error(f"Ошибка при GPU batch-обработке: {e}")
+            return []
+    
+    def cleanup(self):
+        """
+        Очищает ресурсы процессора
+        """
+        self.recognizers = []
+        self.results = []
+        self.ended = set()
+        # batch_model остается в кеше для повторного использования
 
 def split_subtitle_with_timing(subtitle_data, max_chars_per_line=50, font_size=24, video_width=1920):
     """
@@ -698,6 +1294,184 @@ def convert_wav_to_bilingual_subtitles(wav_file_path, output_srt_path=None, mode
     
     return output_srt_path, df_results
 
+
+def convert_wav_to_bilingual_subtitles_gpu(wav_file_path, output_srt_path=None, model_path=None, 
+                                         translation_model_name=None, use_gpu=True, 
+                                         subtitle_lines_count=1, video_path=None, font_size=24):
+    """
+    GPU-ускоренная версия преобразования WAV файла в двуязычные субтитры формата SRT
+    
+    Параметры:
+    wav_file_path (str): Путь к WAV файлу
+    output_srt_path (str): Путь для сохранения SRT файла (опционально)
+    model_path (str): Путь к модели Vosk для русского языка
+    translation_model_name (str): Путь к модели перевода
+    use_gpu (bool): Использовать GPU для обработки
+    subtitle_lines_count (int): Количество строк субтитров одновременно
+    video_path (str): Путь к видеофайлу для получения разрешения (опционально)
+    font_size (int): Размер шрифта субтитров для расчета максимальной длины строки
+    
+    Возвращает:
+    tuple: (путь к созданному SRT файлу, DataFrame с результатами распознавания и перевода)
+    """
+    import time
+    
+    # Проверяем доступность GPU batch-обработки
+    if not use_gpu or not GPU_VOSK_AVAILABLE:
+        logger.info("GPU batch-обработка недоступна или отключена, используем обычную версию")
+        return convert_wav_to_bilingual_subtitles(
+            wav_file_path, output_srt_path, model_path, translation_model_name, 
+            use_gpu, subtitle_lines_count, video_path, font_size
+        )
+    
+    # Получаем разрешение видео для точного расчета длины строк
+    video_width = 1920  # По умолчанию
+    if video_path and os.path.exists(video_path):
+        try:
+            video_width, video_height = get_video_resolution(video_path)
+            logger.info(f"Разрешение видео: {video_width}x{video_height}")
+        except Exception as e:
+            logger.warning(f"Не удалось получить разрешение видео, используем {video_width}x1080: {e}")
+    
+    # Создаем имя для SRT файла, если не указано
+    if not output_srt_path:
+        output_srt_path = os.path.splitext(wav_file_path)[0] + "_bilingual.srt"
+    else:
+        output_srt_path = str(output_srt_path)
+    
+    # Загружаем модель перевода
+    translation_model, tokenizer = _load_translation_model(translation_model_name, use_gpu)
+    
+    # Инициализируем GPU vosk процессор
+    gpu_processor = GpuVoskProcessor(model_path, sample_rate=16000)
+    if not gpu_processor.initialize():
+        logger.warning("Не удалось инициализировать GPU vosk процессор, используем обычную версию")
+        return convert_wav_to_bilingual_subtitles(
+            wav_file_path, output_srt_path, model_path, translation_model_name, 
+            use_gpu, subtitle_lines_count, video_path, font_size
+        )
+    
+    try:
+        start_time = time.time()
+        
+        # Подготавливаем аудио чанки
+        logger.info("Подготовка аудио для GPU batch-обработки...")
+        audio_chunks = gpu_processor.prepare_audio_chunks(wav_file_path)
+        if not audio_chunks:
+            logger.error("Не удалось подготовить аудио чанки")
+            return None, None
+        
+        # Обрабатываем аудио с помощью GPU
+        logger.info("Запуск GPU batch-обработки vosk...")
+        recognition_results = gpu_processor.process_audio_batch(audio_chunks)
+        
+        if not recognition_results:
+            logger.warning("GPU обработка не дала результатов, используем обычную версию")
+            gpu_processor.cleanup()
+            return convert_wav_to_bilingual_subtitles(
+                wav_file_path, output_srt_path, model_path, translation_model_name, 
+                use_gpu, subtitle_lines_count, video_path, font_size
+            )
+        
+        # Переводим результаты на французский
+        logger.info("Перевод результатов на французский...")
+        translation_start = time.time()
+        
+        subtitles_data = []
+        all_subtitles = []
+        
+        # Рассчитываем временные метки для каждого результата
+        total_duration = len(audio_chunks) * BATCH_CHUNK_SIZE / 16000.0 / 2  # Примерная длительность
+        segment_duration = total_duration / len(recognition_results) if recognition_results else 1
+        
+        for i, ru_text in enumerate(recognition_results):
+            if not ru_text.strip():
+                continue
+                
+            # Переводим на французский
+            fr_text = translate_text_ru_to_fr(ru_text, translation_model, tokenizer, use_gpu)
+            
+            # Рассчитываем временные метки
+            start_time_sec = i * segment_duration
+            end_time_sec = (i + 1) * segment_duration
+            
+            # Создаем данные субтитра
+            subtitle_data = {
+                'start_time': format_srt_time(start_time_sec),
+                'end_time': format_srt_time(end_time_sec),
+                'russian_text': ru_text,
+                'french_text': fr_text
+            }
+            
+            # Сохраняем для DataFrame
+            subtitles_data.append({
+                'id': len(subtitles_data) + 1,
+                'start_time': subtitle_data['start_time'],
+                'end_time': subtitle_data['end_time'],
+                'russian_text': subtitle_data['russian_text'],
+                'french_text': subtitle_data['french_text']
+            })
+            
+            # Разбиваем длинные субтитры на короткие сегменты
+            split_segments = split_subtitle_with_timing(
+                subtitle_data, 
+                max_chars_per_line=80,
+                font_size=font_size,
+                video_width=video_width
+            )
+            
+            all_subtitles.extend(split_segments)
+        
+        translation_time = time.time() - translation_start
+        logger.info(f"Перевод завершен за {translation_time:.2f} сек")
+        
+        # Записываем субтитры в файл
+        logger.info("Запись субтитров в SRT файл...")
+        with open(output_srt_path, "w", encoding="utf-8") as f:
+            subtitle_count = 0
+            
+            # Группируем субтитры по subtitle_lines_count
+            for i in range(0, len(all_subtitles), subtitle_lines_count):
+                group = all_subtitles[i:i + subtitle_lines_count]
+                subtitle_count += 1
+                
+                # Определяем время начала и окончания группы
+                group_start_time = group[0]['start_time']
+                group_end_time = group[-1]['end_time']
+                
+                # Объединяем тексты (только французский для SRT файла)
+                group_text = '\\n'.join([item['french_text'] for item in group])
+                
+                # Записываем группу субтитров
+                f.write(f"{subtitle_count}\n")
+                f.write(f"{group_start_time} --> {group_end_time}\n")
+                f.write(f"{group_text}\n\n")
+        
+        # Создаем DataFrame с результатами
+        df_results = pd.DataFrame(subtitles_data)
+        
+        total_time = time.time() - start_time
+        logger.info(f"GPU обработка завершена за {total_time:.2f} сек")
+        logger.info(f"Создано {len(subtitles_data)} сегментов субтитров")
+        logger.info(f"Субтитры сохранены в файл {output_srt_path}")
+        
+        # Очищаем ресурсы
+        gpu_processor.cleanup()
+        
+        return output_srt_path, df_results
+        
+    except Exception as e:
+        logger.error(f"Ошибка при GPU обработке: {e}")
+        gpu_processor.cleanup()
+        
+        # Fallback на обычную версию
+        logger.info("Переключаемся на обычную обработку...")
+        return convert_wav_to_bilingual_subtitles(
+            wav_file_path, output_srt_path, model_path, translation_model_name, 
+            use_gpu, subtitle_lines_count, video_path, font_size
+        )
+
+
 def add_subtitles_to_video(video_path, srt_path, output_video_path, ffmpeg_path=None, 
                           subtitle_lines_count=1, subtitle_font_size=24, 
                           subtitle_font_color='#FFFFFF', subtitle_background_color='#000000',
@@ -812,5 +1586,66 @@ def add_subtitles_to_video(video_path, srt_path, output_video_path, ffmpeg_path=
         return True
     except subprocess.CalledProcessError as e:
         logger.error(f"Ошибка при добавлении субтитров: {e}")
+        logger.error(f"Команда, которая вызвала ошибку: {' '.join(command)}")
+        return False
+
+
+def add_tts_audio_to_video(video_path, tts_audio_path, output_video_path, ffmpeg_path=None, volume=1.0):
+    """
+    Добавляет TTS аудио к видео с помощью FFmpeg
+    
+    Параметры:
+    video_path (str): Путь к исходному видео
+    tts_audio_path (str): Путь к TTS аудио файлу
+    output_video_path (str): Путь для сохранения результата
+    ffmpeg_path (str): Путь к исполняемому файлу FFmpeg
+    volume (float): Громкость TTS аудио (0.0-1.0)
+    
+    Возвращает:
+    bool: Успешность операции
+    """
+    if ffmpeg_path is None:
+        ffmpeg_path = str(FFMPEG_PATH)
+    
+    # Нормализуем пути для Windows
+    video_path = os.path.normpath(video_path)
+    tts_audio_path = os.path.normpath(tts_audio_path)
+    output_video_path = os.path.normpath(output_video_path)
+    ffmpeg_path = os.path.normpath(ffmpeg_path)
+    
+    # Проверяем существование файлов
+    if not os.path.exists(video_path):
+        logger.error(f"Ошибка: видеофайл не найден: {video_path}")
+        return False
+    
+    if not os.path.exists(tts_audio_path):
+        logger.error(f"Ошибка: TTS аудио файл не найден: {tts_audio_path}")
+        return False
+    
+    # Создаём директорию для выходного файла, если её нет
+    output_dir = os.path.dirname(output_video_path)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir, exist_ok=True)
+    
+    # Команда FFmpeg для смешивания аудио
+    command = [
+        ffmpeg_path,
+        '-i', video_path,      # Исходное видео
+        '-i', tts_audio_path,  # TTS аудио
+        '-filter_complex', f'[0:a][1:a]amix=inputs=2:duration=first:dropout_transition=2,volume={volume}',
+        '-c:v', 'copy',        # Копируем видео без изменений
+        '-c:a', 'aac',         # Кодируем аудио в AAC
+        output_video_path,
+        '-y'  # Перезаписать выходной файл, если он существует
+    ]
+    
+    try:
+        logger.info(f"Добавляем TTS аудио к видео...")
+        logger.debug(f"Команда FFmpeg: {' '.join(command)}")
+        subprocess.run(command, check=True)
+        logger.info(f"TTS аудио успешно добавлено. Результат сохранен в {output_video_path}")
+        return True
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Ошибка при добавлении TTS аудио: {e}")
         logger.error(f"Команда, которая вызвала ошибку: {' '.join(command)}")
         return False

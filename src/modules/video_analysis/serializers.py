@@ -26,7 +26,8 @@ class VideoAnalysisSerializer(serializers.ModelSerializer):
             'original_video', 'audio_file', 'subtitles_file', 'output_video',
             'duration', 'duration_formatted', 'subtitle_count', 'segments_count', 'error_message',
             'subtitle_segments', 'subtitle_lines_count', 'subtitle_font_size', 
-            'subtitle_font_color', 'subtitle_background_color', 'subtitle_background_transparent'
+            'subtitle_font_color', 'subtitle_background_color', 'subtitle_background_transparent',
+            'tts_enabled', 'tts_volume', 'tts_language', 'tts_voice_model', 'tts_audio_file'
         ]
         read_only_fields = fields
     
@@ -89,6 +90,28 @@ class BulkVideoAnalysisCreateSerializer(serializers.Serializer):
         help_text="Прозрачный фон субтитров"
     )
     
+    # Настройки озвучки
+    tts_enabled = serializers.BooleanField(
+        default=False,
+        help_text="Включить озвучку"
+    )
+    tts_volume = serializers.FloatField(
+        default=0.7,
+        min_value=0.0,
+        max_value=1.0,
+        help_text="Громкость озвучки (0.0-1.0)"
+    )
+    tts_language = serializers.ChoiceField(
+        choices=[('ru', 'Русский'), ('fr', 'Французский')],
+        default='fr',
+        help_text="Язык озвучки"
+    )
+    tts_voice_model = serializers.CharField(
+        default='silero_tts',
+        max_length=50,
+        help_text="Модель голоса"
+    )
+    
     def validate(self, data):
         videos = data.get('videos', [])
         titles = data.get('titles', [])
@@ -149,4 +172,26 @@ class VideoAnalysisCreateSerializer(serializers.Serializer):
     subtitle_background_transparent = serializers.BooleanField(
         default=False,
         help_text="Прозрачный фон субтитров"
-    ) 
+    )
+    
+    # Настройки озвучки
+    tts_enabled = serializers.BooleanField(
+        default=False,
+        help_text="Включить озвучку"
+    )
+    tts_volume = serializers.FloatField(
+        default=0.7,
+        min_value=0.0,
+        max_value=1.0,
+        help_text="Громкость озвучки (0.0-1.0)"
+    )
+    tts_language = serializers.ChoiceField(
+        choices=[('ru', 'Русский'), ('fr', 'Французский')],
+        default='fr',
+        help_text="Язык озвучки"
+    )
+    tts_voice_model = serializers.CharField(
+        default='silero_tts',
+        max_length=50,
+        help_text="Модель голоса"
+    )

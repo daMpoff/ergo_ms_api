@@ -77,6 +77,7 @@ LOGGING = {
             'encoding': 'utf-8',
             'maxBytes': 10*1024*1024,  # 10MB
             'backupCount': 5,
+            'delay': True,
         },
         
         'celery_worker_file': {
@@ -87,6 +88,7 @@ LOGGING = {
             'encoding': 'utf-8',
             'maxBytes': 10*1024*1024,  # 10MB
             'backupCount': 5,
+            'delay': True,
         },
         
         'celery_beat_file': {
@@ -97,6 +99,7 @@ LOGGING = {
             'encoding': 'utf-8',
             'maxBytes': 10*1024*1024,  # 10MB
             'backupCount': 5,
+            'delay': True,
         },
         
         'celery_tasks_file': {
@@ -107,6 +110,29 @@ LOGGING = {
             'encoding': 'utf-8',
             'maxBytes': 10*1024*1024,  # 10MB
             'backupCount': 5,
+            'delay': True,
+        },
+
+        # Специальные обработчики для разнесения логов по файлам
+        'video_analysis_file': {
+            'level': 'DEBUG',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': os.path.join(LOGS_ROOT, 'video_analysis.log'),
+            'formatter': 'verbose',
+            'encoding': 'utf-8',
+            'maxBytes': 10*1024*1024,  # 10MB
+            'backupCount': 5,
+            'delay': True,
+        },
+        'porosity_tasks_file': {
+            'level': 'DEBUG',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': os.path.join(LOGS_ROOT, 'porosity_tasks.log'),
+            'formatter': 'verbose',
+            'encoding': 'utf-8',
+            'maxBytes': 10*1024*1024,  # 10MB
+            'backupCount': 5,
+            'delay': True,
         },
         
         'celery_error_console': {
@@ -186,13 +212,13 @@ LOGGING = {
         },
         
         'celery.task.porosity_analysis': {
-            'handlers': ['celery_tasks_file', 'console'],
+            'handlers': ['porosity_tasks_file', 'console'],
             'level': 'DEBUG',
             'propagate': False,
         },
         
         'celery.task.video_analysis': {
-            'handlers': ['celery_tasks_file', 'console'],
+            'handlers': ['video_analysis_file', 'console'],
             'level': 'DEBUG',
             'propagate': False,
         },
@@ -206,7 +232,7 @@ LOGGING = {
         
         # Логгер для модуля video_analysis
         'video_analysis': {
-            'handlers': ['celery_tasks_file', 'console'],
+            'handlers': ['video_analysis_file', 'console'],
             'level': 'DEBUG',
             'propagate': False,
         },
