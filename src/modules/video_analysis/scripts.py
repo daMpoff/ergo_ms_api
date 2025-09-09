@@ -1686,24 +1686,24 @@ def add_subtitles_to_video(video_path, srt_path, output_video_path, ffmpeg_path=
     font_color_ffmpeg = hex_to_ffmpeg_color(subtitle_font_color)
     background_color_ffmpeg = hex_to_ffmpeg_color(subtitle_background_color)
     
-    # Настройки позиционирования
-    # Если горизонтальный отступ равен 0, используем центрированное выравнивание
-    if subtitle_margin_horizontal == 0:
-        alignment_map = {
-            'bottom': 2,      # Снизу по центру
-            'top': 8,         # Сверху по центру  
-            'center': 5,      # По центру
-            'custom': 2       # Пользовательское (по умолчанию снизу)
-        }
-    else:
-        # Если есть горизонтальный отступ, используем левое выравнивание
-        alignment_map = {
-            'bottom': 1,      # Снизу слева
-            'top': 7,         # Сверху слева  
-            'center': 4,      # По центру слева
-            'custom': 1       # Пользовательское (по умолчанию снизу слева)
-        }
+    # Настройки позиционирования: всегда используем истинное центрирование для top/center/bottom
+    # Независимо от горизонтального отступа, чтобы не ломать центр по горизонтали
+    alignment_map = {
+        'bottom': 2,   # Снизу по центру
+        'top': 8,      # Сверху по центру
+        'center': 5,   # Посредине по центру
+        'custom': 2    # Пользовательское (по умолчанию снизу по центру)
+    }
     alignment_value = alignment_map.get(subtitle_alignment, 2)
+
+    # При центрировании по горизонтали игнорируем горизонтальные отступы,
+    # чтобы исключить смещение от центра в libass
+    if alignment_value in (2, 5, 8):
+        effective_margin_l = 0
+        effective_margin_r = 0
+    else:
+        effective_margin_l = subtitle_margin_horizontal
+        effective_margin_r = subtitle_margin_horizontal
     
     # Настройки стиля
     if subtitle_background_transparent:
@@ -1719,8 +1719,8 @@ def add_subtitles_to_video(video_path, srt_path, output_video_path, ffmpeg_path=
             'BackColour=&H00000000',     # Прозрачный фон (альфа = 00)
             f'Alignment={alignment_value}',  # Выравнивание
             f'MarginV={subtitle_margin_vertical}',  # Вертикальный отступ
-            f'MarginL={subtitle_margin_horizontal}',  # Левый отступ
-            f'MarginR={subtitle_margin_horizontal}',  # Правый отступ
+            f'MarginL={effective_margin_l}',  # Левый отступ
+            f'MarginR={effective_margin_r}',  # Правый отступ
         ]
     else:
         # Для непрозрачного фона используем BorderStyle=4 (фон за текстом)
@@ -1732,8 +1732,8 @@ def add_subtitles_to_video(video_path, srt_path, output_video_path, ffmpeg_path=
             'Outline=0',      # Без обводки
             f'Alignment={alignment_value}',  # Выравнивание
             f'MarginV={subtitle_margin_vertical}',  # Вертикальный отступ
-            f'MarginL={subtitle_margin_horizontal}',  # Левый отступ
-            f'MarginR={subtitle_margin_horizontal}',  # Правый отступ
+            f'MarginL={effective_margin_l}',  # Левый отступ
+            f'MarginR={effective_margin_r}',  # Правый отступ
         ]
     
     # Создаем команду с правильным экранированием
