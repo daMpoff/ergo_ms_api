@@ -43,5 +43,26 @@ class Command(BaseCommand):
         if not hubconf.exists() or not src_dir.exists():
             raise CommandError('Репозиторий Silero не содержит ожидаемых файлов (hubconf.py, src/silero)')
 
-        self.stdout.write(self.style.SUCCESS('Локальный репозиторий Silero готов'))
+        # Перезаписываем hubconf.py требуемым содержимым
+        try:
+            desired_hubconf = (
+                "dependencies = [\"torch\"]\n\n"
+                "import sys\n"
+                "from silero import (\n"
+                "    silero_stt,\n"
+                "    silero_tts,\n"
+                "    silero_te,\n"
+                ")\n\n"
+                "__all__ = [\n"
+                "    \"silero_stt\",\n"
+                "    \"silero_tts\",\n"
+                "    \"silero_te\",\n"
+                "]\n\n"
+                "sys.path.append(\"src/silero\")\n"
+            )
+            hubconf.write_text(desired_hubconf, encoding='utf-8')
+            self.stdout.write(self.style.SUCCESS('hubconf.py обновлён по требованиям проекта'))
+        except Exception as e:
+            raise CommandError(f'Не удалось обновить hubconf.py: {e}')
 
+        self.stdout.write(self.style.SUCCESS('Локальный репозиторий Silero готов'))

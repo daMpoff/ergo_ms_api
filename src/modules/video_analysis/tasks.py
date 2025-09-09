@@ -19,7 +19,6 @@ from src.modules.video_analysis.scripts import (
     generate_tts_from_subtitles,
     combine_tts_audio_segments,
     add_tts_audio_to_video,
-    TRAINED_MODELS_PATH,
     FFMPEG_PATH
 )
 from src.modules.video_analysis.utils import (
@@ -46,13 +45,13 @@ def translate_video_analysis(self, video_name, user_id=1, use_gpu=None, analysis
     
     from django.contrib.auth import get_user_model
     User = get_user_model()
-    from src.config.settings.static import MEDIA_ROOT
+    from src.modules.video_analysis.apps import VideoAnalysisConfig
 
     try:
         # --- Папки ---
-        video_analysis_root = Path(MEDIA_ROOT) / 'video_analysis'
-        initial_video_dir = Path(video_analysis_root) / 'initial_video'
-        results_root = Path(video_analysis_root) / 'results'
+        video_analysis_root = Path(VideoAnalysisConfig.VIDEO_ANALYSIS_MEDIA)
+        initial_video_dir = Path(VideoAnalysisConfig.INITIAL_VIDEO_DIR)
+        results_root = Path(VideoAnalysisConfig.RESULTS_DIR)
 
         # --- UUID анализа ---
         if analysis_uuid is None:
@@ -136,8 +135,8 @@ def translate_video_analysis(self, video_name, user_id=1, use_gpu=None, analysis
         # --- Загрузка моделей ---
         self.update_state(state='LOADING_MODELS', meta={'progress': 20})
         
-        opus_model_path = str(Path(TRAINED_MODELS_PATH) / "opus-mt-ru-fr")
-        vosk_model_path = str(Path(TRAINED_MODELS_PATH) / "vosk-model-ru-0.42")
+        opus_model_path = VideoAnalysisConfig.TRANSLATION_MODELS_DIR
+        vosk_model_path = VideoAnalysisConfig.VOSK_MODELS_DIR
         
         logger.debug(f"opus_model_path = {opus_model_path}")
         logger.debug(f"vosk_model_path = {vosk_model_path}")
@@ -239,14 +238,18 @@ def translate_video_analysis(self, video_name, user_id=1, use_gpu=None, analysis
             subtitle_segments_data = analysis.get_subtitle_segments_data()
             if subtitle_segments_data:
                 # Определяем спикера в зависимости от языка
+                # Подбираем корректного спикера под язык согласно silero
                 if analysis.tts_language == 'ru':
-                    speaker = 'v3_1_ru'  # Стандартный русский голос
+                    # Доступны: aidar, baya, kseniya, xenia, eugene, random
+                    speaker = 'baya'
                 elif analysis.tts_language == 'fr':
-                    speaker = 'v3_fr'  # Французский голос (если доступен)
+                    # Доступны: fr_0..fr_5, random
+                    speaker = 'fr_1'
                 elif analysis.tts_language == 'en':
-                    speaker = 'v3_en'  # Английский голос
+                    # Доступны: en_0..en_118, random (зависит от модели)
+                    speaker = 'en_0'
                 else:
-                    speaker = 'v3_1_ru'  # По умолчанию русский
+                    speaker = 'random'
                 
                 # Генерируем аудио сегменты
                 audio_segments = generate_tts_from_subtitles(
@@ -261,7 +264,15 @@ def translate_video_analysis(self, video_name, user_id=1, use_gpu=None, analysis
                     # Объединяем сегменты в один файл
                     tts_combined_path = results_path / f'{base_name}_tts_audio.wav'
                     
-                    if combine_tts_audio_segments(audio_segments, str(tts_combined_path), duration):
+                    # Убедимся, что у нас есть длительность видео до объединения
+                    try:
+                        video = VideoFileClip(os.path.abspath(str(video_path)))
+                        video_duration = video.duration
+                        video.close()
+                    except Exception:
+                        video_duration = None
+
+                    if combine_tts_audio_segments(audio_segments, str(tts_combined_path), video_duration):
                         tts_audio_path = str(tts_combined_path)
                         
                         # Сохраняем путь к TTS файлу в модели

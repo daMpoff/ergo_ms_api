@@ -15,7 +15,7 @@ from vosk import Model, KaldiRecognizer
 from moviepy.editor import VideoFileClip
 from transformers import MarianMTModel, MarianTokenizer
 
-from src.config.settings.static import MEDIA_ROOT, PACKAGES_PATH, TRAINED_MODELS_PATH
+from src.modules.video_analysis.apps import VideoAnalysisConfig
 
 # Получаем логгер для модуля
 logger = logging.getLogger('video_analysis')
@@ -37,9 +37,35 @@ except ImportError:
 FRAME_CHUNK_SIZE = 4000  # Размер блока чтения аудио в фреймах
 BATCH_CHUNK_SIZE = 8000  # Размер блока для batch-обработки GPU
 
-FFMPEG_PATH = Path(PACKAGES_PATH) / 'ffmpeg' / 'bin' / 'ffmpeg.exe'
+FFMPEG_PATH = Path(VideoAnalysisConfig.PACKAGES_PATH) / 'ffmpeg' / 'bin' / 'ffmpeg.exe'
+FFPROBE_PATH = Path(VideoAnalysisConfig.PACKAGES_PATH) / 'ffmpeg' / 'bin' / 'ffprobe.exe'
+FFMPEG_BIN_DIR = (Path(VideoAnalysisConfig.PACKAGES_PATH) / 'ffmpeg' / 'bin')
 
-VIDEO_ANALYSIS_MEDIA_DIR = Path(MEDIA_ROOT) / 'video_analysis'
+# Гарантируем наличие ffmpeg/ffprobe в PATH и переменных окружения до импортов pydub
+try:
+    current_path = os.environ.get('PATH', '')
+    bin_dir = str(FFMPEG_BIN_DIR)
+    if bin_dir not in current_path:
+        os.environ['PATH'] = bin_dir + os.pathsep + current_path
+    if FFMPEG_PATH.is_file():
+        os.environ['FFMPEG_BINARY'] = str(FFMPEG_PATH)
+    if FFPROBE_PATH.is_file():
+        os.environ['FFPROBE_BINARY'] = str(FFPROBE_PATH)
+except Exception:
+    pass
+
+# Настроим pydub глобально на локальные бинарники ffmpeg/ffprobe, если доступны
+try:
+    from pydub import AudioSegment as _GlobalAudioSegment
+    if FFMPEG_PATH.is_file():
+        _GlobalAudioSegment.converter = str(FFMPEG_PATH)
+        _GlobalAudioSegment.ffmpeg = str(FFMPEG_PATH)
+    if FFPROBE_PATH.is_file():
+        _GlobalAudioSegment.ffprobe = str(FFPROBE_PATH)
+except Exception:
+    pass
+
+VIDEO_ANALYSIS_MEDIA_DIR = Path(VideoAnalysisConfig.VIDEO_ANALYSIS_MEDIA)
 if not os.path.exists(VIDEO_ANALYSIS_MEDIA_DIR):
     os.makedirs(VIDEO_ANALYSIS_MEDIA_DIR, exist_ok=True)
 
@@ -142,7 +168,7 @@ def _load_translation_model(translation_model_name=None, use_gpu=None):
     if _translation_model is None or _translation_tokenizer is None:
         logger.info("Загрузка модели перевода...")
         if translation_model_name is None:
-            translation_model_name = str(Path(TRAINED_MODELS_PATH) / "opus-mt-ru-fr")
+            translation_model_name = VideoAnalysisConfig.TRANSLATION_MODELS_DIR
         
         device = get_device(use_gpu)
         
@@ -165,7 +191,7 @@ def _load_vosk_model(model_path=None):
     if _vosk_model is None:
         logger.info("Загрузка модели распознавания речи...")
         if model_path is None:
-            model_path = str(Path(TRAINED_MODELS_PATH) / "vosk-model-ru-0.42")
+            model_path = VideoAnalysisConfig.VOSK_MODELS_DIR
         
         _vosk_model = Model(model_path)
         logger.info("Модель распознавания речи загружена!")
@@ -182,7 +208,7 @@ def _load_batch_vosk_model(model_path=None):
     if _batch_vosk_model is None and _is_vosk_batch_supported():
         logger.info("Загрузка batch-модели распознавания речи для GPU...")
         if model_path is None:
-            model_path = str(Path(TRAINED_MODELS_PATH) / "vosk-model-ru-0.42")
+            model_path = VideoAnalysisConfig.VOSK_MODELS_DIR
         
         # Инициализируем GPU если еще не инициализирован
         if init_gpu_vosk():
@@ -204,10 +230,20 @@ def _load_tts_model(use_gpu=None, language='ru', speaker='v3_1_ru'):
     """
     global _tts_model
     
-    # Проверяем, нужно ли загрузить модель заново (другой язык/спикер)
+    # Определяем семейство (hub) спикера для данного языка
+    hub_speaker_map = {
+        'ru': 'v3_1_ru',
+        'en': 'v3_en',
+        'fr': 'v3_fr',
+        'de': 'v3_de',
+        'es': 'v3_es',
+    }
+    hub_speaker = hub_speaker_map.get(language, 'v3_1_ru')
+    
+    # Проверяем, нужно ли загрузить модель заново (другой язык/семейство спикера)
     if (_tts_model is None or 
         _tts_model.get('language') != language or 
-        _tts_model.get('speaker') != speaker):
+        _tts_model.get('hub_speaker') != hub_speaker):
         logger.info("Загрузка TTS модели Silero...")
         try:
             import torch
@@ -216,8 +252,10 @@ def _load_tts_model(use_gpu=None, language='ru', speaker='v3_1_ru'):
             device = get_device(use_gpu)
             
             # Путь к локальной модели
-            tts_models_dir = Path(TRAINED_MODELS_PATH) / 'silero-tts'
-            model_dir = tts_models_dir / f'{language}_{speaker}'
+            tts_models_dir = Path(VideoAnalysisConfig.TTS_MODELS_DIR)
+            # Для загрузки через hub используем "hub-спикер" (семейство модели),
+            # а для apply_tts будем использовать конкретный голос.
+            model_dir = tts_models_dir / f'{language}_{hub_speaker}'
             
             if model_dir.exists():
                 # Загружаем локальную модель
@@ -237,12 +275,12 @@ def _load_tts_model(use_gpu=None, language='ru', speaker='v3_1_ru'):
                     }
                 
                 # Загружаем модель с torch.hub (для получения архитектуры)
-                # Используем локальный репозиторий в packages
+                # Используем локальный репозиторий из apps.py
                 try:
                     import sys as _sys
-                    local_repo_dir = Path(PACKAGES_PATH) / 'silero-models'
-                    repo_dir = str(local_repo_dir)
-                    src_dir = str(local_repo_dir / 'src')
+                    silero_repo_path = VideoAnalysisConfig.SILERO_MODELS_PATH
+                    repo_dir = str(silero_repo_path)
+                    src_dir = str(Path(silero_repo_path) / 'src')
                     for p in (repo_dir, src_dir):
                         if os.path.isdir(p) and p not in _sys.path:
                             _sys.path.insert(0, p)
@@ -253,9 +291,24 @@ def _load_tts_model(use_gpu=None, language='ru', speaker='v3_1_ru'):
                     repo_or_dir=repo_dir,
                     model='silero_tts',
                     language=language,
-                    speaker=speaker,
+                    speaker=hub_speaker,
                     source='local'
                 )
+                # Если модель не соответствует ожидаемому интерфейсу — пробуем прямой импорт hubconf
+                if model is None or not hasattr(model, 'apply_tts'):
+                    try:
+                        import importlib.util as _il
+                        hubconf_path = os.path.join(repo_dir, 'hubconf.py')
+                        spec = _il.spec_from_file_location('silero_hubconf_local', hubconf_path)
+                        module = _il.module_from_spec(spec)
+                        spec.loader.exec_module(module)  # type: ignore
+                        loaded = module.silero_tts(language=language, speaker=speaker)
+                        if isinstance(loaded, tuple) and len(loaded) >= 1:
+                            model = loaded[0]
+                        else:
+                            model = loaded
+                    except Exception as _e:
+                        logger.error(f"Альтернативная загрузка hubconf не удалась: {_e}")
                 
                 # Загружаем веса из локального файла
                 model_path = model_dir / 'model.pt'
@@ -267,13 +320,25 @@ def _load_tts_model(use_gpu=None, language='ru', speaker='v3_1_ru'):
                     except Exception as e:
                         logger.warning(f"Не удалось загрузить локальные веса: {e}, используем предзагруженную модель")
                 
-                model = model.to(device)
+                # Перемещаем на устройство, если метод доступен
+                try:
+                    _ = model.to(device)
+                except Exception:
+                    try:
+                        model.to(device)
+                    except Exception:
+                        pass
+                # Валидация модели
+                if model is None or not hasattr(model, 'apply_tts'):
+                    logger.error("Загружена некорректная TTS модель (None или без apply_tts)")
+                    _tts_model = None
+                    return _tts_model
                 _tts_model = {
                     'model': model,
                     'device': device,
                     'sample_rate': config.get('sample_rate', 48000),
                     'language': config.get('language', language),
-                    'speaker': config.get('speaker', speaker)
+                    'hub_speaker': hub_speaker
                 }
                 
                 logger.info(f"Локальная TTS модель загружена на {device}!")
@@ -286,9 +351,9 @@ def _load_tts_model(use_gpu=None, language='ru', speaker='v3_1_ru'):
                 # Локальный путь также для fallback
                 try:
                     import sys as _sys
-                    local_repo_dir = Path(PACKAGES_PATH) / 'silero-models'
-                    repo_dir = str(local_repo_dir)
-                    src_dir = str(local_repo_dir / 'src')
+                    silero_repo_path = VideoAnalysisConfig.SILERO_MODELS_PATH
+                    repo_dir = str(silero_repo_path)
+                    src_dir = str(Path(silero_repo_path) / 'src')
                     for p in (repo_dir, src_dir):
                         if os.path.isdir(p) and p not in _sys.path:
                             _sys.path.insert(0, p)
@@ -299,17 +364,44 @@ def _load_tts_model(use_gpu=None, language='ru', speaker='v3_1_ru'):
                     repo_or_dir=repo_dir,
                     model='silero_tts',
                     language=language,
-                    speaker=speaker,
+                    speaker=hub_speaker,
                     source='local'
                 )
+                if model is None or not hasattr(model, 'apply_tts'):
+                    try:
+                        import importlib.util as _il
+                        hubconf_path = os.path.join(repo_dir, 'hubconf.py')
+                        spec = _il.spec_from_file_location('silero_hubconf_local', hubconf_path)
+                        module = _il.module_from_spec(spec)
+                        spec.loader.exec_module(module)  # type: ignore
+                        loaded = module.silero_tts(language=language, speaker=speaker)
+                        if isinstance(loaded, tuple) and len(loaded) >= 1:
+                            model = loaded[0]
+                        else:
+                            model = loaded
+                    except Exception as _e:
+                        logger.error(f"Альтернативная загрузка hubconf не удалась: {_e}")
                 
-                model = model.to(device)
+                # Перемещаем на устройство, если метод доступен
+                try:
+                    _ = model.to(device)
+                except Exception:
+                    try:
+                        model.to(device)
+                    except Exception:
+                        pass
+                # Валидация модели
+                if model is None or not hasattr(model, 'apply_tts'):
+                    logger.error("Загружена некорректная TTS модель (None или без apply_tts)")
+                    _tts_model = None
+                    return _tts_model
+
                 _tts_model = {
                     'model': model,
                     'device': device,
                     'sample_rate': 48000,
                     'language': language,
-                    'speaker': speaker
+                    'hub_speaker': hub_speaker
                 }
                 
                 logger.info(f"TTS модель Silero загружена с torch.hub на {device}!")
@@ -339,29 +431,75 @@ def generate_tts_audio(text, output_path, language='ru', speaker='v3_1_ru', volu
         import torch
         import torchaudio
         import numpy as np
+        # Настроим pydub на использование локального ffmpeg
+        try:
+            from pydub import AudioSegment
+            if os.path.isfile(str(FFMPEG_PATH)):
+                AudioSegment.converter = str(FFMPEG_PATH)
+        except Exception:
+            pass
         
-        # Загружаем модель с нужным языком и спикером
+        # Загружаем модель (для загрузки используем hub-спикер семейства)
         tts_data = _load_tts_model(language=language, speaker=speaker)
         if not tts_data:
             logger.error("TTS модель не загружена")
             return False
         
         model = tts_data['model']
+        if model is None or not hasattr(model, 'apply_tts'):
+            logger.error("TTS модель отсутствует или не поддерживает apply_tts")
+            return False
         device = tts_data['device']
         sample_rate = tts_data['sample_rate']
         model_language = tts_data.get('language', language)
-        model_speaker = tts_data.get('speaker', speaker)
+        # Нормализуем спикера по языку: для генерации используем конкретные голоса
+        if model_language == 'fr':
+            # допустимые: fr_0..fr_5, random
+            model_speaker = speaker if speaker in ['fr_0','fr_1','fr_2','fr_3','fr_4','fr_5','random'] else 'fr_1'
+        elif model_language == 'ru':
+            # допустимые: aidar, baya, kseniya, xenia, eugene, random
+            model_speaker = speaker if speaker in ['aidar','baya','kseniya','xenia','eugene','random'] else 'baya'
+        else:
+            model_speaker = speaker
         
         logger.debug(f"Генерация TTS: язык={model_language}, спикер={model_speaker}, текст='{text[:50]}...'")
         
-        # Генерируем аудио
+        # Генерируем аудио (учитываем альтернативный интерфейс)
         with torch.no_grad():
-            audio = model.apply_tts(
-                text=text,
-                speaker=model_speaker,
-                sample_rate=sample_rate
-            )
+            try:
+                if hasattr(model, 'apply_tts'):
+                    audio = model.apply_tts(
+                        text=text,
+                        speaker=model_speaker,
+                        sample_rate=sample_rate
+                    )
+                elif hasattr(model, 'tts'):  # возможный альтернативный метод
+                    audio = model.tts(
+                        text=text,
+                        speaker=model_speaker,
+                        sample_rate=sample_rate
+                    )
+                elif callable(model):  # некоторые варианты отдают вызываемый объект
+                    audio = model(
+                        text=text,
+                        speaker=model_speaker,
+                        sample_rate=sample_rate
+                    )
+                else:
+                    logger.error("Модель Silero не имеет ни apply_tts, ни tts, ни callable интерфейса")
+                    return False
+            except Exception as e:
+                logger.error(f"Ошибка вызова TTS метода: {e}")
+                return False
         
+        # Приводим к torch.Tensor
+        try:
+            import numpy as _np
+            if isinstance(audio, _np.ndarray):
+                audio = torch.from_numpy(audio)
+        except Exception:
+            pass
+
         # Применяем громкость
         if volume != 1.0:
             audio = audio * volume
@@ -370,7 +508,11 @@ def generate_tts_audio(text, output_path, language='ru', speaker='v3_1_ru', volu
         audio = torch.clamp(audio, -1.0, 1.0)
         
         # Сохраняем в файл
-        torchaudio.save(output_path, audio.unsqueeze(0).cpu(), sample_rate)
+        try:
+            torchaudio.save(output_path, audio.unsqueeze(0).cpu(), sample_rate)
+        except Exception as e:
+            logger.error(f"Ошибка сохранения TTS аудио в файл {output_path}: {e}")
+            return False
         
         logger.info(f"TTS аудио сохранено: {output_path}")
         return True
@@ -397,6 +539,12 @@ def generate_tts_from_subtitles(subtitles_data, output_dir, language='ru', speak
     try:
         os.makedirs(output_dir, exist_ok=True)
         audio_files = []
+
+        # Предварительно валидируем TTS-модель перед циклом
+        tts_data = _load_tts_model(language=language, speaker=speaker)
+        if not tts_data or not tts_data.get('model') or not hasattr(tts_data.get('model'), 'apply_tts'):
+            logger.error("TTS модель не загружена или некорректна (нет apply_tts). Генерация озвучки будет пропущена.")
+            return []
         
         for i, subtitle in enumerate(subtitles_data):
             # Выбираем текст в зависимости от языка
@@ -445,7 +593,7 @@ def combine_tts_audio_segments(audio_segments, output_path, video_duration=None)
     """
     try:
         from pydub import AudioSegment
-        from pydub.silence import Silence
+        # Silence не является классом для импорта; используем встроенный silent
         
         if not audio_segments:
             logger.warning("Нет аудио сегментов для объединения")
@@ -466,8 +614,9 @@ def combine_tts_audio_segments(audio_segments, output_path, video_duration=None)
         # Добавляем каждый сегмент в нужное место
         for segment in audio_segments:
             try:
-                # Загружаем аудио сегмент
-                audio = AudioSegment.from_wav(segment['path'])
+                # Загружаем аудио сегмент (абсолютный путь)
+                audio_path_abs = os.path.abspath(segment['path'])
+                audio = AudioSegment.from_wav(audio_path_abs)
                 
                 # Парсим время начала
                 start_time_sec = parse_srt_time_to_seconds(segment['start_time'])
@@ -477,17 +626,18 @@ def combine_tts_audio_segments(audio_segments, output_path, video_duration=None)
                 combined_audio = combined_audio.overlay(audio, position=start_time_ms)
                 
             except Exception as e:
-                logger.warning(f"Не удалось добавить сегмент {segment['path']}: {e}")
+                logger.error(f"Не удалось добавить сегмент: path={segment.get('path')} abs={audio_path_abs}", exc_info=True)
                 continue
         
-        # Сохраняем объединенный файл
-        combined_audio.export(output_path, format="wav")
+        # Сохраняем объединенный файл (абсолютный путь)
+        abs_output_path = os.path.abspath(output_path)
+        combined_audio.export(abs_output_path, format="wav")
         
-        logger.info(f"TTS аудио объединено и сохранено: {output_path}")
+        logger.info(f"TTS аудио объединено и сохранено: {abs_output_path}")
         return True
         
     except Exception as e:
-        logger.error(f"Ошибка при объединении TTS аудио: {e}")
+        logger.error("Ошибка при объединении TTS аудио", exc_info=True)
         return False
 
 
@@ -532,12 +682,8 @@ def preload_models(translation_model_name=None, vosk_model_path=None, use_gpu=No
         else:
             logger.warning("Не удалось загрузить batch-модель vosk для GPU")
     
-    # Загружаем TTS модель
-    tts_model = _load_tts_model(use_gpu)
-    if tts_model:
-        logger.info("TTS модель Silero успешно загружена")
-    else:
-        logger.warning("Не удалось загрузить TTS модель")
+    # Не загружаем TTS на этом этапе: язык TTS зависит от параметров анализа.
+    # Модель будет лениво загружена при первой генерации озвучки нужного языка.
     
     logger.info("Все модели загружены и готовы к использованию!")
 

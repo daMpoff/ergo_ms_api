@@ -16,6 +16,8 @@ class VideoAnalysisSerializer(serializers.ModelSerializer):
     subtitle_segments = SubtitleSegmentSerializer(many=True, read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     duration_formatted = serializers.SerializerMethodField()
+    processing_time_seconds = serializers.SerializerMethodField()
+    processing_time_formatted = serializers.SerializerMethodField()
     segments_count = serializers.SerializerMethodField()
     
     class Meta:
@@ -24,7 +26,7 @@ class VideoAnalysisSerializer(serializers.ModelSerializer):
             'id', 'title', 'description', 'status', 'status_display',
             'created_at', 'updated_at', 'started_at', 'completed_at',
             'original_video', 'audio_file', 'subtitles_file', 'output_video',
-            'duration', 'duration_formatted', 'subtitle_count', 'segments_count', 'error_message',
+            'duration', 'duration_formatted', 'processing_time_seconds', 'processing_time_formatted', 'subtitle_count', 'segments_count', 'error_message',
             'subtitle_segments', 'subtitle_lines_count', 'subtitle_font_size', 
             'subtitle_font_color', 'subtitle_background_color', 'subtitle_background_transparent',
             'tts_enabled', 'tts_volume', 'tts_language', 'tts_voice_model', 'tts_audio_file'
@@ -48,6 +50,28 @@ class VideoAnalysisSerializer(serializers.ModelSerializer):
     def get_segments_count(self, obj):
         """Возвращает количество сегментов субтитров"""
         return obj.subtitle_segments.count() if hasattr(obj, 'subtitle_segments') else 0
+
+    def get_processing_time_seconds(self, obj):
+        """Возвращает время обработки (секунды) как разницу completed_at - started_at"""
+        try:
+            if obj.started_at and obj.completed_at:
+                delta = obj.completed_at - obj.started_at
+                return int(delta.total_seconds())
+        except Exception:
+            pass
+        return None
+
+    def get_processing_time_formatted(self, obj):
+        """Форматирует время обработки в HH:MM:SS или MM:SS"""
+        seconds = self.get_processing_time_seconds(obj)
+        if seconds is None:
+            return None
+        hours = seconds // 3600
+        minutes = (seconds % 3600) // 60
+        secs = seconds % 60
+        if hours > 0:
+            return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+        return f"{minutes:02d}:{secs:02d}"
 
 
 class BulkVideoAnalysisCreateSerializer(serializers.Serializer):

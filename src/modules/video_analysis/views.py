@@ -139,8 +139,8 @@ class VideoAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         uuid_filename = f"{analysis.id}{file_extension}"
 
         # Сохраняем исходное видео с именем UUID
-        media_root = Path(settings.MEDIA_ROOT)
-        initial_dir = media_root / 'video_analysis' / 'initial_video'
+        from src.modules.video_analysis.apps import VideoAnalysisConfig
+        initial_dir = Path(VideoAnalysisConfig.INITIAL_VIDEO_DIR)
         initial_dir.mkdir(parents=True, exist_ok=True)
 
         target_path = initial_dir / uuid_filename
@@ -205,7 +205,8 @@ class VideoAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         file_type = request.query_params.get('type')
 
         def build_abs(rel):
-            abs_path = Path(settings.MEDIA_ROOT) / rel
+            from src.modules.video_analysis.apps import VideoAnalysisConfig
+            abs_path = Path(VideoAnalysisConfig.MEDIA_ROOT) / rel
             return abs_path
 
         abs_path = None
@@ -303,8 +304,8 @@ class VideoAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         tts_voice_model = validated_data.get('tts_voice_model', 'silero_tts')
         
         # Создаем папку для загрузки
-        media_root = Path(settings.MEDIA_ROOT)
-        initial_dir = media_root / 'video_analysis' / 'initial_video'
+        from src.modules.video_analysis.apps import VideoAnalysisConfig
+        initial_dir = Path(VideoAnalysisConfig.INITIAL_VIDEO_DIR)
         initial_dir.mkdir(parents=True, exist_ok=True)
         
         results = []
@@ -387,6 +388,36 @@ class VideoAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
             'detail': f'Запущена обработка {len([r for r in results if r["status"] == "started"])} видео',
             'results': results
         }, status=status.HTTP_202_ACCEPTED)
+
+    @action(detail=False, methods=['post'], url_path='bulk_delete')
+    def bulk_delete(self, request):
+        """
+        Массовое удаление анализов текущего пользователя.
+        Ожидает JSON: { ids: [uuid, ...] }
+        """
+        user = self.get_safe_user()
+        ids = request.data.get('ids', [])
+        if not isinstance(ids, list) or not ids:
+            return Response({'detail': 'Передайте список идентификаторов в поле ids'}, status=status.HTTP_400_BAD_REQUEST)
+
+        queryset = self.get_safe_queryset(VideoAnalysis.objects.filter(user=user, id__in=ids))
+        to_delete = list(queryset)
+
+        deleted, errors = 0, []
+        for analysis in to_delete:
+            try:
+                analysis.force_cleanup_all_files()
+                analysis.delete()
+                deleted += 1
+            except Exception as e:
+                logger.error(f"Ошибка при массовом удалении анализа {analysis.id}: {e}")
+                errors.append({'id': str(analysis.id), 'error': str(e)})
+
+        return Response({
+            'detail': f'Удалено {deleted} анализов',
+            'deleted': deleted,
+            'errors': errors
+        }, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['get'], url_path='statistics')
     def statistics(self, request):

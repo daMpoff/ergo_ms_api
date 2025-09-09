@@ -6,12 +6,13 @@ import os
 import sys
 import traceback
 import logging
+
 from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
 from django.conf import settings
 
-from src.config.settings.static import TRAINED_MODELS_PATH, PACKAGES_PATH
+from src.modules.video_analysis.apps import VideoAnalysisConfig
 
 logger = logging.getLogger('video_analysis')
 
@@ -63,7 +64,7 @@ class Command(BaseCommand):
         self.stdout.write(f'Спикер: {speaker}')
         
         # Создаем папку для TTS моделей
-        tts_models_dir = Path(TRAINED_MODELS_PATH) / 'silero-tts'
+        tts_models_dir = Path(VideoAnalysisConfig.TTS_MODELS_DIR)
         tts_models_dir.mkdir(parents=True, exist_ok=True)
         
         # Путь к конкретной модели
@@ -88,79 +89,53 @@ class Command(BaseCommand):
             device = 'cuda' if torch.cuda.is_available() else 'cpu'
             self.stdout.write(f'Используемое устройство: {device}')
             
-            # Загружаем модель из локального репозитория в packages
-            self.stdout.write('Загрузка модели из локального репозитория packages/silero-models...')
-            local_repo_dir = Path(PACKAGES_PATH) / 'silero-models'
-            if not local_repo_dir.exists():
-                raise CommandError(
-                    f"Локальный репозиторий Silero не найден: {local_repo_dir}. \n"
-                    f"Установите его командой: python manage.py install_silero_repo"
-                )
-
-            # Добавляем repo и src в sys.path для корректных импортов src.silero
-            repo_dir = str(local_repo_dir)
-            src_dir = str(local_repo_dir / 'src')
-            for p in (repo_dir, src_dir):
-                if os.path.isdir(p) and p not in sys.path:
-                    sys.path.insert(0, p)
-                    
-            # Пытаемся загрузить через прямой импорт hubconf.py (обход ограничений torch.hub)
-            def _load_silero_local(_repo_dir: str, _language: str, _speaker: str):
-                import importlib.util as _il
-                hubconf_path = os.path.join(_repo_dir, 'hubconf.py')
-                if not os.path.isfile(hubconf_path):
-                    raise CommandError(f'hubconf.py не найден в {_repo_dir}')
-                # гарантируем src в sys.path
-                _src_dir = os.path.join(_repo_dir, 'src')
-                if os.path.isdir(_src_dir) and _src_dir not in sys.path:
-                    sys.path.insert(0, _src_dir)
-                spec = _il.spec_from_file_location('silero_hubconf_local', hubconf_path)
-                module = _il.module_from_spec(spec)
-                spec.loader.exec_module(module)  # type: ignore
-                # В hubconf определена функция silero_tts(...)
-                if not hasattr(module, 'silero_tts'):
-                    raise CommandError('В hubconf.py не найдена функция silero_tts')
-                return module.silero_tts(language=_language, speaker=_speaker)
-
-            try:
-                hub_result = _load_silero_local(repo_dir, language, speaker)
-            except Exception:
-                # fallback к torch.hub.load (должно работать, если импорты в порядке)
-                hub_result = torch.hub.load(
-                    repo_or_dir=repo_dir,
-                    model='silero_tts',
-                    language=language,
-                    speaker=speaker,
-                    source='local'
-                )
-
-            # Некоторые версии hubconf возвращают только модель
-            if isinstance(hub_result, tuple) and len(hub_result) >= 2:
-                model, example_text = hub_result[0], hub_result[1]
-            else:
-                model, example_text = hub_result, ""
-            
             # Создаем директорию модели
             if model_dir.exists():
                 import shutil
                 shutil.rmtree(model_dir)
             model_dir.mkdir(parents=True, exist_ok=True)
             
-            # Сохраняем модель (если возможно). Некоторые модели Silero (torch.package) не имеют state_dict
-            self.stdout.write(f'Сохранение модели в {model_dir}...')
-            model_path = model_dir / 'model.pt'
-            saved_ok = False
+            # Определяем путь для сохранения модели
+            model_filename = f'silero_tts_{language}_{speaker}.pt'
+            model_path = model_dir / model_filename
+            
+            # Получаем путь к локальному репозиторию Silero
+            silero_repo_path = VideoAnalysisConfig.SILERO_MODELS_PATH
+            if not os.path.exists(silero_repo_path):
+                raise CommandError(
+                    f"Локальный репозиторий Silero не найден: {silero_repo_path}. \n"
+                    f"Установите его командой: python manage.py install_silero_repo"
+                )
+            
+            self.stdout.write(f'Загрузка модели Silero TTS из локального репозитория: {silero_repo_path}')
+            self.stdout.write(f'Сохранение модели в: {model_path}')
+            
+            # Загружаем модель из локального репозитория с сохранением в указанный путь
+            model, example_text = torch.hub.load(
+                repo_or_dir=silero_repo_path,
+                model='silero_tts',
+                language=language,
+                speaker=speaker,
+                source='local',
+                force_reload=force  # Принудительно перезагружает модель если force=True
+            )
+            
+            self.stdout.write(f'Модель успешно загружена из локального репозитория')
+            
+            # Сохраняем модель в файл
+            self.stdout.write(f'Сохранение модели в файл: {model_path}')
             try:
+                # Пытаемся сохранить модель
                 if hasattr(model, 'state_dict'):
                     torch.save(model.state_dict(), model_path)
-                    saved_ok = True
                 else:
-                    # Пробуем полное сохранение объекта (может не поддерживаться)
+                    # Пробуем полное сохранение объекта
                     torch.save(model, model_path)
-                    saved_ok = True
+                self.stdout.write(f'Модель успешно сохранена в: {model_path}')
             except Exception as save_err:
                 self.stdout.write(self.style.WARNING(
-                    f"Не удалось сохранить веса модели ({save_err}). Будет использоваться загрузка из локального репозитория при исполнении."
+                    f"Не удалось сохранить модель в файл ({save_err}). "
+                    f"Модель будет загружаться из локального репозитория при использовании."
                 ))
             
             # Сохраняем конфигурацию модели
@@ -168,6 +143,8 @@ class Command(BaseCommand):
                 'language': language,
                 'speaker': speaker,
                 'model_type': 'silero_tts',
+                'model_path': str(model_path),
+                'silero_repo_path': silero_repo_path,
                 'sample_rate': 48000,
                 'device': device
             }
@@ -209,6 +186,7 @@ class Command(BaseCommand):
                     f'✅ TTS модель успешно установлена в {model_dir}'
                 )
             )
+            self.stdout.write(f'Модель сохранена в: {model_path}')
             self.stdout.write(f'Конфигурация: {config_path}')
             self.stdout.write(f'Тестовое аудио: {test_audio_path}')
             
@@ -221,9 +199,8 @@ class Command(BaseCommand):
             tb = traceback.format_exc()
             details = [
                 f"Импортная ошибка: {e}",
-                f"repo_dir={locals().get('repo_dir', None)}",
-                f"src_dir={locals().get('src_dir', None)}",
-                f"sys.path (первые 10): {sys.path[:10]}",
+                f"model_path={locals().get('model_path', None)}",
+                f"model_dir={locals().get('model_dir', None)}",
                 "Traceback:",
                 tb
             ]
@@ -237,9 +214,8 @@ class Command(BaseCommand):
             tb = traceback.format_exc()
             details = [
                 f"Ошибка при установке TTS модели: {e}",
-                f"repo_dir={locals().get('repo_dir', None)}",
-                f"src_dir={locals().get('src_dir', None)}",
-                f"sys.path (первые 10): {sys.path[:10]}",
+                f"model_path={locals().get('model_path', None)}",
+                f"model_dir={locals().get('model_dir', None)}",
                 "Traceback:",
                 tb
             ]
