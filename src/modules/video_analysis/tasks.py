@@ -43,6 +43,44 @@ def translate_video_analysis(self, video_name, user_id=1, use_gpu=None, analysis
     # Логируем начало задачи
     log_task_start('translate_video_analysis', video_name=video_name, user_id=user_id, use_gpu=use_gpu)
     
+    # Логируем количество одновременно выполняющихся задач
+    try:
+        from celery import current_app
+        inspect = current_app.control.inspect()
+        active_tasks = inspect.active()
+        
+        if active_tasks:
+            total_active = 0
+            video_analysis_tasks = 0
+            
+            for worker_name, worker_tasks in active_tasks.items():
+                if worker_tasks:  # Проверяем, что список задач не пустой
+                    total_active += len(worker_tasks)
+                    # Считаем задачи video_analysis
+                    for task in worker_tasks:
+                        task_name = task.get('name', '')
+                        if 'translate_video_analysis' in task_name:
+                            video_analysis_tasks += 1
+                            
+            logger.info(f"Статистика задач: всего активных задач - {total_active}, "
+                       f"задач анализа видео - {video_analysis_tasks} (включая текущую)")
+        else:
+            logger.info("Статистика задач: нет других активных задач, запускается первая задача")
+            
+    except Exception as e:
+        logger.warning(f"Не удалось получить статистику задач: {e}")
+    
+    def check_if_cancelled():
+        """Проверяет, была ли задача отменена"""
+        try:
+            analysis = VideoAnalysis.objects.get(id=analysis_uuid)
+            if analysis.status == 'cancelled':
+                logger.info(f"Задача отменена пользователем для анализа {analysis_uuid}")
+                return True
+        except VideoAnalysis.DoesNotExist:
+            pass
+        return False
+    
     from django.contrib.auth import get_user_model
     User = get_user_model()
     from src.modules.video_analysis.apps import VideoAnalysisConfig
@@ -118,6 +156,9 @@ def translate_video_analysis(self, video_name, user_id=1, use_gpu=None, analysis
         logger.debug(f"output_video_path = {output_video_path}")
 
         # --- Извлечение аудио ---
+        if check_if_cancelled():
+            return {'status': 'cancelled', 'message': 'Задача отменена пользователем'}
+            
         self.update_state(state='EXTRACTING_AUDIO', meta={'progress': 10})
         
         logger.debug(f"video_path = {video_path} (тип: {type(video_path)})")
@@ -133,6 +174,9 @@ def translate_video_analysis(self, video_name, user_id=1, use_gpu=None, analysis
             return {'status': 'error', 'message': analysis.error_message}
 
         # --- Загрузка моделей ---
+        if check_if_cancelled():
+            return {'status': 'cancelled', 'message': 'Задача отменена пользователем'}
+            
         self.update_state(state='LOADING_MODELS', meta={'progress': 20})
         
         opus_model_path = VideoAnalysisConfig.TRANSLATION_MODELS_DIR
@@ -154,6 +198,9 @@ def translate_video_analysis(self, video_name, user_id=1, use_gpu=None, analysis
         )
 
         # --- Распознавание и перевод ---
+        if check_if_cancelled():
+            return {'status': 'cancelled', 'message': 'Задача отменена пользователем'}
+            
         self.update_state(state='RECOGNIZING_SPEECH', meta={'progress': 30})
         
         temp_audio_path_str = str(temp_audio_path)
@@ -315,7 +362,10 @@ def translate_video_analysis(self, video_name, user_id=1, use_gpu=None, analysis
                 subtitle_font_size=analysis.subtitle_font_size,
                 subtitle_font_color=analysis.subtitle_font_color,
                 subtitle_background_color=analysis.subtitle_background_color,
-                subtitle_background_transparent=analysis.subtitle_background_transparent
+                subtitle_background_transparent=analysis.subtitle_background_transparent,
+                subtitle_alignment=analysis.subtitle_alignment,
+                subtitle_margin_vertical=analysis.subtitle_margin_vertical,
+                subtitle_margin_horizontal=analysis.subtitle_margin_horizontal
             )
             
             if not success:
@@ -357,7 +407,10 @@ def translate_video_analysis(self, video_name, user_id=1, use_gpu=None, analysis
                 subtitle_font_size=analysis.subtitle_font_size,
                 subtitle_font_color=analysis.subtitle_font_color,
                 subtitle_background_color=analysis.subtitle_background_color,
-                subtitle_background_transparent=analysis.subtitle_background_transparent
+                subtitle_background_transparent=analysis.subtitle_background_transparent,
+                subtitle_alignment=analysis.subtitle_alignment,
+                subtitle_margin_vertical=analysis.subtitle_margin_vertical,
+                subtitle_margin_horizontal=analysis.subtitle_margin_horizontal
             )
             if not success:
                 analysis.status = 'failed'

@@ -57,6 +57,17 @@ class VideoAnalysis(models.Model):
     subtitle_background_color = models.CharField(max_length=7, default='#000000', verbose_name='Цвет фона субтитров')
     subtitle_background_transparent = models.BooleanField(default=False, verbose_name='Прозрачный фон субтитров')
     
+    # Позиционирование субтитров
+    ALIGNMENT_CHOICES = [
+        ('bottom', 'Снизу'),
+        ('top', 'Сверху'),
+        ('center', 'По центру'),
+        ('custom', 'Пользовательское'),
+    ]
+    subtitle_alignment = models.CharField(max_length=10, choices=ALIGNMENT_CHOICES, default='bottom', verbose_name='Выравнивание субтитров')
+    subtitle_margin_vertical = models.IntegerField(default=20, verbose_name='Отступ по вертикали (в пикселях)')
+    subtitle_margin_horizontal = models.IntegerField(default=0, verbose_name='Отступ по горизонтали (в пикселях)')
+    
     # Настройки озвучки
     tts_enabled = models.BooleanField(default=False, verbose_name='Включить озвучку')
     tts_volume = models.FloatField(default=0.7, verbose_name='Громкость озвучки (0.0-1.0)')

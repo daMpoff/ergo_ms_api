@@ -1621,7 +1621,8 @@ def convert_wav_to_bilingual_subtitles_gpu(wav_file_path, output_srt_path=None, 
 def add_subtitles_to_video(video_path, srt_path, output_video_path, ffmpeg_path=None, 
                           subtitle_lines_count=1, subtitle_font_size=24, 
                           subtitle_font_color='#FFFFFF', subtitle_background_color='#000000',
-                          subtitle_background_transparent=False):
+                          subtitle_background_transparent=False, subtitle_alignment='bottom',
+                          subtitle_margin_vertical=20, subtitle_margin_horizontal=0):
     """
     Добавляет субтитры к видео с помощью FFmpeg
     
@@ -1635,6 +1636,9 @@ def add_subtitles_to_video(video_path, srt_path, output_video_path, ffmpeg_path=
     subtitle_font_color (str): Цвет шрифта в формате HEX
     subtitle_background_color (str): Цвет фона в формате HEX
     subtitle_background_transparent (bool): Прозрачный фон
+    subtitle_alignment (str): Выравнивание субтитров (bottom, top, center, custom)
+    subtitle_margin_vertical (int): Отступ по вертикали (в пикселях)
+    subtitle_margin_horizontal (int): Отступ по горизонтали (в пикселях)
     
     Возвращает:
     bool: Успешность операции
@@ -1682,6 +1686,25 @@ def add_subtitles_to_video(video_path, srt_path, output_video_path, ffmpeg_path=
     font_color_ffmpeg = hex_to_ffmpeg_color(subtitle_font_color)
     background_color_ffmpeg = hex_to_ffmpeg_color(subtitle_background_color)
     
+    # Настройки позиционирования
+    # Если горизонтальный отступ равен 0, используем центрированное выравнивание
+    if subtitle_margin_horizontal == 0:
+        alignment_map = {
+            'bottom': 2,      # Снизу по центру
+            'top': 8,         # Сверху по центру  
+            'center': 5,      # По центру
+            'custom': 2       # Пользовательское (по умолчанию снизу)
+        }
+    else:
+        # Если есть горизонтальный отступ, используем левое выравнивание
+        alignment_map = {
+            'bottom': 1,      # Снизу слева
+            'top': 7,         # Сверху слева  
+            'center': 4,      # По центру слева
+            'custom': 1       # Пользовательское (по умолчанию снизу слева)
+        }
+    alignment_value = alignment_map.get(subtitle_alignment, 2)
+    
     # Настройки стиля
     if subtitle_background_transparent:
         # Для прозрачного фона используем BorderStyle=0 (без фона)
@@ -1694,15 +1717,23 @@ def add_subtitles_to_video(video_path, srt_path, output_video_path, ffmpeg_path=
             f'OutlineColour=&H000000&',  # Черная обводка
             'Shadow=2',       # Тень для улучшения читаемости
             'BackColour=&H00000000',     # Прозрачный фон (альфа = 00)
+            f'Alignment={alignment_value}',  # Выравнивание
+            f'MarginV={subtitle_margin_vertical}',  # Вертикальный отступ
+            f'MarginL={subtitle_margin_horizontal}',  # Левый отступ
+            f'MarginR={subtitle_margin_horizontal}',  # Правый отступ
         ]
     else:
-        # Для непрозрачного фона используем BorderStyle=3 (фон вокруг текста)
+        # Для непрозрачного фона используем BorderStyle=4 (фон за текстом)
         style_parts = [
             f'FontSize={subtitle_font_size}',
             f'PrimaryColour={font_color_ffmpeg}',
-            f'OutlineColour={background_color_ffmpeg}',
-            'BorderStyle=3',  # Фон вокруг текста
-            'Outline=0'       # Без дополнительной обводки
+            f'BackColour={background_color_ffmpeg}',  # Цвет фона
+            'BorderStyle=4',  # Фон за текстом
+            'Outline=0',      # Без обводки
+            f'Alignment={alignment_value}',  # Выравнивание
+            f'MarginV={subtitle_margin_vertical}',  # Вертикальный отступ
+            f'MarginL={subtitle_margin_horizontal}',  # Левый отступ
+            f'MarginR={subtitle_margin_horizontal}',  # Правый отступ
         ]
     
     # Создаем команду с правильным экранированием
@@ -1712,7 +1743,8 @@ def add_subtitles_to_video(video_path, srt_path, output_video_path, ffmpeg_path=
     # Логируем настройки субтитров для отладки
     logger.info(f"Настройки субтитров: прозрачный_фон={subtitle_background_transparent}, "
                f"размер_шрифта={subtitle_font_size}, цвет_шрифта={subtitle_font_color}, "
-               f"цвет_фона={subtitle_background_color}")
+               f"цвет_фона={subtitle_background_color}, выравнивание={subtitle_alignment}, "
+               f"отступ_верт={subtitle_margin_vertical}, отступ_гор={subtitle_margin_horizontal}")
     logger.debug(f"ASS стили: {style_string}")
     logger.debug(f"FFmpeg фильтр: {vf_filter}")
     

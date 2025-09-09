@@ -3,20 +3,18 @@ Django команда для установки TTS модели Silero в па�
 """
 
 import os
-import sys
 import traceback
 import logging
 
 from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
-from django.conf import settings
 
 from src.modules.video_analysis.apps import VideoAnalysisConfig
 
 logger = logging.getLogger('video_analysis')
 
-
+# python manage.py install_tts_model --language fr --speaker v3_fr --force
 class Command(BaseCommand):
     help = 'Устанавливает TTS модель Silero в папку trained_models'
 

@@ -29,6 +29,7 @@ class VideoAnalysisSerializer(serializers.ModelSerializer):
             'duration', 'duration_formatted', 'processing_time_seconds', 'processing_time_formatted', 'subtitle_count', 'segments_count', 'error_message',
             'subtitle_segments', 'subtitle_lines_count', 'subtitle_font_size', 
             'subtitle_font_color', 'subtitle_background_color', 'subtitle_background_transparent',
+            'subtitle_alignment', 'subtitle_margin_vertical', 'subtitle_margin_horizontal',
             'tts_enabled', 'tts_volume', 'tts_language', 'tts_voice_model', 'tts_audio_file'
         ]
         read_only_fields = fields
@@ -113,6 +114,23 @@ class BulkVideoAnalysisCreateSerializer(serializers.Serializer):
         default=False,
         help_text="Прозрачный фон субтитров"
     )
+    subtitle_alignment = serializers.ChoiceField(
+        choices=['bottom', 'top', 'center', 'custom'],
+        default='bottom',
+        help_text="Выравнивание субтитров"
+    )
+    subtitle_margin_vertical = serializers.IntegerField(
+        default=20,
+        min_value=0,
+        max_value=200,
+        help_text="Отступ по вертикали (в пикселях)"
+    )
+    subtitle_margin_horizontal = serializers.IntegerField(
+        default=0,
+        min_value=-200,
+        max_value=200,
+        help_text="Отступ по горизонтали (в пикселях)"
+    )
     
     # Настройки озвучки
     tts_enabled = serializers.BooleanField(
@@ -196,6 +214,23 @@ class VideoAnalysisCreateSerializer(serializers.Serializer):
     subtitle_background_transparent = serializers.BooleanField(
         default=False,
         help_text="Прозрачный фон субтитров"
+    )
+    subtitle_alignment = serializers.ChoiceField(
+        choices=['bottom', 'top', 'center', 'custom'],
+        default='bottom',
+        help_text="Выравнивание субтитров"
+    )
+    subtitle_margin_vertical = serializers.IntegerField(
+        default=20,
+        min_value=0,
+        max_value=200,
+        help_text="Отступ по вертикали (в пикселях)"
+    )
+    subtitle_margin_horizontal = serializers.IntegerField(
+        default=0,
+        min_value=-200,
+        max_value=200,
+        help_text="Отступ по горизонтали (в пикселях)"
     )
     
     # Настройки озвучки

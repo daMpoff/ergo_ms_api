@@ -104,6 +104,15 @@ class VideoAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         subtitle_font_color = serializer.validated_data.get('subtitle_font_color', '#FFFFFF')
         subtitle_background_color = serializer.validated_data.get('subtitle_background_color', '#000000')
         subtitle_background_transparent = serializer.validated_data.get('subtitle_background_transparent', False)
+        subtitle_alignment = serializer.validated_data.get('subtitle_alignment', 'bottom')
+        subtitle_margin_vertical = serializer.validated_data.get('subtitle_margin_vertical', 20)
+        subtitle_margin_horizontal = serializer.validated_data.get('subtitle_margin_horizontal', 0)
+        
+        # Преобразуем строковые boolean значения для create метода
+        if isinstance(subtitle_background_transparent, str):
+            subtitle_background_transparent = subtitle_background_transparent.lower() in ('true', '1', 'yes', 'on')
+        elif subtitle_background_transparent is None:
+            subtitle_background_transparent = False
         
         # Получаем настройки TTS
         tts_enabled = serializer.validated_data.get('tts_enabled', False)
@@ -126,6 +135,9 @@ class VideoAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
             subtitle_font_color=subtitle_font_color,
             subtitle_background_color=subtitle_background_color,
             subtitle_background_transparent=subtitle_background_transparent,
+            subtitle_alignment=subtitle_alignment,
+            subtitle_margin_vertical=subtitle_margin_vertical,
+            subtitle_margin_horizontal=subtitle_margin_horizontal,
             tts_enabled=tts_enabled,
             tts_volume=tts_volume,
             tts_language=tts_language,
@@ -245,6 +257,9 @@ class VideoAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         subtitle_font_color = request.data.get('subtitle_font_color', '#FFFFFF')
         subtitle_background_color = request.data.get('subtitle_background_color', '#000000')
         subtitle_background_transparent = request.data.get('subtitle_background_transparent', False)
+        subtitle_alignment = request.data.get('subtitle_alignment', 'bottom')
+        subtitle_margin_vertical = int(request.data.get('subtitle_margin_vertical', 20))
+        subtitle_margin_horizontal = int(request.data.get('subtitle_margin_horizontal', 0))
         
         # Получаем настройки TTS
         tts_enabled = request.data.get('tts_enabled', False)
@@ -255,9 +270,13 @@ class VideoAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         # Преобразуем строковые boolean значения
         if isinstance(subtitle_background_transparent, str):
             subtitle_background_transparent = subtitle_background_transparent.lower() in ('true', '1', 'yes', 'on')
+        elif subtitle_background_transparent is None:
+            subtitle_background_transparent = False
         
         if isinstance(tts_enabled, str):
             tts_enabled = tts_enabled.lower() in ('true', '1', 'yes', 'on')
+        elif tts_enabled is None:
+            tts_enabled = False
         
         logger.info(f"Получены настройки субтитров: lines={subtitle_lines_count}, size={subtitle_font_size}, "
                    f"font_color={subtitle_font_color}, bg_color={subtitle_background_color}, "
@@ -278,6 +297,9 @@ class VideoAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
             'subtitle_font_color': subtitle_font_color,
             'subtitle_background_color': subtitle_background_color,
             'subtitle_background_transparent': subtitle_background_transparent,
+            'subtitle_alignment': subtitle_alignment,
+            'subtitle_margin_vertical': subtitle_margin_vertical,
+            'subtitle_margin_horizontal': subtitle_margin_horizontal,
             'tts_enabled': tts_enabled,
             'tts_volume': tts_volume,
             'tts_language': tts_language,
@@ -296,6 +318,9 @@ class VideoAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         subtitle_font_color = validated_data.get('subtitle_font_color', '#FFFFFF')
         subtitle_background_color = validated_data.get('subtitle_background_color', '#000000')
         subtitle_background_transparent = validated_data.get('subtitle_background_transparent', False)
+        subtitle_alignment = validated_data.get('subtitle_alignment', 'bottom')
+        subtitle_margin_vertical = validated_data.get('subtitle_margin_vertical', 20)
+        subtitle_margin_horizontal = validated_data.get('subtitle_margin_horizontal', 0)
         
         # Получаем настройки TTS
         tts_enabled = validated_data.get('tts_enabled', False)
@@ -328,6 +353,9 @@ class VideoAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
                     subtitle_font_color=subtitle_font_color,
                     subtitle_background_color=subtitle_background_color,
                     subtitle_background_transparent=subtitle_background_transparent,
+                    subtitle_alignment=subtitle_alignment,
+                    subtitle_margin_vertical=subtitle_margin_vertical,
+                    subtitle_margin_horizontal=subtitle_margin_horizontal,
                     tts_enabled=tts_enabled,
                     tts_volume=tts_volume,
                     tts_language=tts_language,
@@ -441,6 +469,43 @@ class VideoAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
             'total_segments': total_segments,
             'total_duration': total_duration,
         })
+
+    @action(detail=True, methods=['post'], url_path='cancel')
+    def cancel_analysis(self, request, pk=None):
+        """
+        Отменить выполнение анализа
+        """
+        analysis = self.get_object()
+        
+        # Проверяем, что анализ можно отменить
+        if analysis.status not in ['pending', 'processing']:
+            return Response({
+                'detail': f'Нельзя отменить анализ со статусом "{analysis.status}"'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Отменяем задачу Celery, если она есть
+            if analysis.task_id:
+                from celery import current_app
+                current_app.control.revoke(analysis.task_id, terminate=True)
+                logger.info(f"Задача Celery {analysis.task_id} отменена для анализа {analysis.id}")
+            
+            # Обновляем статус анализа
+            analysis.update_status('cancelled', error_message='Анализ отменен пользователем')
+            
+            logger.info(f"Анализ {analysis.id} отменен пользователем {request.user.username}")
+            
+            return Response({
+                'detail': 'Анализ успешно отменен',
+                'analysis': VideoAnalysisSerializer(analysis).data
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Ошибка при отмене анализа {analysis.id}: {e}")
+            return Response({
+                'detail': 'Ошибка при отмене анализа',
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=False, methods=['post'], url_path='cleanup-orphaned-files')
     def cleanup_orphaned_files(self, request):
