@@ -47,7 +47,7 @@ def translate_video_analysis(self, video_name, user_id=1, use_gpu=None, analysis
     if not video_analysis_semaphore.acquire(blocking=False):
         # Если не можем получить семафор, откладываем задачу
         logger.warning(f"Достигнут лимит одновременных задач video_analysis. Задача {self.request.id} отложена.")
-        raise self.retry(countdown=60, max_retries=None)  # Повтор через 60 секунд
+        raise self.retry(countdown=60)  # Повтор через 60 секунд
     
     try:
         start_time = time.time()

@@ -175,14 +175,19 @@ def _load_translation_model(translation_model_name=None, use_gpu=None):
         device = get_device(use_gpu)
         
         _translation_tokenizer = MarianTokenizer.from_pretrained(translation_model_name)
-        _translation_model = MarianMTModel.from_pretrained(
-            translation_model_name,
-            torch_dtype=torch.float16 if use_gpu else torch.float32
-        )
-        
-        # Перемещаем модель на нужное устройство после загрузки
+        # Загружаем модель сразу на целевое устройство, избегая meta-тензоров и последующих .to()
         if use_gpu and device == 'cuda':
-            _translation_model = _translation_model.to(device)
+            _translation_model = MarianMTModel.from_pretrained(
+                translation_model_name,
+                dtype=torch.float16,
+                device_map='auto'
+            )
+        else:
+            _translation_model = MarianMTModel.from_pretrained(
+                translation_model_name,
+                dtype=torch.float32,
+                low_cpu_mem_usage=False
+            )
         
         logger.info(f"Модель перевода загружена на {device}!")
     
