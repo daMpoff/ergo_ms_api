@@ -7,7 +7,6 @@ import os
 import logging
 
 from abc import ABC, abstractmethod
-from logging.handlers import RotatingFileHandler
 from typing import Dict, Any
 
 from src.config.settings.static import LOGS_ROOT
@@ -38,10 +37,8 @@ class CeleryModuleConfig(ABC):
         if not module_logger.handlers:
             # Создаем файловый обработчик для модуля
             log_file = os.path.join(self.log_dir, f'{self.module_name}.log')
-            file_handler = RotatingFileHandler(
+            file_handler = logging.FileHandler(
                 log_file,
-                maxBytes=10*1024*1024,  # 10MB
-                backupCount=5,
                 encoding='utf-8'
             )
             file_handler.setLevel(logging.DEBUG)

@@ -11,6 +11,8 @@ from pathlib import Path
 import pandas as pd
 import platform
 
+import torch
+
 from vosk import Model, KaldiRecognizer
 from moviepy.editor import VideoFileClip
 from transformers import MarianMTModel, MarianTokenizer
@@ -173,10 +175,14 @@ def _load_translation_model(translation_model_name=None, use_gpu=None):
         device = get_device(use_gpu)
         
         _translation_tokenizer = MarianTokenizer.from_pretrained(translation_model_name)
-        _translation_model = MarianMTModel.from_pretrained(translation_model_name)
+        _translation_model = MarianMTModel.from_pretrained(
+            translation_model_name,
+            torch_dtype=torch.float16 if use_gpu else torch.float32
+        )
         
-        # Перемещаем модель на нужное устройство
-        _translation_model = _translation_model.to(device)
+        # Перемещаем модель на нужное устройство после загрузки
+        if use_gpu and device == 'cuda':
+            _translation_model = _translation_model.to(device)
         
         logger.info(f"Модель перевода загружена на {device}!")
     
@@ -1621,7 +1627,7 @@ def convert_wav_to_bilingual_subtitles_gpu(wav_file_path, output_srt_path=None, 
 def add_subtitles_to_video(video_path, srt_path, output_video_path, ffmpeg_path=None, 
                           subtitle_lines_count=1, subtitle_font_size=24, 
                           subtitle_font_color='#FFFFFF', subtitle_background_color='#000000',
-                          subtitle_background_transparent=False, subtitle_alignment='bottom',
+                          subtitle_background_transparent=False, subtitle_alignment='2',
                           subtitle_margin_vertical=20, subtitle_margin_horizontal=0):
     """
     Добавляет субтитры к видео с помощью FFmpeg
@@ -1636,7 +1642,7 @@ def add_subtitles_to_video(video_path, srt_path, output_video_path, ffmpeg_path=
     subtitle_font_color (str): Цвет шрифта в формате HEX
     subtitle_background_color (str): Цвет фона в формате HEX
     subtitle_background_transparent (bool): Прозрачный фон
-    subtitle_alignment (str): Выравнивание субтитров (bottom, top, center, custom)
+    subtitle_alignment (str): Позиция субтитров (1-9)
     subtitle_margin_vertical (int): Отступ по вертикали (в пикселях)
     subtitle_margin_horizontal (int): Отступ по горизонтали (в пикселях)
     
@@ -1689,10 +1695,19 @@ def add_subtitles_to_video(video_path, srt_path, output_video_path, ffmpeg_path=
     # Настройки позиционирования: всегда используем истинное центрирование для top/center/bottom
     # Независимо от горизонтального отступа, чтобы не ломать центр по горизонтали
     alignment_map = {
-        'bottom': 2,   # Снизу по центру
-        'top': 8,      # Сверху по центру
-        'center': 5,   # Посредине по центру
-        'custom': 2    # Пользовательское (по умолчанию снизу по центру)
+        '1': 1,   # Слева снизу
+        '2': 2,   # По центру снизу
+        '3': 3,   # Справа снизу
+
+        '4': 4,   # Сверху слева
+
+        '5': 8,   # По центру слева
+
+        '6': 6,   # Сверху по центру
+        '7': 7,   # Сверху справа
+
+        '8': 10,   # По центру
+        '9': 11   # Справа по центру
     }
     alignment_value = alignment_map.get(subtitle_alignment, 2)
 
@@ -1743,7 +1758,7 @@ def add_subtitles_to_video(video_path, srt_path, output_video_path, ffmpeg_path=
     # Логируем настройки субтитров для отладки
     logger.info(f"Настройки субтитров: прозрачный_фон={subtitle_background_transparent}, "
                f"размер_шрифта={subtitle_font_size}, цвет_шрифта={subtitle_font_color}, "
-               f"цвет_фона={subtitle_background_color}, выравнивание={subtitle_alignment}, "
+               f"цвет_фона={subtitle_background_color}, позиция={subtitle_alignment}, "
                f"отступ_верт={subtitle_margin_vertical}, отступ_гор={subtitle_margin_horizontal}")
     logger.debug(f"ASS стили: {style_string}")
     logger.debug(f"FFmpeg фильтр: {vf_filter}")

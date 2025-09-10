@@ -59,12 +59,17 @@ class VideoAnalysis(models.Model):
     
     # Позиционирование субтитров
     ALIGNMENT_CHOICES = [
-        ('bottom', 'Снизу'),
-        ('top', 'Сверху'),
-        ('center', 'По центру'),
-        ('custom', 'Пользовательское'),
+        ('1', 'Слева снизу'),
+        ('2', 'По центру снизу'),
+        ('3', 'Справа снизу'),
+        ('4', 'Сверху слева'),
+        ('5', 'По центру слева'),
+        ('6', 'Сверху по центру'),
+        ('7', 'Сверху справа'),
+        ('8', 'По центру'),
+        ('9', 'Справа по центру'),
     ]
-    subtitle_alignment = models.CharField(max_length=10, choices=ALIGNMENT_CHOICES, default='bottom', verbose_name='Выравнивание субтитров')
+    subtitle_alignment = models.CharField(max_length=1, choices=ALIGNMENT_CHOICES, default='2', verbose_name='Позиция субтитров')
     subtitle_margin_vertical = models.IntegerField(default=20, verbose_name='Отступ по вертикали (в пикселях)')
     subtitle_margin_horizontal = models.IntegerField(default=0, verbose_name='Отступ по горизонтали (в пикселях)')
     

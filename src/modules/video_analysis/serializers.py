@@ -115,9 +115,9 @@ class BulkVideoAnalysisCreateSerializer(serializers.Serializer):
         help_text="Прозрачный фон субтитров"
     )
     subtitle_alignment = serializers.ChoiceField(
-        choices=['bottom', 'top', 'center', 'custom'],
-        default='bottom',
-        help_text="Выравнивание субтитров"
+        choices=['1', '2', '3', '4', '5', '6', '7', '8', '9'],
+        default='2',
+        help_text="Позиция субтитров"
     )
     subtitle_margin_vertical = serializers.IntegerField(
         default=20,
@@ -216,9 +216,9 @@ class VideoAnalysisCreateSerializer(serializers.Serializer):
         help_text="Прозрачный фон субтитров"
     )
     subtitle_alignment = serializers.ChoiceField(
-        choices=['bottom', 'top', 'center', 'custom'],
-        default='bottom',
-        help_text="Выравнивание субтитров"
+        choices=['1', '2', '3', '4', '5', '6', '7', '8', '9'],
+        default='2',
+        help_text="Позиция субтитров"
     )
     subtitle_margin_vertical = serializers.IntegerField(
         default=20,
