@@ -175,19 +175,25 @@ def _load_translation_model(translation_model_name=None, use_gpu=None):
         device = get_device(use_gpu)
         
         _translation_tokenizer = MarianTokenizer.from_pretrained(translation_model_name)
-        # Загружаем модель сразу на целевое устройство, избегая meta-тензоров и последующих .to()
+        # Загружаем модель сначала на CPU, затем перемещаем на целевое устройство
+        # Это предотвращает создание meta-тензоров при использовании device_map='auto'
         if use_gpu and device == 'cuda':
             _translation_model = MarianMTModel.from_pretrained(
                 translation_model_name,
                 dtype=torch.float16,
-                device_map='auto'
-            )
+                low_cpu_mem_usage=True
+            ).to(device)
         else:
             _translation_model = MarianMTModel.from_pretrained(
                 translation_model_name,
                 dtype=torch.float32,
                 low_cpu_mem_usage=False
             )
+        
+        # Выравниваем размер словаря под токенизатор и привязываем веса
+        _translation_model.resize_token_embeddings(len(_translation_tokenizer))
+        _translation_model.config.tie_word_embeddings = True
+        _translation_model.tie_weights()
         
         logger.info(f"Модель перевода загружена на {device}!")
     
@@ -718,18 +724,48 @@ def translate_text_ru_to_fr(text, model=None, tokenizer=None, use_gpu=None):
     if model is None or tokenizer is None:
         model, tokenizer = _load_translation_model(use_gpu=use_gpu)
     
-    device = get_device(use_gpu)
+    # Определяем устройство по фактическим параметрам модели, чтобы избежать переноса meta-тензоров
+    try:
+        device = str(next(model.parameters()).device)
+    except Exception:
+        device = 'cpu'
     
     inputs = tokenizer(text, return_tensors="pt", padding=True)
     # Перемещаем входные данные на нужное устройство
     inputs = {k: v.to(device) for k, v in inputs.items()}
     
-    translated = model.generate(**inputs, max_new_tokens=100)
-    french_text = tokenizer.decode(translated[0], skip_special_tokens=True)
+    try:
+        with torch.no_grad():  # Добавляем no_grad для экономии памяти
+            translated = model.generate(**inputs, max_new_tokens=100)
+        french_text = tokenizer.decode(translated[0], skip_special_tokens=True)
 
-    french_text = replace_html_entities(french_text)
+        french_text = replace_html_entities(french_text)
 
-    return french_text
+        return french_text
+    except RuntimeError as e:
+        if "meta tensors" in str(e):
+            logger.error(f"Ошибка с мета-тензорами при переводе: {e}")
+            # Попытка перезагрузить модель
+            global _translation_model, _translation_tokenizer
+            _translation_model = None
+            _translation_tokenizer = None
+            logger.info("Перезагружаем модель перевода...")
+            model, tokenizer = _load_translation_model(use_gpu=use_gpu)
+            # Повторно определяем устройство по параметрам модели
+            try:
+                device = str(next(model.parameters()).device)
+            except Exception:
+                device = 'cpu'
+            # Повторная попытка перевода
+            inputs = tokenizer(text, return_tensors="pt", padding=True)
+            inputs = {k: v.to(device) for k, v in inputs.items()}
+            with torch.no_grad():
+                translated = model.generate(**inputs, max_new_tokens=100)
+            french_text = tokenizer.decode(translated[0], skip_special_tokens=True)
+            return replace_html_entities(french_text)
+        else:
+            logger.error(f"Ошибка при переводе текста: {e}")
+            raise
 
 def format_srt_time(seconds):
     """

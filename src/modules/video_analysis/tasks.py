@@ -37,7 +37,7 @@ logger = logging.getLogger('video_analysis')
 
 video_analysis_semaphore = threading.Semaphore(VideoAnalysisConfig.MAX_CONCURRENT_TASKS)
 
-@shared_task(bind=True)
+@shared_task(bind=True, max_retries=None, default_retry_delay=60)
 def translate_video_analysis(self, video_name, user_id=1, use_gpu=None, analysis_uuid=None, title=None):
     """
     Основная Celery задача: перевод видео, создание анализа в БД, сохранение всех файлов и сегментов.
