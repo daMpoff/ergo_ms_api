@@ -534,8 +534,14 @@ class ImpulsAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
                 status='processing'
             )
             
-            # Запускаем обработку
-            task = create_analysis_by_protocol.delay(protocol_number, request.user.id, title, description)
+            # Запускаем обработку, передавая analysis_id, чтобы сохранить UUID
+            task = create_analysis_by_protocol.delay(
+                protocol_number,
+                request.user.id,
+                title,
+                description,
+                str(analysis.id)
+            )
             analysis.task_id = task.id
             analysis.save()
             
@@ -588,12 +594,13 @@ class ImpulsAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
             
             # Запускаем обработку
             if analysis.protocol_number:
-                # Если есть протокол, используем create_analysis_by_protocol
+                # Если есть протокол, используем create_analysis_by_protocol, сохраняем UUID
                 task = create_analysis_by_protocol.delay(
-                    analysis.protocol_number, 
-                    analysis.user.id, 
-                    analysis.title, 
-                    analysis.description
+                    analysis.protocol_number,
+                    analysis.user.id,
+                    analysis.title,
+                    analysis.description,
+                    str(analysis.id)
                 )
             else:
                 # Если нет протокола, просто обновляем статус

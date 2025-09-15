@@ -106,7 +106,7 @@ def import_impuls_excel(self, file_path: str, file_type: str):
 
 
 @shared_task(bind=True, name='src.modules.impuls_analysis.tasks.create_analysis_by_protocol')
-def create_analysis_by_protocol(self, protocol_number: str, user_id: int, title: str = None, description: str = None):
+def create_analysis_by_protocol(self, protocol_number: str, user_id: int, title: str = None, description: str = None, analysis_id: str = None):
     """
     Создает ImpulsAnalysis по номеру протокола:
     - проверяет наличие данных в обеих таблицах
@@ -121,51 +121,59 @@ def create_analysis_by_protocol(self, protocol_number: str, user_id: int, title:
            not ImpulsPlanRecord.objects.filter(protocol_number=protocol_number).exists():
             raise ValueError("Для указанного протокола должны существовать записи в ImpulsForceRecord и ImpulsPlanRecord.")
 
-        # Создание записи анализа
+        # Создание/обновление записи анализа
         from django.contrib.auth import get_user_model
         User = get_user_model()
         user = User.objects.filter(id=user_id).first()
         if user is None:
             raise ValueError(f"Пользователь не найден (id={user_id})")
 
-        # Проверяем, существует ли уже анализ для этого протокола и пользователя
-        existing_analysis = ImpulsAnalysis.objects.filter(
-            user=user, 
-            protocol_number=protocol_number
-        ).first()
-        
-        if existing_analysis:
-            analysis_logger.info(f"Удаляем существующий анализ для протокола {protocol_number} (user_id={user_id}): {existing_analysis.id}")
-            
-            # Удаляем файлы анализа
-            files_deleted = existing_analysis.delete_analysis_files()
-            analysis_logger.info(f"Удалено файлов: {files_deleted}")
-            
-            # Удаляем экстремумы (каскадное удаление)
-            extrema_count = existing_analysis.extrema.count()
-            
-            # Удаляем сам анализ
-            existing_analysis.delete()
-            analysis_logger.info(f"Удален анализ {existing_analysis.id} с {extrema_count} экстремумами")
-
-        # Создаем анализ с временным статусом
-        analysis = ImpulsAnalysis.objects.create(
-            user=user,
-            title=title or f"Протокол {protocol_number}",
-            description=description or f"Анализ по протоколу {protocol_number}",
-            status='processing',
-            protocol_number=protocol_number,
-        )
+        # Если передан analysis_id, обновляем существующую запись вместо создания новой
+        if analysis_id:
+            analysis = ImpulsAnalysis.objects.filter(id=analysis_id, user=user).first()
+            if analysis is None:
+                # Если по каким-то причинам запись не найдена, создаем новую
+                analysis = ImpulsAnalysis.objects.create(
+                    user=user,
+                    title=title or f"Протокол {protocol_number}",
+                    description=description or f"Анализ по протоколу {protocol_number}",
+                    status='processing',
+                    protocol_number=protocol_number,
+                )
+            else:
+                # Обнуляем связанные артефакты и переводим в processing
+                try:
+                    files_deleted = analysis.delete_analysis_files()
+                    analysis_logger.info(f"Удалено файлов: {files_deleted}")
+                except Exception:
+                    pass
+                analysis.status = 'processing'
+                analysis.error_message = ''
+                analysis.started_at = None
+                analysis.completed_at = None
+                analysis.protocol_number = protocol_number
+                if title:
+                    analysis.title = title
+                if description:
+                    analysis.description = description
+                analysis.save()
+        else:
+            # Режим обратной совместимости: создаем новый анализ
+            analysis = ImpulsAnalysis.objects.create(
+                user=user,
+                title=title or f"Протокол {protocol_number}",
+                description=description or f"Анализ по протоколу {protocol_number}",
+                status='processing',
+                protocol_number=protocol_number,
+            )
 
         # Запуск утилиты анализа с ID анализа
         results = run_protocol_analysis(protocol_number, str(analysis.id))
 
-        # Обновляем анализ с результатами
+        # Обновляем базовые поля анализа (без завершения)
         analysis.protocol_number = results['protocol_number']
         analysis.p_static = results['p_static']
         analysis.energy_j = results['energy_j']
-        analysis.status = 'completed'
-        analysis.completed_at = timezone.now()
         analysis.save()
 
         # Сохраняем экстремумы в отдельную таблицу
@@ -187,10 +195,15 @@ def create_analysis_by_protocol(self, protocol_number: str, user_id: int, title:
         if extremum_objects:
             ImpulsExtremum.objects.bulk_create(extremum_objects, batch_size=100)
 
-        # Генерируем Word протокол
+        # Генерируем Word протокол (может занять время). Завершаем только после успеха
         protocol_path = generate_protocol_document(protocol_number, str(analysis.id))
+
+        # Помечаем анализ завершенным только после успешной генерации протокола
+        analysis.status = 'completed'
+        analysis.completed_at = timezone.now()
+        analysis.save()
         
-        analysis_logger.info(f"Анализ создан {analysis.id} для протокола {protocol_number}, экстремумов: {len(extremum_objects)}")
+        analysis_logger.info(f"Анализ обновлен {analysis.id} для протокола {protocol_number}, экстремумов: {len(extremum_objects)}")
         return {
             'analysis_id': str(analysis.id), 
             'protocol_number': protocol_number, 

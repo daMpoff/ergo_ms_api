@@ -820,9 +820,22 @@ def run_protocol_analysis(protocol_number: str, analysis_id: str = None) -> Dict
 		plt.annotate('', xy=(v[i1], h), xytext=(v[i0], h),
 		            arrowprops=dict(arrowstyle='<->', lw=1, color='black', alpha=0.8))
 		t_offset = 0.02 * max(float(np.max(f)), 1.0)
-		plt.text(xm, h + t_offset, 'T', ha='center', va='bottom', fontsize=10)
 		S = float(np.trapz(f[i0:i1 + 1], v[i0:i1 + 1]))
 		duration_v = float(v[i1] - v[i0])
+		# Подпись длительности импульса: только число, две значащие цифры, без экспоненты
+		if duration_v == 0.0:
+			formatted_num = '0'
+		else:
+			# определяем количество знаков после запятой для двух значащих цифр
+			n = int(np.floor(np.log10(abs(duration_v))))
+			decimals = max(0, 2 - 1 - n)
+			s_num = f"{duration_v:.{decimals}f}"
+			# убираем лишние нули и точку в конце
+			if '.' in s_num:
+				s_num = s_num.rstrip('0').rstrip('.')
+			formatted_num = s_num
+		dur_str = (formatted_num).replace('.', ',') + 'с'
+		plt.text(xm, h + t_offset * 1.5, dur_str, ha='center', va='bottom', fontsize=10)
 		v_start, v_end = float(v[i0]), float(v[i1])
 		in_pulse_max = peaks[(peaks >= i0) & (peaks <= i1)]
 		for j, p in enumerate(in_pulse_max, 1):

@@ -323,7 +323,7 @@ def create_impulse_tables(doc, extrema_df):
         # --- Площадь импульса ---
         area_row = table.rows[end_row + 2]
         area_row.cells[0].text = "Площадь импульса"
-        area_row.cells[1].text = "S, усл.единиц²"
+        area_row.cells[1].text = "S, H/с²"
         area_row.cells[2].text = f"{float(group['area'].iloc[0]):.2f}"
 
         # Форматирование всех ячеек таблицы (Times New Roman 14)
