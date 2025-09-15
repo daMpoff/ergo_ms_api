@@ -176,12 +176,12 @@ def _load_translation_model(translation_model_name=None, use_gpu=None):
         
         _translation_tokenizer = MarianTokenizer.from_pretrained(translation_model_name)
         # Загружаем модель сначала на CPU, затем перемещаем на целевое устройство
-        # Это предотвращает создание meta-тензоров при использовании device_map='auto'
+        # Это предотвращает создание meta-тензоров при использовании low_cpu_mem_usage
         if use_gpu and device == 'cuda':
             _translation_model = MarianMTModel.from_pretrained(
                 translation_model_name,
                 dtype=torch.float16,
-                low_cpu_mem_usage=True
+                low_cpu_mem_usage=False  # Важно: выключаем, чтобы не получить meta-тензоры
             ).to(device)
         else:
             _translation_model = MarianMTModel.from_pretrained(
@@ -190,7 +190,6 @@ def _load_translation_model(translation_model_name=None, use_gpu=None):
                 low_cpu_mem_usage=False
             )
         
-        # Выравниваем размер словаря под токенизатор и привязываем веса
         _translation_model.resize_token_embeddings(len(_translation_tokenizer))
         _translation_model.config.tie_word_embeddings = True
         _translation_model.tie_weights()
