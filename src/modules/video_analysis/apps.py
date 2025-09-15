@@ -32,7 +32,7 @@ class VideoAnalysisConfig(AppConfig):
     RESULTS_DIR = os.path.join(VIDEO_ANALYSIS_MEDIA, 'results')
 
     # Максимальное количество одновременных задач
-    MAX_CONCURRENT_TASKS = 2
+    MAX_CONCURRENT_TASKS = 1
     
     def ready(self):
         """Импортируем сигналы при запуске приложения"""
