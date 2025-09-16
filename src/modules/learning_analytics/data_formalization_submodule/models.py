@@ -216,6 +216,7 @@ class Competency(models.Model):
 
     # Таксономия Блума
     blooms_level = models.CharField(
+        max_length=10,
         choices=BLOOMS_LEVELS,
         default='KNOW',
         verbose_name="Уровень таксономии Блума"
