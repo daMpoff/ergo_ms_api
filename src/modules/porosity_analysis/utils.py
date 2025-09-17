@@ -68,6 +68,42 @@ def cleanup_analysis_files(analysis):
         logger.error(f"Ошибка при удалении файлов анализа {analysis.id}: {str(e)}")
 
 
+# ---- Управление флагами отмены выполнения Celery-задач для анализа ----
+def _cancel_flags_dir():
+    from django.conf import settings
+    directory = os.path.join(settings.MEDIA_ROOT, 'porosity_analysis', 'cancel')
+    os.makedirs(directory, exist_ok=True)
+    return directory
+
+
+def set_cancel_flag(analysis_id: int):
+    """Создает флаг отмены для анализа, чтобы фоновые задачи прерывали работу."""
+    try:
+        path = os.path.join(_cancel_flags_dir(), f"{analysis_id}.flag")
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write('cancelled')
+        logger.info(f"Установлен флаг отмены для анализа {analysis_id}: {path}")
+    except Exception as e:
+        logger.error(f"Не удалось установить флаг отмены для анализа {analysis_id}: {e}")
+
+
+def clear_cancel_flag(analysis_id: int):
+    """Удаляет флаг отмены для анализа."""
+    try:
+        path = os.path.join(_cancel_flags_dir(), f"{analysis_id}.flag")
+        if os.path.exists(path):
+            os.remove(path)
+            logger.info(f"Снят флаг отмены для анализа {analysis_id}")
+    except Exception as e:
+        logger.warning(f"Не удалось удалить флаг отмены для анализа {analysis_id}: {e}")
+
+
+def is_cancelled(analysis_id: int) -> bool:
+    """Проверяет, установлен ли флаг отмены для анализа."""
+    path = os.path.join(_cancel_flags_dir(), f"{analysis_id}.flag")
+    return os.path.exists(path)
+
+
 def get_analysis_results_files(analysis):
     """
     Получает список файлов результатов анализа

@@ -25,7 +25,7 @@ from src.modules.porosity_analysis.serializers import (
     PorosityAnalysisResultsSerializer
 )
 from src.modules.porosity_analysis.tasks import run_porosity_analysis, check_concurrent_analyses_limit
-from src.modules.porosity_analysis.utils import save_uploaded_image, get_analysis_results_files, create_analysis_summary
+from src.modules.porosity_analysis.utils import save_uploaded_image, get_analysis_results_files, create_analysis_summary, set_cancel_flag
 from src.modules.porosity_analysis.config import PorosityAnalysisConfig
 
 
@@ -65,6 +65,17 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
             return self.get_paginated_response(serializer.data)
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
+
+    def destroy(self, request, *args, **kwargs):
+        """Удаление анализа: ставим флаг отмены и удаляем объект (файлы почистит сигнал)."""
+        instance = self.get_object()
+        try:
+            # Ставим флаг отмены для фоновых задач
+            set_cancel_flag(instance.id)
+        except Exception:
+            pass
+        self.perform_destroy(instance)
+        return Response(status=status.HTTP_204_NO_CONTENT)
     
     def perform_create(self, serializer):
         """Создание анализа (задача запускается только после загрузки изображения)"""
@@ -284,16 +295,12 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
         """Получение информации о файлах результатов"""
         analysis = self.get_object()
         
-        print(f"Files info endpoint called for analysis {analysis.id}")
-        print(f"Results directory: {analysis.results_directory}")
-        print(f"Directory exists: {os.path.exists(analysis.results_directory) if analysis.results_directory else False}")
+        # Приглушаем подробный вывод
         
         # Получаем список файлов
         result_files = analysis.get_result_files()
         
-        print(f"Found {len(result_files)} result files")
-        for file in result_files:
-            print(f"  - {file['name']} ({file['size']} bytes)")
+        # Приглушаем подробный вывод
         
         # Добавляем отладочную информацию
         debug_info = {
@@ -314,7 +321,7 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
         analysis = self.get_object()
         filename = request.query_params.get('file')
         
-        print(f"Image endpoint called for analysis {analysis.id}, filename: {filename}")
+        # Приглушаем подробный вывод
         
         if not filename:
             return Response({
@@ -322,9 +329,7 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
             }, status=status.HTTP_400_BAD_REQUEST)
         
         file_path = os.path.join(analysis.results_directory, filename)
-        print(f"Looking for file: {file_path}")
-        print(f"File exists: {os.path.exists(file_path)}")
-        print(f"Directory exists: {os.path.exists(analysis.results_directory)}")
+        # Приглушаем подробный вывод
         
         if not os.path.exists(file_path):
             return Response({
@@ -337,12 +342,11 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
         try:
             with open(file_path, 'rb') as f:
                 file_content = f.read()
-                print(f"File read successfully, size: {len(file_content)} bytes")
                 response = HttpResponse(file_content, content_type='image/png')
                 response['Content-Disposition'] = f'inline; filename="{filename}"'
                 return response
         except Exception as e:
-            print(f"Error reading file: {str(e)}")
+            # Приглушаем подробный вывод
             return Response({
                 'error': f'Ошибка при чтении файла: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -550,7 +554,7 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
         analysis = self.get_object()
         report_type = request.query_params.get('type', 'pdf')  # По умолчанию PDF
         
-        print(f"Download report called for analysis {analysis.id}, type: {report_type}")
+        # Приглушаем подробный вывод
         
         if analysis.status != 'completed':
             return Response({
@@ -559,17 +563,16 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
         
         # Путь к директории отчетов
         reports_dir = os.path.join(analysis.results_directory, 'reports')
-        print(f"Reports directory: {reports_dir}")
-        print(f"Directory exists: {os.path.exists(reports_dir)}")
+        # Приглушаем подробный вывод
         
         # Если отчеты еще не созданы, создаем их
         if not os.path.exists(reports_dir) or not os.listdir(reports_dir):
-            print("Reports directory does not exist or is empty, generating reports...")
+            # Приглушаем подробный вывод
             try:
                 from .report_generator import PorosityReportGenerator
                 report_generator = PorosityReportGenerator(analysis)
                 reports = report_generator.generate_reports()
-                print(f"Generated reports: {reports}")
+                # Приглушаем подробный вывод
                 
                 # Проверяем, что отчеты действительно созданы
                 if not reports:
@@ -578,7 +581,7 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
                     }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
                     
             except Exception as e:
-                print(f"Error generating reports: {str(e)}")
+                # Приглушаем подробный вывод
                 return Response({
                     'error': f'Ошибка при генерации отчетов: {str(e)}'
                 }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -586,32 +589,32 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
         # Ищем файл отчета
         report_files = []
         if os.path.exists(reports_dir):
-            print(f"Scanning directory: {reports_dir}")
+            # Приглушаем подробный вывод
             for filename in os.listdir(reports_dir):
-                print(f"Found file: {filename}")
+                # Приглушаем подробный вывод
                 if filename.endswith(f'.{report_type}'):
                     report_files.append(filename)
-                    print(f"Added report file: {filename}")
+                    # Приглушаем подробный вывод
         
-        print(f"Found {len(report_files)} report files for type {report_type}")
+        # Приглушаем подробный вывод
         
         if not report_files:
             # Попробуем сгенерировать отчеты еще раз
-            print("No report files found, trying to generate reports again...")
+            # Приглушаем подробный вывод
             try:
                 from .report_generator import PorosityReportGenerator
                 report_generator = PorosityReportGenerator(analysis)
                 reports = report_generator.generate_reports()
-                print(f"Regenerated reports: {reports}")
+                # Приглушаем подробный вывод
                 
                 # Проверяем снова
                 if os.path.exists(reports_dir):
                     for filename in os.listdir(reports_dir):
                         if filename.endswith(f'.{report_type}'):
                             report_files.append(filename)
-                            print(f"Found regenerated report file: {filename}")
+                            # Приглушаем подробный вывод
             except Exception as e:
-                print(f"Error regenerating reports: {str(e)}")
+                pass
             
             if not report_files:
                 return Response({
@@ -626,8 +629,7 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
         latest_report = report_files[0]
         file_path = os.path.join(reports_dir, latest_report)
         
-        print(f"Selected file: {file_path}")
-        print(f"File exists: {os.path.exists(file_path)}")
+        # Приглушаем подробный вывод
         
         if not os.path.exists(file_path):
             return Response({
@@ -648,8 +650,7 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
                 'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
             }.get(report_type, 'application/octet-stream')
             
-            print(f"Content type: {content_type}")
-            print(f"File size: {file_size} bytes")
+            # Приглушаем подробный вывод
             
             # Отправляем файл
             with open(file_path, 'rb') as f:

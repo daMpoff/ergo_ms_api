@@ -30,10 +30,9 @@ def setup_russian_fonts():
                 font_name = os.path.splitext(os.path.basename(custom_font_path))[0]
                 pdfmetrics.registerFont(TTFont(font_name, custom_font_path))
                 addMapping(font_name, 0, 0, font_name)
-                print(f"Используется пользовательский шрифт: {font_name} из {custom_font_path}")
                 return font_name
             except Exception as font_error:
-                print(f"Не удалось зарегистрировать пользовательский шрифт {custom_font_path}: {font_error}")
+                pass
         
         # Список возможных путей к шрифтам с поддержкой кириллицы
         font_paths = [
@@ -65,10 +64,8 @@ def setup_russian_fonts():
                     font_name = os.path.splitext(os.path.basename(font_path))[0]
                     pdfmetrics.registerFont(TTFont(font_name, font_path))
                     addMapping(font_name, 0, 0, font_name)
-                    print(f"Успешно зарегистрирован шрифт: {font_name} из {font_path}")
                     return font_name
                 except Exception as font_error:
-                    print(f"Не удалось зарегистрировать шрифт {font_path}: {font_error}")
                     continue
         
         # Если ничего не найдено, используем встроенный шрифт
@@ -83,7 +80,7 @@ def setup_russian_fonts():
 RUSSIAN_FONT = setup_russian_fonts()
 
 # Выводим информацию о выбранном шрифте
-print(f"Используется шрифт для PDF: {RUSSIAN_FONT}")
+# Приглушаем лишний вывод в Celery
 
 # Настраиваем логгер для генератора отчетов
 logger = logging.getLogger('celery.task.porosity_analysis.reports')

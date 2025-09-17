@@ -30,6 +30,7 @@ from src.modules.porosity_analysis.scripts.visualization import (
 )
 from src.modules.porosity_analysis.scripts.config import FILES, MESSAGES
 from src.modules.porosity_analysis.scripts.utils import calculate_basic_pore_statistics
+from src.modules.porosity_analysis.utils import is_cancelled
 
 
 class PorosityAnalyzer:
@@ -58,6 +59,11 @@ class PorosityAnalyzer:
             Результаты анализа или None в случае ошибки
         """
         try:
+            # Ранняя проверка отмены
+            analysis_id_env = os.environ.get('POROSITY_ANALYSIS_ID')
+            if analysis_id_env and is_cancelled(int(analysis_id_env)):
+                print(f"Задача анализа {analysis_id_env} отменена до выполнения. Выход.")
+                return None
             # 1. Определение масштаба по линейке
             scale_results = self._detect_scale(image_path, scale_value, save_directory)
             pixels_per_micron, scale_result, scale_region = scale_results
@@ -67,6 +73,12 @@ class PorosityAnalyzer:
             self._save_scale_image(scale_result, save_directory)
             
             # 2. Анализ пористости с учетом масштаба
+            # Проверка отмены перед тяжелым этапом
+            analysis_id_env = os.environ.get('POROSITY_ANALYSIS_ID')
+            if analysis_id_env and is_cancelled(int(analysis_id_env)):
+                print(f"Задача анализа {analysis_id_env} отменена перед основным этапом. Выход.")
+                return None
+
             core_results = advanced_porosity_analysis(
                 image_path, pixels_per_micron, scale_region, save_directory
             )
@@ -83,7 +95,11 @@ class PorosityAnalyzer:
             results['pixels_per_micron'] = pixels_per_micron
             results['microns_per_pixel'] = microns_per_pixel
             
-            # 5. Создание визуализаций
+            # 5. Создание визуализаций (с проверкой отмены)
+            analysis_id_env = os.environ.get('POROSITY_ANALYSIS_ID')
+            if analysis_id_env and is_cancelled(int(analysis_id_env)):
+                print(f"Задача анализа {analysis_id_env} отменена перед визуализациями. Выход.")
+                return None
             self._create_visualizations(results, save_directory)
             
             # 6. Вывод итоговых результатов
@@ -109,12 +125,8 @@ class PorosityAnalyzer:
         microns_per_pixel: float,
         scale_region: tuple
     ) -> None:
-        """Логирует результаты детекции масштаба"""
-        print(self.messages['SCALE_DETECTED'])
-        print(f"1 пиксель = {microns_per_pixel:.5f} мкм")
-        print(f"1 мкм = {pixels_per_micron:.5f} пикселей")
-        print(f"Область линейки: x={scale_region[0]}, y={scale_region[1]}, "
-              f"ширина={scale_region[2]}, высота={scale_region[3]}")
+        """Логирует результаты детекции масштаба (приглушено для Celery)."""
+        pass
     
     def _save_scale_image(self, scale_result: np.ndarray, save_directory: str) -> None:
         """Сохраняет изображение с обнаруженной линейкой"""
@@ -126,8 +138,7 @@ class PorosityAnalyzer:
         core_results: Dict[str, Any], 
         microns_per_pixel: float
     ) -> Dict[str, Any]:
-        """Выполняет дополнительные расчеты"""
-        print(f"\n{self.messages['CALCULATIONS_START']}")
+        """Выполняет дополнительные расчеты (без избыточного вывода)."""
         
         pore_properties = core_results['pore_properties']
         pore_diameters_microns = core_results['pore_diameters_microns']
@@ -181,8 +192,7 @@ class PorosityAnalyzer:
         return results
     
     def _create_visualizations(self, results: Dict[str, Any], save_directory: str) -> None:
-        """Создает все визуализации"""
-        print(f"\n{self.messages['VISUALIZATIONS_START']}")
+        """Создает все визуализации (без избыточного вывода)."""
         
         # Создаем задачи визуализации
         visualization_tasks = self._create_visualization_tasks(results, save_directory)
@@ -191,7 +201,7 @@ class PorosityAnalyzer:
         for task in visualization_tasks:
             task()
         
-        print(self.messages['VISUALIZATIONS_COMPLETE'])
+        # Приглушаем подробный вывод
     
     def _create_visualization_tasks(
         self, 
@@ -225,8 +235,8 @@ class PorosityAnalyzer:
         ]
     
     def _log_final_results(self, results: Dict[str, Any]) -> None:
-        """Выводит итоговые результаты анализа"""
-        print("\nРезультаты анализа пористости (исключая область измерительной линейки, линии и аномалии):")
+        """Выводит итоговые результаты анализа (приглушено для Celery)."""
+        return
         
         # Основные метрики
         self._log_main_metrics(results)
@@ -235,14 +245,8 @@ class PorosityAnalyzer:
         self._log_excluded_areas(results)
     
     def _log_main_metrics(self, results: Dict[str, Any]) -> None:
-        """Логирует основные метрики"""
-        print(f"Пористость: {results['porosity_percentage']:.2f}%")
-        print(f"Относительная площадь пор: {results['relative_pore_area']:.2f}%")
-        print(f"Количество пор: {results['number_of_pores']}")
-        print(f"Средний размер поры: {results['mean_pore_size_microns']:.2f} мкм²")
-        print(f"Медианный размер поры: {results['median_pore_size_microns']:.2f} мкм²")
-        print(f"Средний диаметр поры: {results['mean_pore_diameter_microns']:.2f} мкм")
-        print(f"Медианный диаметр поры: {results['median_pore_diameter_microns']:.2f} мкм")
+        """Логирует основные метрики (приглушено)."""
+        return
     
     def _log_excluded_areas(self, results: Dict[str, Any]) -> None:
         """Логирует информацию об исключенных областях"""
@@ -254,12 +258,8 @@ class PorosityAnalyzer:
         anomalies_excluded = np.sum(~results['anomalies_exclude_mask'])
         total_excluded = np.sum(~results['exclude_mask'])
         
-        print(f"\nИсключенные области:")
-        print(f"Область шкалы: {scale_excluded} пикселей ({(scale_excluded/total_pixels)*100:.2f}%)")
-        print(f"Области линий: {lines_excluded} пикселей ({(lines_excluded/total_pixels)*100:.2f}%)")
-        print(f"Аномальные области: {anomalies_excluded} пикселей ({(anomalies_excluded/total_pixels)*100:.2f}%)")
-        print(f"Общая исключенная область: {total_excluded} пикселей ({(total_excluded/total_pixels)*100:.2f}%)")
-        print(f"Область анализа: {total_pixels - total_excluded} пикселей ({((total_pixels - total_excluded)/total_pixels)*100:.2f}%)")
+        # Приглушаем подробные распечатки
+        return
     
     def get_last_results(self):
         """Возвращает результаты последнего анализа"""

@@ -17,6 +17,7 @@ matplotlib.use('Agg')  # Используем non-interactive backend
 
 from pathlib import Path
 from typing import Optional
+import os
 
 from src.modules.porosity_analysis.scripts.porosity_analyzer import PorosityAnalyzer
 
@@ -42,9 +43,7 @@ def run_analysis(config):
         )
         
         if results:
-            # Логируем исходные результаты для отладки
-            print(f"Исходные результаты анализа: {results}")
-            
+            # Не печатаем весь объект результатов (может быть очень большим)
             # Возвращаем результаты анализа
             final_results = {
                 'porosity_percentage': results.get('porosity_percentage', 0.0),
@@ -56,7 +55,7 @@ def run_analysis(config):
                 'average_interpore_distance': results.get('average_interpore_distance', 0.0)
             }
             
-            print(f"Финальные результаты: {final_results}")
+            # Не печатаем финальные результаты в stdout для Celery
             return final_results
         else:
             return None
@@ -109,10 +108,22 @@ class PorosityAnalysisApp:
         if not self._validate_inputs(image_path, save_directory):
             return False
         
+        # Проверка отмены перед запуском
+        from src.modules.porosity_analysis.utils import is_cancelled
+        analysis_id_env = os.environ.get('POROSITY_ANALYSIS_ID')
+        if analysis_id_env and is_cancelled(int(analysis_id_env)):
+            print(f"Задача анализа {analysis_id_env} отменена перед запуском. Прерывание.")
+            return None
+
         # Запуск анализа
-        print("Начинаем анализ пористости...")
+        # print("Начинаем анализ пористости...")
         results = self.analyzer.integrated_analysis(image_path, scale_value, save_directory)
         
+        # Проверка отмены после выполнения
+        if analysis_id_env and is_cancelled(int(analysis_id_env)):
+            # print(f"Задача анализа {analysis_id_env} отменена во время выполнения. Результаты не сохраняем.")
+            return None
+
         # Обработка результатов
         success = self._handle_results(results, save_directory)
         return results if success else None

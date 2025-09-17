@@ -1,4 +1,5 @@
 import os
+import zipfile
 import logging
 
 # Настройка Matplotlib для работы в фоновом режиме (без GUI)
@@ -12,6 +13,7 @@ from django.utils import timezone
 
 from src.modules.porosity_analysis.models import PorosityAnalysis
 from src.modules.porosity_analysis.config import PorosityAnalysisConfig
+from src.modules.porosity_analysis.utils import is_cancelled, clear_cancel_flag, get_analysis_results_files
 
 # Настраиваем логгер для задач анализа пористости
 logger = logging.getLogger('celery.task.porosity_analysis')
@@ -36,6 +38,11 @@ def run_porosity_analysis(self, analysis_id):
     try:
         # Убрана проверка лимита одновременных анализов
         
+        # Отмена до старта
+        if is_cancelled(analysis_id):
+            logger.info(f"Анализ {analysis_id} отменен до запуска. Завершаем задачу.")
+            return
+
         # Получаем объект анализа
         analysis = PorosityAnalysis.objects.get(id=analysis_id)
         
@@ -64,12 +71,27 @@ def run_porosity_analysis(self, analysis_id):
         # Создаем директорию для результатов если её нет
         os.makedirs(analysis.results_directory, exist_ok=True)
         
+        # Пробрасываем идентификатор анализа в окружение для внутренних проверок отмены
+        os.environ['POROSITY_ANALYSIS_ID'] = str(analysis_id)
+
         # Запускаем анализ
         logger.warning(f"Путь к изображению: {analysis.original_image_path}, существует: {os.path.exists(analysis.original_image_path)}")
+        # Внутренняя обертка, позволяющая периодически проверять отмену
         results = run_analysis(config)
 
         # Логируем результаты для отладки
-        logger.warning(f"Результаты анализа: {results}")
+        # Не логируем весь объект результатов (может быть очень большим)
+        try:
+            result_keys = list(results.keys()) if isinstance(results, dict) else None
+            logger.info(f"Результаты анализа получены. Ключи: {result_keys}")
+        except Exception:
+            logger.info("Результаты анализа получены.")
+
+        # Если во время выполнения пришла отмена — завершаем без ошибки
+        if is_cancelled(analysis_id):
+            logger.info(f"Анализ {analysis_id} был отменен во время выполнения. Корректное завершение без сохранения результатов.")
+            clear_cancel_flag(analysis_id)
+            return
 
         if not results:
             logger.error(f"Анализ не выполнен или произошла ошибка для анализа {analysis_id} (см. выше в логах)")
@@ -88,14 +110,8 @@ def run_porosity_analysis(self, analysis_id):
         average_interpore_distance = results.get('average_interpore_distance')
         
         # Логируем значения для отладки
-        logger.warning(f"Сохраняемые значения:")
-        logger.warning(f"  - porosity_percentage: {porosity_percentage}")
-        logger.warning(f"  - number_of_pores: {number_of_pores}")
-        logger.warning(f"  - average_pore_size: {average_pore_size}")
-        logger.warning(f"  - max_pore_size: {max_pore_size}")
-        logger.warning(f"  - min_pore_size: {min_pore_size}")
-        logger.warning(f"  - pore_density: {pore_density}")
-        logger.warning(f"  - average_interpore_distance: {average_interpore_distance}")
+        logger.debug("Сохраняемые значения: porosity=%s, pores=%s, avg_size=%s, max=%s, min=%s, density=%s, interpore=%s",
+                     porosity_percentage, number_of_pores, average_pore_size, max_pore_size, min_pore_size, pore_density, average_interpore_distance)
         
         analysis.porosity_percentage = porosity_percentage
         analysis.number_of_pores = number_of_pores
@@ -117,7 +133,35 @@ def run_porosity_analysis(self, analysis_id):
             logger.error(f"Ошибка при генерации отчетов для анализа {analysis_id}: {e}")
             # Не прерываем процесс, если отчеты не удалось создать
         
+        # Создаем ZIP архив результатов (кэш) сразу в задаче
+        try:
+            if not is_cancelled(analysis_id):
+                result_files = get_analysis_results_files(analysis)
+                zip_path = os.path.join(analysis.results_directory, f"analysis_{analysis_id}_results.zip")
+
+                # Пересоздаем архив
+                if os.path.exists(zip_path):
+                    try:
+                        os.remove(zip_path)
+                    except Exception:
+                        pass
+
+                with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                    for file_path in result_files:
+                        # Не включаем сам архив, если встречается при повторном запуске
+                        if os.path.abspath(file_path) == os.path.abspath(zip_path):
+                            continue
+                        if os.path.exists(file_path) and os.path.isfile(file_path):
+                            relative_path = os.path.relpath(file_path, analysis.results_directory)
+                            zip_file.write(file_path, relative_path)
+                logger.info(f"ZIP архив результатов создан: {zip_path}")
+            else:
+                logger.info(f"Анализ {analysis_id} отменен перед созданием архива. Пропускаем упаковку.")
+        except Exception as e:
+            logger.error(f"Ошибка при создании ZIP архива для анализа {analysis_id}: {e}")
+
         logger.info(f"Анализ пористости завершен успешно для ID: {analysis_id}")
+        clear_cancel_flag(analysis_id)
         
     except PorosityAnalysis.DoesNotExist:
         logger.error(f"Анализ с ID {analysis_id} не найден")

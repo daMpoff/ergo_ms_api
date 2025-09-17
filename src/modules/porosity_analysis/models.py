@@ -81,11 +81,10 @@ class PorosityAnalysis(models.Model):
     
     def get_result_files(self):
         """Возвращает список файлов результатов анализа"""
-        print(f"Checking results directory: {self.results_directory}")
-        print(f"Directory exists: {os.path.exists(self.results_directory)}")
+        # Приглушаем отладочный вывод в Celery
         
         if not os.path.exists(self.results_directory):
-            print(f"Results directory does not exist: {self.results_directory}")
+            pass
             return []
         
         result_files = []
@@ -108,7 +107,7 @@ class PorosityAnalysis(models.Model):
         
         for filename, description in expected_files:
             file_path = os.path.join(self.results_directory, filename)
-            print(f"Checking file: {file_path}, exists: {os.path.exists(file_path)}")
+            # Подробный вывод отключен
             if os.path.exists(file_path):
                 file_size = os.path.getsize(file_path)
                 result_files.append({
@@ -118,5 +117,5 @@ class PorosityAnalysis(models.Model):
                     'size_mb': file_size / (1024 * 1024)
                 })
         
-        print(f"Found {len(result_files)} result files")
+        # Подробный вывод отключен
         return result_files
