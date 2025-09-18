@@ -181,13 +181,13 @@ def _load_translation_model(translation_model_name=None, use_gpu=None):
             _translation_model = MarianMTModel.from_pretrained(
                 translation_model_name,
                 dtype=torch.float16,
-                low_cpu_mem_usage=False  # Важно: выключаем, чтобы не получить meta-тензоры
+                low_cpu_mem_usage=True  # Важно: выключаем, чтобы не получить meta-тензоры
             ).to(device)
         else:
             _translation_model = MarianMTModel.from_pretrained(
                 translation_model_name,
                 dtype=torch.float32,
-                low_cpu_mem_usage=False
+                low_cpu_mem_usage=True
             )
         
         _translation_model.resize_token_embeddings(len(_translation_tokenizer))
