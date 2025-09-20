@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from src.modules.project_ed.models import Project, Category, Subcategory, TargetIndicator
+from src.modules.project_ed.models import Project, Category, Subcategory, TargetIndicator, EventBlock, Event
 
 
 class ProjectSerializer(serializers.ModelSerializer):
@@ -182,3 +182,145 @@ class TargetIndicatorSerializer(serializers.ModelSerializer):
             )
         
         return attrs
+
+
+class EventSerializer(serializers.ModelSerializer):
+    """Сериализатор для мероприятий."""
+    years_display = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = Event
+        fields = [
+            'id',
+            'block',
+            'code',
+            'name',
+            'results',
+            'start_year',
+            'end_year',
+            'years_display',
+            'order',
+            'is_active',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['years_display', 'created_at', 'updated_at']
+    
+    def validate(self, attrs):
+        """Валидация: год начала не может быть больше года окончания."""
+        start_year = attrs.get('start_year')
+        end_year = attrs.get('end_year')
+        
+        if start_year and end_year and start_year > end_year:
+            raise serializers.ValidationError(
+                'Год начала не может быть больше года окончания.'
+            )
+        
+        return attrs
+
+
+class EventBlockSerializer(serializers.ModelSerializer):
+    """Сериализатор для блоков мероприятий."""
+    events = EventSerializer(many=True, read_only=True)
+    category_name = serializers.CharField(source='category.name', read_only=True)
+    subcategory_name = serializers.CharField(source='subcategory.name', read_only=True)
+    events_count = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = EventBlock
+        fields = [
+            'id',
+            'title',
+            'description',
+            'category',
+            'subcategory',
+            'category_name',
+            'subcategory_name',
+            'events',
+            'events_count',
+            'order',
+            'is_active',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['category_name', 'subcategory_name', 'events_count', 'created_at', 'updated_at']
+    
+    def validate(self, attrs):
+        """Валидация: подкатегория должна принадлежать выбранной категории."""
+        category = attrs.get('category')
+        subcategory = attrs.get('subcategory')
+        
+        if subcategory and category and subcategory.category != category:
+            raise serializers.ValidationError(
+                'Подкатегория должна принадлежать выбранной категории.'
+            )
+        
+        return attrs
+
+
+class EventBlockCreateUpdateSerializer(serializers.ModelSerializer):
+    """Сериализатор для создания и обновления блоков мероприятий с мероприятиями."""
+    events = serializers.ListField(
+        child=serializers.DictField(),
+        write_only=True,
+        required=False,
+        allow_empty=True
+    )
+    category_name = serializers.CharField(source='category.name', read_only=True)
+    subcategory_name = serializers.CharField(source='subcategory.name', read_only=True)
+    events_count = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = EventBlock
+        fields = [
+            'id',
+            'title',
+            'description',
+            'category',
+            'subcategory',
+            'category_name',
+            'subcategory_name',
+            'events',
+            'events_count',
+            'order',
+            'is_active',
+        ]
+    
+    def create(self, validated_data):
+        events_data = validated_data.pop('events', [])
+        event_block = EventBlock.objects.create(**validated_data)
+        
+        # Создаем мероприятия
+        for index, event_data in enumerate(events_data):
+            if event_data.get('name', '').strip():  # Пропускаем пустые названия
+                Event.objects.create(
+                    block=event_block,
+                    order=index,
+                    **event_data
+                )
+        
+        return event_block
+    
+    def update(self, instance, validated_data):
+        events_data = validated_data.pop('events', None)
+        
+        # Обновляем основную информацию блока
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        
+        # Обновляем мероприятия, если они переданы
+        if events_data is not None:
+            # Удаляем существующие мероприятия
+            instance.events.all().delete()
+            
+            # Создаем новые мероприятия
+            for index, event_data in enumerate(events_data):
+                if event_data.get('name', '').strip():  # Пропускаем пустые названия
+                    Event.objects.create(
+                        block=instance,
+                        order=index,
+                        **event_data
+                    )
+        
+        return instance

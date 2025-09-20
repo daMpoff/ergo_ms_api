@@ -171,3 +171,117 @@ class TargetIndicator(models.Model):
         
         if self.subcategory and self.category and self.subcategory.category != self.category:
             raise ValidationError('Подкатегория должна принадлежать выбранной категории.')
+
+
+class EventBlock(models.Model):
+    """Блок мероприятий программы развития БГТУ."""
+    
+    title = models.CharField('Название блока', max_length=255)
+    description = models.TextField('Описание блока', blank=True)
+    
+    # Связь с категорией и подкатегорией (опционально)
+    category = models.ForeignKey(
+        Category,
+        on_delete=models.SET_NULL,
+        related_name='event_blocks',
+        verbose_name='Категория',
+        null=True,
+        blank=True
+    )
+    subcategory = models.ForeignKey(
+        Subcategory,
+        on_delete=models.SET_NULL,
+        related_name='event_blocks',
+        verbose_name='Подкатегория',
+        null=True,
+        blank=True
+    )
+    
+    # Служебные поля
+    order = models.PositiveIntegerField('Порядок сортировки', default=0)
+    is_active = models.BooleanField('Активен', default=True)
+    created_at = models.DateTimeField('Создано', auto_now_add=True)
+    updated_at = models.DateTimeField('Обновлено', auto_now=True)
+    
+    class Meta:
+        verbose_name = 'Блок мероприятий'
+        verbose_name_plural = 'Блоки мероприятий'
+        ordering = ['order', 'title']
+    
+    def __str__(self) -> str:
+        return self.title
+    
+    @property
+    def category_name(self):
+        """Название категории."""
+        return self.category.name if self.category else None
+    
+    @property
+    def subcategory_name(self):
+        """Название подкатегории."""
+        return self.subcategory.name if self.subcategory else None
+    
+    @property
+    def events_count(self):
+        """Количество мероприятий в блоке."""
+        return self.events.count()
+    
+    def clean(self):
+        """Валидация: подкатегория должна принадлежать выбранной категории."""
+        from django.core.exceptions import ValidationError
+        
+        if self.subcategory and self.category and self.subcategory.category != self.category:
+            raise ValidationError('Подкатегория должна принадлежать выбранной категории.')
+
+
+class Event(models.Model):
+    """Мероприятие в блоке мероприятий."""
+    
+    block = models.ForeignKey(
+        EventBlock,
+        on_delete=models.CASCADE,
+        related_name='events',
+        verbose_name='Блок мероприятий'
+    )
+    
+    code = models.CharField('Код мероприятия', max_length=50, blank=True)
+    name = models.CharField('Наименование мероприятия', max_length=500)
+    results = models.TextField('Основные результаты', blank=True)
+    
+    # Сроки реализации
+    start_year = models.PositiveIntegerField('Год начала', null=True, blank=True)
+    end_year = models.PositiveIntegerField('Год окончания', null=True, blank=True)
+    
+    # Служебные поля
+    order = models.PositiveIntegerField('Порядок сортировки', default=0)
+    is_active = models.BooleanField('Активен', default=True)
+    created_at = models.DateTimeField('Создано', auto_now_add=True)
+    updated_at = models.DateTimeField('Обновлено', auto_now=True)
+    
+    class Meta:
+        verbose_name = 'Мероприятие'
+        verbose_name_plural = 'Мероприятия'
+        ordering = ['block__order', 'order', 'name']
+    
+    def __str__(self) -> str:
+        return f'{self.code} - {self.name}' if self.code else self.name
+    
+    @property
+    def years_display(self):
+        """Отображение годов реализации."""
+        if self.start_year and self.end_year:
+            if self.start_year == self.end_year:
+                return str(self.start_year)
+            return f'{self.start_year}–{self.end_year}'
+        elif self.start_year:
+            return f'с {self.start_year}'
+        elif self.end_year:
+            return f'до {self.end_year}'
+        return ''
+    
+    def clean(self):
+        """Валидация: год начала не может быть больше года окончания."""
+        from django.core.exceptions import ValidationError
+        
+        if self.start_year and self.end_year and self.start_year > self.end_year:
+            raise ValidationError('Год начала не может быть больше года окончания.')

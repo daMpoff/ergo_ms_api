@@ -1,17 +1,21 @@
 from django.shortcuts import render
+from django.db.models import Prefetch
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 
 from src.core.utils.mixins import SwaggerSafeMixin
-from src.modules.project_ed.models import Project, Category, Subcategory, TargetIndicator
+from src.modules.project_ed.models import Project, Category, Subcategory, TargetIndicator, EventBlock, Event
 from src.modules.project_ed.serializers import (
     ProjectSerializer, 
     CategorySerializer, 
     CategoryCreateUpdateSerializer,
     SubcategorySerializer,
-    TargetIndicatorSerializer
+    TargetIndicatorSerializer,
+    EventBlockSerializer,
+    EventBlockCreateUpdateSerializer,
+    EventSerializer
 )
 
 
@@ -226,3 +230,224 @@ class TargetIndicatorViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
             serializer.save(project_id=project_id)
         else:
             serializer.save()
+
+
+class EventBlockViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
+    """ViewSet для управления блоками мероприятий."""
+    queryset = EventBlock.objects.filter(is_active=True).prefetch_related(
+        Prefetch('events', queryset=Event.objects.filter(is_active=True)),
+        'category', 
+        'subcategory'
+    )
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_serializer_class(self):
+        if self.action in ['create', 'update', 'partial_update']:
+            return EventBlockCreateUpdateSerializer
+        return EventBlockSerializer
+    
+    def get_queryset(self):
+        # Принудительно исправляем порядок блоков при загрузке
+        blocks = EventBlock.objects.filter(is_active=True).order_by('order')
+        for i, block in enumerate(blocks):
+            if block.order != i:
+                block.order = i
+                block.save()
+        
+        return EventBlock.objects.filter(is_active=True).prefetch_related(
+            Prefetch('events', queryset=Event.objects.filter(is_active=True)),
+            'category', 
+            'subcategory'
+        )
+    
+    @action(detail=True, methods=['get'])
+    def events(self, request, pk=None):
+        """Получить мероприятия для конкретного блока."""
+        block = self.get_object()
+        events = block.events.filter(is_active=True)
+        serializer = EventSerializer(events, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['delete'])
+    def safe_delete(self, request, pk=None):
+        """Безопасное удаление блока с проверкой использования."""
+        block = self.get_object()
+        
+        # Проверяем, есть ли мероприятия в блоке
+        events_count = block.events_count
+        
+        if events_count > 0:
+            return Response({
+                'error': 'Блок не может быть удален',
+                'message': f'В блоке есть {events_count} мероприятий',
+                'events_count': events_count
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Если мероприятий нет, помечаем как неактивный
+        block.is_active = False
+        block.save()
+        
+        return Response({'message': 'Блок мероприятий успешно удален'}, status=status.HTTP_200_OK)
+    
+    @action(detail=True, methods=['patch'])
+    def update_order(self, request, pk=None):
+        """Обновление порядка блока с автоматическим пересчетом порядка других блоков."""
+        block = self.get_object()
+        new_order = request.data.get('order')
+        
+        if new_order is None:
+            return Response({
+                'error': 'Поле order обязательно'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            new_order = int(new_order)
+        except (ValueError, TypeError):
+            return Response({
+                'error': 'Поле order должно быть числом'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Получаем все блоки, отсортированные по порядку
+        all_blocks = list(EventBlock.objects.filter(is_active=True).order_by('order'))
+        
+        # Находим текущий индекс блока в отсортированном списке
+        current_index = next((i for i, blk in enumerate(all_blocks) if blk.id == block.id), -1)
+        
+        if current_index == -1:
+            return Response({
+                'error': 'Блок не найден'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Если порядок не изменился, ничего не делаем
+        if current_index == new_order:
+            return Response({'message': 'Порядок не изменился'}, status=status.HTTP_200_OK)
+        
+        # Создаем новый список с обновленными порядками
+        updated_blocks = []
+        
+        # Создаем новый список блоков без текущего
+        other_blocks = [blk for blk in all_blocks if blk.id != block.id]
+        
+        # Вставляем текущий блок на новую позицию
+        if new_order == 0:
+            # Вставляем в начало
+            updated_blocks.append(block)
+            updated_blocks.extend(other_blocks)
+        elif new_order >= len(other_blocks):
+            # Вставляем в конец
+            updated_blocks.extend(other_blocks)
+            updated_blocks.append(block)
+        else:
+            # Вставляем в середину
+            updated_blocks.extend(other_blocks[:new_order])
+            updated_blocks.append(block)
+            updated_blocks.extend(other_blocks[new_order:])
+        
+        # Устанавливаем правильные порядки для всех блоков
+        for i, blk in enumerate(updated_blocks):
+            blk.order = i
+        
+        # Сохраняем все изменения
+        for blk in updated_blocks:
+            blk.save()
+        
+        return Response({
+            'message': 'Порядок блока успешно обновлен',
+            'old_order': current_index,
+            'new_order': new_order
+        }, status=status.HTTP_200_OK)
+
+
+class EventViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
+    """ViewSet для управления мероприятиями."""
+    queryset = Event.objects.filter(is_active=True)
+    serializer_class = EventSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        block_id = self.request.query_params.get('block_id')
+        queryset = Event.objects.filter(is_active=True)
+        
+        if block_id:
+            queryset = queryset.filter(block_id=block_id)
+        
+        return queryset
+    
+    @action(detail=True, methods=['delete'])
+    def safe_delete(self, request, pk=None):
+        """Безопасное удаление мероприятия."""
+        event = self.get_object()
+        
+        # Помечаем как неактивное
+        event.is_active = False
+        event.save()
+        
+        return Response({'message': 'Мероприятие успешно удалено'}, status=status.HTTP_200_OK)
+    
+    @action(detail=True, methods=['patch'])
+    def update_order(self, request, pk=None):
+        """Обновление порядка мероприятия в блоке."""
+        event = self.get_object()
+        new_order = request.data.get('order')
+        
+        if new_order is None:
+            return Response({
+                'error': 'Поле order обязательно'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            new_order = int(new_order)
+        except (ValueError, TypeError):
+            return Response({
+                'error': 'Поле order должно быть числом'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Получаем все мероприятия в том же блоке, отсортированные по порядку
+        all_events = list(Event.objects.filter(block=event.block, is_active=True).order_by('order'))
+        
+        # Находим текущий индекс мероприятия в отсортированном списке
+        current_index = next((i for i, evt in enumerate(all_events) if evt.id == event.id), -1)
+        
+        if current_index == -1:
+            return Response({
+                'error': 'Мероприятие не найдено'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Если порядок не изменился, ничего не делаем
+        if current_index == new_order:
+            return Response({'message': 'Порядок не изменился'}, status=status.HTTP_200_OK)
+        
+        # Создаем новый список с обновленными порядками
+        updated_events = []
+        
+        # Создаем новый список мероприятий без текущего
+        other_events = [evt for evt in all_events if evt.id != event.id]
+        
+        # Вставляем текущее мероприятие на новую позицию
+        if new_order == 0:
+            # Вставляем в начало
+            updated_events.append(event)
+            updated_events.extend(other_events)
+        elif new_order >= len(other_events):
+            # Вставляем в конец
+            updated_events.extend(other_events)
+            updated_events.append(event)
+        else:
+            # Вставляем в середину
+            updated_events.extend(other_events[:new_order])
+            updated_events.append(event)
+            updated_events.extend(other_events[new_order:])
+        
+        # Устанавливаем правильные порядки для всех мероприятий
+        for i, evt in enumerate(updated_events):
+            evt.order = i
+        
+        # Сохраняем все изменения
+        for evt in updated_events:
+            evt.save()
+        
+        return Response({
+            'message': 'Порядок мероприятия успешно обновлен',
+            'old_order': current_index,
+            'new_order': new_order
+        }, status=status.HTTP_200_OK)
