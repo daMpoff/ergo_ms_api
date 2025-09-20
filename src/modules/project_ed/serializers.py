@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from src.modules.project_ed.models import Project
+from src.modules.project_ed.models import Project, Category, Subcategory, TargetIndicator
 
 
 class ProjectSerializer(serializers.ModelSerializer):
@@ -42,3 +42,143 @@ class ProjectSerializer(serializers.ModelSerializer):
         if request and request.user and request.user.is_authenticated:
             validated_data['owner'] = request.user
         return super().create(validated_data)
+
+
+class SubcategorySerializer(serializers.ModelSerializer):
+    """Сериализатор для подкатегорий."""
+    indicators_count = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = Subcategory
+        fields = [
+            'id',
+            'name',
+            'description',
+            'order',
+            'is_active',
+            'indicators_count',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['indicators_count', 'created_at', 'updated_at']
+
+
+class CategorySerializer(serializers.ModelSerializer):
+    """Сериализатор для категорий."""
+    subcategories = SubcategorySerializer(many=True, read_only=True)
+    indicators_count = serializers.ReadOnlyField()
+    subcategories_count = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = Category
+        fields = [
+            'id',
+            'name',
+            'description',
+            'order',
+            'is_active',
+            'indicators_count',
+            'subcategories_count',
+            'subcategories',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['indicators_count', 'subcategories_count', 'created_at', 'updated_at']
+
+
+class CategoryCreateUpdateSerializer(serializers.ModelSerializer):
+    """Сериализатор для создания и обновления категорий с подкатегориями."""
+    subcategories = serializers.ListField(
+        child=serializers.CharField(max_length=255),
+        write_only=True,
+        required=False,
+        allow_empty=True
+    )
+    
+    class Meta:
+        model = Category
+        fields = [
+            'id',
+            'name',
+            'description',
+            'order',
+            'is_active',
+            'subcategories',
+        ]
+    
+    def create(self, validated_data):
+        subcategories_data = validated_data.pop('subcategories', [])
+        category = Category.objects.create(**validated_data)
+        
+        # Создаем подкатегории
+        for index, subcategory_name in enumerate(subcategories_data):
+            if subcategory_name.strip():  # Пропускаем пустые названия
+                Subcategory.objects.create(
+                    category=category,
+                    name=subcategory_name.strip(),
+                    order=index
+                )
+        
+        return category
+    
+    def update(self, instance, validated_data):
+        subcategories_data = validated_data.pop('subcategories', None)
+        
+        # Обновляем основную информацию категории
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        
+        # Обновляем подкатегории, если они переданы
+        if subcategories_data is not None:
+            # Удаляем существующие подкатегории
+            instance.subcategories.all().delete()
+            
+            # Создаем новые подкатегории
+            for index, subcategory_name in enumerate(subcategories_data):
+                if subcategory_name.strip():  # Пропускаем пустые названия
+                    Subcategory.objects.create(
+                        category=instance,
+                        name=subcategory_name.strip(),
+                        order=index
+                    )
+        
+        return instance
+
+
+class TargetIndicatorSerializer(serializers.ModelSerializer):
+    """Сериализатор для целевых показателей."""
+    category_name = serializers.CharField(source='category.name', read_only=True)
+    subcategory_name = serializers.CharField(source='subcategory.name', read_only=True)
+    
+    class Meta:
+        model = TargetIndicator
+        fields = [
+            'id',
+            'project',
+            'category',
+            'subcategory',
+            'category_name',
+            'subcategory_name',
+            'name',
+            'description',
+            'unit',
+            'target_value',
+            'current_value',
+            'is_active',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['project', 'created_at', 'updated_at']
+    
+    def validate(self, attrs):
+        """Валидация: подкатегория должна принадлежать выбранной категории."""
+        category = attrs.get('category')
+        subcategory = attrs.get('subcategory')
+        
+        if subcategory and category and subcategory.category != category:
+            raise serializers.ValidationError(
+                'Подкатегория должна принадлежать выбранной категории.'
+            )
+        
+        return attrs
