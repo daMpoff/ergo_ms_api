@@ -246,6 +246,21 @@ class EventBlockViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
             return EventBlockCreateUpdateSerializer
         return EventBlockSerializer
     
+    def update(self, request, *args, **kwargs):
+        """Переопределяем update для принудительного вызова save() модели."""
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        
+        # Принудительно вызываем save() модели для обновления кодов мероприятий
+        instance = serializer.save()
+        
+        if getattr(instance, '_prefetched_objects_cache', None):
+            instance._prefetched_objects_cache = {}
+        
+        return Response(serializer.data)
+    
     def get_queryset(self):
         # Принудительно исправляем порядок блоков при загрузке
         blocks = EventBlock.objects.filter(is_active=True).order_by('order')
@@ -254,7 +269,18 @@ class EventBlockViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
                 block.order = i
                 block.save()
         
-        return EventBlock.objects.filter(is_active=True).prefetch_related(
+        # Получаем параметры фильтрации
+        category_id = self.request.query_params.get('category_id')
+        subcategory_id = self.request.query_params.get('subcategory_id')
+        
+        queryset = EventBlock.objects.filter(is_active=True)
+        
+        if category_id:
+            queryset = queryset.filter(category_id=category_id)
+        if subcategory_id:
+            queryset = queryset.filter(subcategory_id=subcategory_id)
+        
+        return queryset.prefetch_related(
             Prefetch('events', queryset=Event.objects.filter(is_active=True)),
             'category', 
             'subcategory'

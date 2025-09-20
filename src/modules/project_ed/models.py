@@ -152,6 +152,29 @@ class TargetIndicator(models.Model):
     target_value = models.DecimalField('Целевое значение', max_digits=10, decimal_places=2, null=True, blank=True)
     current_value = models.DecimalField('Текущее значение', max_digits=10, decimal_places=2, null=True, blank=True)
     
+    # Связь с блоком мероприятий
+    event_block = models.ForeignKey(
+        'EventBlock',
+        on_delete=models.SET_NULL,
+        related_name='target_indicators',
+        verbose_name='Блок мероприятий',
+        null=True,
+        blank=True
+    )
+    
+    # Ответственный
+    responsible = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name='responsible_indicators',
+        verbose_name='Ответственный',
+        null=True,
+        blank=True
+    )
+    
+    # Значения по годам (JSON поле)
+    values_by_year = models.JSONField('Значения по годам', default=dict, blank=True)
+    
     # Служебные поля
     is_active = models.BooleanField('Активен', default=True)
     created_at = models.DateTimeField('Создано', auto_now_add=True)
@@ -176,6 +199,7 @@ class TargetIndicator(models.Model):
 class EventBlock(models.Model):
     """Блок мероприятий программы развития БГТУ."""
     
+    code = models.CharField('Код блока', max_length=50, blank=True, null=True)
     title = models.CharField('Название блока', max_length=255)
     description = models.TextField('Описание блока', blank=True)
     
@@ -232,6 +256,70 @@ class EventBlock(models.Model):
         
         if self.subcategory and self.category and self.subcategory.category != self.category:
             raise ValidationError('Подкатегория должна принадлежать выбранной категории.')
+    
+    def save(self, *args, **kwargs):
+        """Переопределяем save для обновления кодов мероприятий при изменении кода блока."""
+        # Проверяем, изменился ли код блока
+        if self.pk:
+            try:
+                old_instance = EventBlock.objects.get(pk=self.pk)
+                old_code = old_instance.code
+                new_code = self.code
+                
+                # Если код изменился и новый код не пустой, обновляем коды мероприятий
+                if old_code != new_code and new_code:
+                    self._update_events_codes(old_code, new_code)
+            except EventBlock.DoesNotExist:
+                pass  # Объект не существует, пропускаем
+        
+        super().save(*args, **kwargs)
+    
+    def _update_events_codes(self, old_code, new_code):
+        """Обновляет коды всех мероприятий в блоке при изменении кода блока."""
+        import re
+        from django.db import transaction
+        
+        # Получаем все мероприятия в блоке
+        events = self.events.filter(is_active=True)
+        
+        with transaction.atomic():
+            for event in events:
+                if event.code:
+                    # Пытаемся извлечь номер мероприятия из кода
+                    # Сначала пробуем паттерн с кодом блока
+                    pattern_with_block = re.escape(old_code) + r'\.(\d+)$'
+                    match = re.match(pattern_with_block, event.code)
+                    
+                    if match:
+                        # Код соответствует старому коду блока
+                        event_number = match.group(1)
+                        new_event_code = f"{new_code}.{event_number}"
+                    else:
+                        # Код не соответствует коду блока, извлекаем номер из любого паттерна X.Y
+                        general_pattern = r'^(.+)\.(\d+)$'
+                        general_match = re.match(general_pattern, event.code)
+                        
+                        if general_match:
+                            # Используем номер из существующего кода
+                            event_number = general_match.group(2)
+                            new_event_code = f"{new_code}.{event_number}"
+                        else:
+                            # Если код не соответствует ни одному паттерну, генерируем новый
+                            # Находим максимальный номер в блоке
+                            max_number = 0
+                            for other_event in events:
+                                if other_event.code and other_event.id != event.id:
+                                    other_match = re.match(r'^.+\.(\d+)$', other_event.code)
+                                    if other_match:
+                                        number = int(other_match.group(1))
+                                        if number > max_number:
+                                            max_number = number
+                            
+                            new_number = max_number + 1
+                            new_event_code = f"{new_code}.{new_number}"
+                    
+                    event.code = new_event_code
+                    event.save(update_fields=['code', 'updated_at'])
 
 
 class Event(models.Model):

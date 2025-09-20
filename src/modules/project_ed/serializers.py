@@ -150,6 +150,8 @@ class TargetIndicatorSerializer(serializers.ModelSerializer):
     """Сериализатор для целевых показателей."""
     category_name = serializers.CharField(source='category.name', read_only=True)
     subcategory_name = serializers.CharField(source='subcategory.name', read_only=True)
+    event_block_title = serializers.CharField(source='event_block.title', read_only=True)
+    responsible_name = serializers.SerializerMethodField()
     
     class Meta:
         model = TargetIndicator
@@ -165,11 +167,22 @@ class TargetIndicatorSerializer(serializers.ModelSerializer):
             'unit',
             'target_value',
             'current_value',
+            'event_block',
+            'event_block_title',
+            'responsible',
+            'responsible_name',
+            'values_by_year',
             'is_active',
             'created_at',
             'updated_at',
         ]
         read_only_fields = ['project', 'created_at', 'updated_at']
+    
+    def get_responsible_name(self, obj):
+        """Получить полное имя ответственного."""
+        if obj.responsible:
+            return f"{obj.responsible.first_name} {obj.responsible.last_name}".strip() or obj.responsible.username
+        return None
     
     def validate(self, attrs):
         """Валидация: подкатегория должна принадлежать выбранной категории."""
@@ -230,6 +243,7 @@ class EventBlockSerializer(serializers.ModelSerializer):
         model = EventBlock
         fields = [
             'id',
+            'code',
             'title',
             'description',
             'category',
@@ -274,6 +288,7 @@ class EventBlockCreateUpdateSerializer(serializers.ModelSerializer):
         model = EventBlock
         fields = [
             'id',
+            'code',
             'title',
             'description',
             'category',
@@ -285,6 +300,18 @@ class EventBlockCreateUpdateSerializer(serializers.ModelSerializer):
             'order',
             'is_active',
         ]
+    
+    def validate(self, attrs):
+        """Валидация: подкатегория должна принадлежать выбранной категории."""
+        category = attrs.get('category')
+        subcategory = attrs.get('subcategory')
+        
+        if subcategory and category and subcategory.category != category:
+            raise serializers.ValidationError(
+                'Подкатегория должна принадлежать выбранной категории.'
+            )
+        
+        return attrs
     
     def create(self, validated_data):
         events_data = validated_data.pop('events', [])
