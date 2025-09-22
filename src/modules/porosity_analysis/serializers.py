@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from src.modules.porosity_analysis.models import PorosityAnalysis
+from django.utils import timezone
 
 
 class PorosityAnalysisSerializer(serializers.ModelSerializer):
@@ -52,6 +53,9 @@ class CreatePorosityAnalysisSerializer(serializers.ModelSerializer):
         model = PorosityAnalysis
         fields = ['id', 'name', 'description', 'scale_value', 'pixels_per_micron']
         read_only_fields = ['id']
+        extra_kwargs = {
+            'name': {'required': False, 'allow_blank': True}
+        }
     
     def create(self, validated_data):
         import uuid
@@ -59,6 +63,11 @@ class CreatePorosityAnalysisSerializer(serializers.ModelSerializer):
         # Генерируем UUID для файлов
         validated_data['original_image_uuid'] = str(uuid.uuid4())
         validated_data['results_uuid'] = str(uuid.uuid4())
+        
+        # Автогенерация названия, если не указано пользователем (без даты/времени)
+        name = validated_data.get('name')
+        if not name or not str(name).strip():
+            validated_data['name'] = "Анализ пористости"
         
         # Создаем объект анализа
         analysis = PorosityAnalysis.objects.create(**validated_data)
