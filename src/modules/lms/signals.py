@@ -10,6 +10,7 @@ from .models import (
     ForumPost, Enrollment, UserProfile, CalendarEvent,
     Test, UserBadge, LessonItem, Resource
 )
+from django.db.utils import ProgrammingError, OperationalError, DatabaseError
 from .services import (
     NotificationService, BadgeService, ProgressTrackingService,
     CalendarService, EmailService, GradingService
@@ -20,7 +21,11 @@ from .services import (
 def create_user_profile(sender, instance, created, **kwargs):
     """Создать профиль пользователя при создании нового пользователя"""
     if created:
-        UserProfile.objects.get_or_create(user=instance)
+        # Безопасно пропускаем, если таблицы ещё нет (например, модуль LMS не мигрирован)
+        try:
+            UserProfile.objects.get_or_create(user=instance)
+        except (ProgrammingError, OperationalError, DatabaseError):
+            pass
         # Отправить приветственное письмо
         EmailService.send_welcome_email(instance)
 
