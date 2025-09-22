@@ -1,12 +1,16 @@
 from django.shortcuts import render
 from django.db.models import Prefetch
+from django.db import models as dj_models
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 
 from src.core.utils.mixins import SwaggerSafeMixin
-from src.modules.project_ed.models import Project, Category, Subcategory, TargetIndicator, EventBlock, Event
+from src.modules.project_ed.models import (
+    Project, Category, Subcategory, TargetIndicator, EventBlock, Event,
+    UserProfile, Role, Position, Faculty, Department
+)
 from src.modules.project_ed.serializers import (
     ProjectSerializer, 
     CategorySerializer, 
@@ -15,7 +19,12 @@ from src.modules.project_ed.serializers import (
     TargetIndicatorSerializer,
     EventBlockSerializer,
     EventBlockCreateUpdateSerializer,
-    EventSerializer
+    EventSerializer,
+    ProjectEdUserProfileSerializer,
+    ProjectEdRoleSerializer,
+    ProjectEdPositionSerializer,
+    ProjectEdFacultySerializer,
+    ProjectEdDepartmentSerializer
 )
 
 
@@ -30,6 +39,40 @@ class IsOwnerOrReadOnly(permissions.BasePermission):
         if request.method in permissions.SAFE_METHODS:
             return obj.owner_id == getattr(request.user, 'id', None)
         return obj.owner_id == getattr(request.user, 'id', None)
+
+
+class IsProjectEdAdmin(permissions.BasePermission):
+    """Доступ только для пользователей с ролью 'Администратор' в ProjectEd.
+
+    Проверяет связанный профиль `UserProfile` либо принадлежность пользователя к группе с именем 'Администратор'.
+    """
+
+    message = 'Доступ разрешен только администраторам ProjectEd.'
+
+    def has_permission(self, request, view):
+        user = getattr(request, 'user', None)
+        if not user or not user.is_authenticated:
+            return False
+
+        # Проверка через профиль ProjectEd
+        try:
+            profile = getattr(user, 'project_ed_profile', None)
+            if profile and (
+                getattr(profile, 'role', '') == 'Администратор' or
+                getattr(getattr(profile, 'role_ref', None), 'name', None) == 'Администратор'
+            ):
+                return True
+        except Exception:
+            pass
+
+        # Резервная проверка через группы Django
+        try:
+            if user.groups.filter(name='Администратор').exists():
+                return True
+        except Exception:
+            pass
+
+        return False
 
 
 class ProjectViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
@@ -477,3 +520,53 @@ class EventViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
             'old_order': current_index,
             'new_order': new_order
         }, status=status.HTTP_200_OK)
+
+
+class ProjectEdUserProfileViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
+    """Профили пользователей ProjectEd."""
+    queryset = UserProfile.objects.select_related('user').all()
+    serializer_class = ProjectEdUserProfileSerializer
+    permission_classes = [permissions.IsAuthenticated, IsProjectEdAdmin]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        search = self.request.query_params.get('search')
+        user_id = self.request.query_params.get('user')
+        if user_id:
+            qs = qs.filter(user_id=user_id)
+        if search:
+            qs = qs.filter(
+                dj_models.Q(user__username__icontains=search) |
+                dj_models.Q(user__first_name__icontains=search) |
+                dj_models.Q(user__last_name__icontains=search) |
+                dj_models.Q(user__email__icontains=search) |
+                dj_models.Q(role__icontains=search) |
+                dj_models.Q(position__icontains=search) |
+                dj_models.Q(faculty__icontains=search) |
+                dj_models.Q(department__icontains=search)
+            )
+        return qs.order_by('user__first_name', 'user__last_name')
+
+
+class ProjectEdRoleViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
+    queryset = Role.objects.all()
+    serializer_class = ProjectEdRoleSerializer
+    permission_classes = [permissions.IsAuthenticated, IsProjectEdAdmin]
+
+
+class ProjectEdPositionViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
+    queryset = Position.objects.all()
+    serializer_class = ProjectEdPositionSerializer
+    permission_classes = [permissions.IsAuthenticated, IsProjectEdAdmin]
+
+
+class ProjectEdFacultyViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
+    queryset = Faculty.objects.all()
+    serializer_class = ProjectEdFacultySerializer
+    permission_classes = [permissions.IsAuthenticated, IsProjectEdAdmin]
+
+
+class ProjectEdDepartmentViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
+    queryset = Department.objects.all()
+    serializer_class = ProjectEdDepartmentSerializer
+    permission_classes = [permissions.IsAuthenticated, IsProjectEdAdmin]

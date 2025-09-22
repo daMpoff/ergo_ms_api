@@ -373,3 +373,100 @@ class Event(models.Model):
         
         if self.start_year and self.end_year and self.start_year > self.end_year:
             raise ValidationError('Год начала не может быть больше года окончания.')
+
+
+class UserProfile(models.Model):
+    """Профиль пользователя для модуля ProjectEd.
+
+    Ссылочная модель на пользователя с дополнительными полями:
+    роль, должность, факультет, кафедра.
+    """
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='project_ed_profile',
+        verbose_name='Пользователь'
+    )
+
+    # Старые строковые поля (оставляем для обратной совместимости фронта)
+    role = models.CharField('Роль в проекте (строка)', max_length=100, blank=True)
+    position = models.CharField('Должность (строка)', max_length=255, blank=True)
+    faculty = models.CharField('Факультет (строка)', max_length=255, blank=True)
+    department = models.CharField('Кафедра (строка)', max_length=255, blank=True)
+
+    # Новые ссылочные поля на справочники
+    role_ref = models.ForeignKey(
+        'Role', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='profiles', verbose_name='Роль (справочник)'
+    )
+    position_ref = models.ForeignKey(
+        'Position', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='profiles', verbose_name='Должность (справочник)'
+    )
+    faculty_ref = models.ForeignKey(
+        'Faculty', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='profiles', verbose_name='Факультет (справочник)'
+    )
+    department_ref = models.ForeignKey(
+        'Department', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='profiles', verbose_name='Кафедра (справочник)'
+    )
+
+    created_at = models.DateTimeField('Создано', auto_now_add=True)
+    updated_at = models.DateTimeField('Обновлено', auto_now=True)
+
+    class Meta:
+        verbose_name = 'Профиль пользователя проекта'
+        verbose_name_plural = 'Профили пользователей проекта'
+
+    def __str__(self) -> str:
+        return f'UserProfile<{self.user_id}> {getattr(self.user, "username", "")}'
+
+
+class Role(models.Model):
+    name = models.CharField('Название', max_length=255, unique=True)
+
+    class Meta:
+        verbose_name = 'Роль ProjectEd'
+        verbose_name_plural = 'Роли ProjectEd'
+        ordering = ['name']
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class Position(models.Model):
+    name = models.CharField('Название', max_length=255, unique=True)
+
+    class Meta:
+        verbose_name = 'Должность ProjectEd'
+        verbose_name_plural = 'Должности ProjectEd'
+        ordering = ['name']
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class Faculty(models.Model):
+    name = models.CharField('Название', max_length=255, unique=True)
+
+    class Meta:
+        verbose_name = 'Факультет ProjectEd'
+        verbose_name_plural = 'Факультеты ProjectEd'
+        ordering = ['name']
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class Department(models.Model):
+    name = models.CharField('Название', max_length=255, unique=True)
+
+    class Meta:
+        verbose_name = 'Кафедра ProjectEd'
+        verbose_name_plural = 'Кафедры ProjectEd'
+        ordering = ['name']
+
+    def __str__(self) -> str:
+        return self.name
