@@ -389,12 +389,6 @@ class UserProfile(models.Model):
         verbose_name='Пользователь'
     )
 
-    # Старые строковые поля (оставляем для обратной совместимости фронта)
-    role = models.CharField('Роль в проекте (строка)', max_length=100, blank=True)
-    position = models.CharField('Должность (строка)', max_length=255, blank=True)
-    faculty = models.CharField('Факультет (строка)', max_length=255, blank=True)
-    department = models.CharField('Кафедра (строка)', max_length=255, blank=True)
-
     # Новые ссылочные поля на справочники
     role_ref = models.ForeignKey(
         'Role', on_delete=models.SET_NULL, null=True, blank=True,
@@ -450,6 +444,7 @@ class Position(models.Model):
 
 class Faculty(models.Model):
     name = models.CharField('Название', max_length=255, unique=True)
+    short_name = models.CharField('Сокращённое название', max_length=10, blank=True, default='')
 
     class Meta:
         verbose_name = 'Факультет ProjectEd'
@@ -462,6 +457,7 @@ class Faculty(models.Model):
 
 class Department(models.Model):
     name = models.CharField('Название', max_length=255, unique=True)
+    short_name = models.CharField('Сокращённое название', max_length=10, blank=True, default='')
 
     class Meta:
         verbose_name = 'Кафедра ProjectEd'

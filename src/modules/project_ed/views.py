@@ -58,7 +58,6 @@ class IsProjectEdAdmin(permissions.BasePermission):
         try:
             profile = getattr(user, 'project_ed_profile', None)
             if profile and (
-                getattr(profile, 'role', '') == 'Администратор' or
                 getattr(getattr(profile, 'role_ref', None), 'name', None) == 'Администратор'
             ):
                 return True
@@ -523,28 +522,56 @@ class EventViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
 
 
 class ProjectEdUserProfileViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
-    """Профили пользователей ProjectEd."""
-    queryset = UserProfile.objects.select_related('user').all()
+    """Профили пользователей ProjectEd.
+
+    - Администратор ProjectEd видит все профили
+    - Обычный пользователь видит только свой профиль по ?user=<id>
+    """
+    queryset = UserProfile.objects.select_related('user', 'role_ref').all()
     serializer_class = ProjectEdUserProfileSerializer
-    permission_classes = [permissions.IsAuthenticated, IsProjectEdAdmin]
+    permission_classes = [permissions.IsAuthenticated]
+
+    def _is_project_ed_admin(self, user):
+        try:
+            profile = getattr(user, 'project_ed_profile', None)
+            if profile and getattr(getattr(profile, 'role_ref', None), 'name', None) == 'Администратор':
+                return True
+        except Exception:
+            pass
+        try:
+            if user.groups.filter(name='Администратор').exists():
+                return True
+        except Exception:
+            pass
+        return False
 
     def get_queryset(self):
         qs = super().get_queryset()
-        search = self.request.query_params.get('search')
-        user_id = self.request.query_params.get('user')
-        if user_id:
-            qs = qs.filter(user_id=user_id)
+        request = self.request
+        user = getattr(request, 'user', None)
+        is_admin = self._is_project_ed_admin(user) if (user and user.is_authenticated) else False
+
+        search = request.query_params.get('search')
+        user_id = request.query_params.get('user')
+
+        # Не-админ: только свой профиль при явном указании user=<id>
+        if not is_admin:
+            if user_id and str(user.id) == str(user_id):
+                qs = qs.filter(user_id=user.id)
+            else:
+                return qs.none()
+        else:
+            if user_id:
+                qs = qs.filter(user_id=user_id)
+
         if search:
             qs = qs.filter(
                 dj_models.Q(user__username__icontains=search) |
                 dj_models.Q(user__first_name__icontains=search) |
                 dj_models.Q(user__last_name__icontains=search) |
-                dj_models.Q(user__email__icontains=search) |
-                dj_models.Q(role__icontains=search) |
-                dj_models.Q(position__icontains=search) |
-                dj_models.Q(faculty__icontains=search) |
-                dj_models.Q(department__icontains=search)
+                dj_models.Q(user__email__icontains=search)
             )
+
         return qs.order_by('user__first_name', 'user__last_name')
 
 

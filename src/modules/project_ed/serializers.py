@@ -372,11 +372,6 @@ class ProjectEdUserProfileSerializer(serializers.ModelSerializer):
             'user',
             'user_username',
             'user_full_name',
-            # Строковые поля (legacy)
-            'role',
-            'position',
-            'faculty',
-            'department',
             # Ссылочные поля (новые)
             'role_ref',
             'position_ref',
