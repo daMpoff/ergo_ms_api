@@ -35,10 +35,27 @@ class Command(BaseCommand):
         """
         for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
             try:
-                if (proc.info['cmdline'] and 
-                    'celery' in proc.info['cmdline'] and 
-                    'worker' in proc.info['cmdline']):
-                    logger.debug(f'Найден процесс Celery worker: PID={proc.pid}')
+                cmdline = proc.info.get('cmdline') or []
+                cmdline_lower = [part.lower() for part in cmdline]
+
+                # Совпадение 1: стандартный процесс Celery worker
+                is_celery_worker = ('worker' in cmdline_lower)
+
+                # Совпадение 2: процесс запуска через обертку "api start_celery_worker"
+                is_wrapper_worker = ('start_celery_worker' in cmdline_lower)
+
+                # Сначала отдаем приоритет реальному celery-процессу
+                if is_celery_worker:
+                    logger.debug(
+                        f"Найден процесс Celery worker: PID={proc.pid}, CMDLINE={' '.join(cmdline)}"
+                    )
+                    return proc
+
+                # Если celery не найден, падаем обратно на обертку
+                if is_wrapper_worker:
+                    logger.debug(
+                        f"Найден процесс Celery worker (обертка): PID={proc.pid}, CMDLINE={' '.join(cmdline)}"
+                    )
                     return proc
             except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
                 logger.error(f'Ошибка при поиске процесса: {e}')
