@@ -10,6 +10,9 @@ class PorosityAnalysis(models.Model):
     name = models.CharField(max_length=255, verbose_name="Название анализа")
     description = models.TextField(blank=True, verbose_name="Описание")
     created_at = models.DateTimeField(default=timezone.now, verbose_name="Дата создания")
+    # Времена выполнения
+    start_time = models.DateTimeField(null=True, blank=True, verbose_name="Время старта")
+    end_time = models.DateTimeField(null=True, blank=True, verbose_name="Время завершения")
     
     # Пути к файлам
     original_image_uuid = models.CharField(max_length=36, unique=True, verbose_name="UUID исходного изображения")
@@ -39,6 +42,7 @@ class PorosityAnalysis(models.Model):
     ]
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', verbose_name="Статус")
     error_message = models.TextField(blank=True, verbose_name="Сообщение об ошибке")
+    duration_seconds = models.IntegerField(null=True, blank=True, verbose_name="Длительность (сек)")
     
     class Meta:
         db_table = 'porosity_analysis'

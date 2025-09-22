@@ -46,8 +46,9 @@ def run_porosity_analysis(self, analysis_id):
         # Получаем объект анализа
         analysis = PorosityAnalysis.objects.get(id=analysis_id)
         
-        # Обновляем статус на "обрабатывается"
+        # Обновляем статус на "обрабатывается" и фиксируем время старта
         analysis.status = 'processing'
+        analysis.start_time = timezone.now()
         analysis.save()
         
         logger.info(f"Начинаем анализ пористости для ID: {analysis_id}")
@@ -121,6 +122,12 @@ def run_porosity_analysis(self, analysis_id):
         analysis.pore_density = pore_density
         analysis.average_interpore_distance = average_interpore_distance
         analysis.status = 'completed'
+        analysis.end_time = timezone.now()
+        try:
+            if analysis.start_time and analysis.end_time:
+                analysis.duration_seconds = int((analysis.end_time - analysis.start_time).total_seconds())
+        except Exception:
+            pass
         analysis.save()
         
         # Генерируем отчеты

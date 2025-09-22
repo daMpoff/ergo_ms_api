@@ -1,19 +1,22 @@
 from rest_framework import serializers
 from src.modules.porosity_analysis.models import PorosityAnalysis
+from django.utils import timezone
 
 
 class PorosityAnalysisSerializer(serializers.ModelSerializer):
     """Сериализатор для анализа пористости"""
     
     result_files = serializers.SerializerMethodField()
+    duration_human = serializers.SerializerMethodField()
     
     class Meta:
         model = PorosityAnalysis
         fields = [
-            'id', 'name', 'description', 'created_at', 'original_image_uuid',
+            'id', 'name', 'description', 'created_at', 'start_time', 'end_time', 'original_image_uuid',
             'results_uuid', 'scale_value', 'pixels_per_micron', 'porosity_percentage',
             'number_of_pores', 'average_pore_size', 'max_pore_size', 'min_pore_size',
-            'pore_density', 'average_interpore_distance', 'status', 'error_message', 'result_files'
+            'pore_density', 'average_interpore_distance', 'status', 'error_message', 'result_files',
+            'duration_seconds', 'duration_human'
         ]
         read_only_fields = [
             'id', 'created_at', 'original_image_uuid', 'results_uuid',
@@ -26,6 +29,22 @@ class PorosityAnalysisSerializer(serializers.ModelSerializer):
         """Возвращает список файлов результатов"""
         return obj.get_result_files()
 
+    def get_duration_human(self, obj):
+        seconds = obj.duration_seconds
+        if seconds is None:
+            return None
+        # формат: HH:MM:SS (точность до секунд)
+        try:
+            h = seconds // 3600
+            m = (seconds % 3600) // 60
+            s = seconds % 60
+            if h > 0:
+                return f"{h:02d}:{m:02d}:{s:02d}"
+            else:
+                return f"{m:02d}:{s:02d}"
+        except Exception:
+            return None
+
 
 class CreatePorosityAnalysisSerializer(serializers.ModelSerializer):
     """Сериализатор для создания нового анализа пористости"""
@@ -34,6 +53,9 @@ class CreatePorosityAnalysisSerializer(serializers.ModelSerializer):
         model = PorosityAnalysis
         fields = ['id', 'name', 'description', 'scale_value', 'pixels_per_micron']
         read_only_fields = ['id']
+        extra_kwargs = {
+            'name': {'required': False, 'allow_blank': True}
+        }
     
     def create(self, validated_data):
         import uuid
@@ -41,6 +63,11 @@ class CreatePorosityAnalysisSerializer(serializers.ModelSerializer):
         # Генерируем UUID для файлов
         validated_data['original_image_uuid'] = str(uuid.uuid4())
         validated_data['results_uuid'] = str(uuid.uuid4())
+        
+        # Автогенерация названия, если не указано пользователем (без даты/времени)
+        name = validated_data.get('name')
+        if not name or not str(name).strip():
+            validated_data['name'] = "Анализ пористости"
         
         # Создаем объект анализа
         analysis = PorosityAnalysis.objects.create(**validated_data)

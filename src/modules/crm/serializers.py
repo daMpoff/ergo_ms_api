@@ -47,10 +47,25 @@ class TaskPrioritySerializer(serializers.ModelSerializer):
 class CRMUserSerializer(serializers.ModelSerializer):
     """Сериализатор пользователя"""
     full_name = serializers.CharField(source='get_full_name', read_only=True)
+    avatar_url = serializers.SerializerMethodField()
     
     class Meta:
         model = User
-        fields = ['id', 'username', 'first_name', 'last_name', 'full_name', 'email']
+        fields = ['id', 'username', 'first_name', 'last_name', 'full_name', 'email', 'avatar_url']
+
+    def get_avatar_url(self, obj):
+        # Ожидаем связь one-to-one: user.avatar.image
+        avatar = getattr(obj, 'avatar', None)
+        image = getattr(avatar, 'image', None)
+        if image and hasattr(image, 'url'):
+            request = self.context.get('request')
+            try:
+                url = image.url
+                return request.build_absolute_uri(url) if request else url
+            except Exception:
+                # На случай, если storage не может отдать url
+                return None
+        return None
 
 
 class ProjectMemberSerializer(serializers.ModelSerializer):

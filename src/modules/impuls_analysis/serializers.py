@@ -141,3 +141,19 @@ class ImpulsAnalysisBulkDownloadSerializer(serializers.Serializer):
         if not value:
             raise serializers.ValidationError("Список ID анализов не может быть пустым")
         return value
+
+
+class ImpulsAnalysisBulkDeleteSerializer(serializers.Serializer):
+    """Сериализатор для массового удаления анализов"""
+    analysis_ids = serializers.ListField(
+        child=serializers.UUIDField(),
+        min_length=1,
+        max_length=100,
+        help_text="Список ID анализов для удаления"
+    )
+    
+    def validate_analysis_ids(self, value):
+        """Проверяем, что список не пустой"""
+        if not value:
+            raise serializers.ValidationError("Список ID анализов не может быть пустым")
+        return value

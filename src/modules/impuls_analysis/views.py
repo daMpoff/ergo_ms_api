@@ -28,7 +28,8 @@ from src.modules.impuls_analysis.serializers import (
     ImpulsProtocolSerializer,
     ImpulsFileUploadSerializer,
     ImpulsMultipleFileUploadSerializer,
-    ImpulsAnalysisBulkDownloadSerializer
+    ImpulsAnalysisBulkDownloadSerializer,
+    ImpulsAnalysisBulkDeleteSerializer
 )
 from src.modules.impuls_analysis.tasks import create_analysis_by_protocol, import_impuls_excel
 
@@ -65,8 +66,8 @@ class ImpulsAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     ordering = ['-created_at']
 
     def get_queryset(self):
-        """Фильтруем анализы по пользователю"""
-        return self.queryset.filter(user=self.request.user)
+        """Возвращаем все анализы для всех пользователей"""
+        return self.queryset.all()
 
     def get_serializer_class(self):
         """Выбираем сериализатор в зависимости от действия"""
@@ -310,8 +311,7 @@ class ImpulsAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         if serializer.is_valid():
             analysis_ids = serializer.validated_data['analysis_ids']
             analyses = ImpulsAnalysis.objects.filter(
-                id__in=analysis_ids,
-                user=request.user
+                id__in=analysis_ids
             )
             
             # Здесь можно реализовать создание ZIP архива с протоколами
@@ -334,18 +334,60 @@ class ImpulsAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    @action(detail=False, methods=['post'])
+    def bulk_delete(self, request):
+        """Массовое удаление анализов"""
+        serializer = ImpulsAnalysisBulkDeleteSerializer(data=request.data)
+        if serializer.is_valid():
+            analysis_ids = serializer.validated_data['analysis_ids']
+            
+            try:
+                # Получаем анализы пользователя
+                analyses = ImpulsAnalysis.objects.filter(
+                    id__in=analysis_ids,
+                    user=request.user
+                )
+                
+                deleted_count = 0
+                for analysis in analyses:
+                    try:
+                        analysis.delete()
+                        deleted_count += 1
+                        logger.info(f'Удален анализ {analysis.id} пользователем {request.user.id}')
+                    except Exception as e:
+                        logger.error(f'Ошибка при удалении анализа {analysis.id}: {str(e)}')
+                
+                return Response({
+                    'success': True,
+                    'message': f'Удалено {deleted_count} из {len(analysis_ids)} анализов',
+                    'deleted_count': deleted_count,
+                    'total_requested': len(analysis_ids)
+                }, status=status.HTTP_200_OK)
+                
+            except Exception as e:
+                logger.error(f'Ошибка при массовом удалении анализов: {str(e)}')
+                return Response(
+                    {'success': False, 'error': f'Ошибка при массовом удалении: {str(e)}'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+        else:
+            return Response({
+                'success': False,
+                'errors': serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+
     @action(detail=False, methods=['get'])
     def statistics(self, request):
-        """Получить статистику анализов"""
-        user_analyses = ImpulsAnalysis.objects.filter(user=request.user)
+        """Получить статистику всех анализов"""
+        all_analyses = ImpulsAnalysis.objects.all()
         
         stats = {
-            'total': user_analyses.count(),
-            'pending': user_analyses.filter(status='pending').count(),
-            'processing': user_analyses.filter(status='processing').count(),
-            'completed': user_analyses.filter(status='completed').count(),
-            'failed': user_analyses.filter(status='failed').count(),
-            'cancelled': user_analyses.filter(status='cancelled').count(),
+            'total': all_analyses.count(),
+            'pending': all_analyses.filter(status='pending').count(),
+            'processing': all_analyses.filter(status='processing').count(),
+            'completed': all_analyses.filter(status='completed').count(),
+            'failed': all_analyses.filter(status='failed').count(),
+            'cancelled': all_analyses.filter(status='cancelled').count(),
         }
         
         return Response(stats)
@@ -425,9 +467,8 @@ class ImpulsAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
                 force_record = ImpulsForceRecord.objects.filter(protocol_number=protocol_number).first()
                 plan_record = ImpulsPlanRecord.objects.filter(protocol_number=protocol_number).first()
                 
-                # Проверяем, есть ли уже анализы для этого протокола у текущего пользователя
+                # Проверяем, есть ли уже анализы для этого протокола
                 existing_analyses = ImpulsAnalysis.objects.filter(
-                    user=request.user,
                     protocol_number=protocol_number
                 ).order_by('-created_at')
                 

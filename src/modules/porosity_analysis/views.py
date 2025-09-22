@@ -9,6 +9,7 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.renderers import JSONRenderer
 from rest_framework.pagination import PageNumberPagination
 from django.http import FileResponse, HttpResponse
+from django.utils import timezone
 import os
 import zipfile
 import io
@@ -66,6 +67,72 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
 
+    @action(detail=False, methods=['post'])
+    def delete_multiple(self, request):
+        """Массовое удаление анализов по списку ID или строке номеров.
+
+        Тело запроса может содержать:
+        - analysis_ids | ids: массив чисел
+        - input | ids_text: строка с номерами через запятую/пробел/точку с запятой
+        """
+        try:
+            ids = request.data.get('analysis_ids') or request.data.get('ids')
+            input_text = request.data.get('input') or request.data.get('ids_text') or ''
+
+            parsed_ids = []
+            if isinstance(ids, list):
+                parsed_ids.extend([int(x) for x in ids if str(x).isdigit()])
+            if isinstance(input_text, str) and input_text.strip():
+                import re
+                for token in re.split(r"[\s,;]+", input_text.strip()):
+                    if token.isdigit():
+                        parsed_ids.append(int(token))
+
+            # Удаляем дубликаты
+            parsed_ids = list(sorted(set(parsed_ids)))
+
+            if not parsed_ids:
+                return Response({
+                    'success': False,
+                    'error': 'Не указаны валидные номера анализов для удаления'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            queryset = self.get_queryset().filter(id__in=parsed_ids)
+            if not queryset.exists():
+                return Response({
+                    'success': False,
+                    'error': 'Анализы по указанным номерам не найдены'
+                }, status=status.HTTP_404_NOT_FOUND)
+
+            deleted = 0
+            not_found = [i for i in parsed_ids if i not in queryset.values_list('id', flat=True)]
+            errors = []
+
+            for analysis in queryset:
+                try:
+                    try:
+                        set_cancel_flag(analysis.id)
+                    except Exception:
+                        pass
+                    analysis.delete()
+                    deleted += 1
+                except Exception as e:
+                    errors.append(f"{analysis.id}: {str(e)}")
+
+            return Response({
+                'success': True,
+                'deleted_count': deleted,
+                'requested_count': len(parsed_ids),
+                'not_found': not_found or None,
+                'errors': errors or None
+            }, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.error(f"Ошибка при массовом удалении анализов: {e}")
+            return Response({
+                'success': False,
+                'error': f'Ошибка при массовом удалении: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
     def destroy(self, request, *args, **kwargs):
         """Удаление анализа: ставим флаг отмены и удаляем объект (файлы почистит сигнал)."""
         instance = self.get_object()
@@ -97,6 +164,18 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
         try:
             # Сохраняем изображение
             save_uploaded_image(image_file, analysis.original_image_uuid)
+            
+            # Если имя анализа не задано пользователем (или это автогенерация), формируем от названия файла
+            try:
+                original_filename = getattr(image_file, 'name', None) or ''
+                base_name, _ = os.path.splitext(original_filename)
+                # Переопределяем, если имя пустое или похоже на авто-сгенерированное
+                if not analysis.name or not analysis.name.strip() or analysis.name.strip().startswith('Анализ пористости'):
+                    safe_base = base_name.strip() or 'изображение'
+                    analysis.name = f"Анализ пористости — {safe_base}"
+            except Exception:
+                # Тихо игнорируем проблемы с именем файла
+                pass
             
             # Убрана проверка лимита одновременных анализов
             
@@ -159,9 +238,11 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
                 except Exception as e:
                     logger.warning(f"Не удалось удалить старый архив: {e}")
             
-            # Сбрасываем статус и ошибки
+            # Сбрасываем статус, ошибки и время запуска/завершения
             analysis.status = 'pending'
             analysis.error_message = ''
+            analysis.start_time = timezone.now()
+            analysis.end_time = None
             analysis.porosity_percentage = None
             analysis.number_of_pores = None
             analysis.average_pore_size = None
@@ -467,9 +548,11 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
                         except Exception as e:
                             logger.warning(f"Не удалось удалить старую директорию результатов для анализа {analysis.id}: {e}")
                     
-                    # Сбрасываем статус и результаты
+                    # Сбрасываем статус, время и результаты
                     analysis.status = 'pending'
                     analysis.error_message = ''
+                    analysis.start_time = timezone.now()
+                    analysis.end_time = None
                     analysis.porosity_percentage = None
                     analysis.number_of_pores = None
                     analysis.average_pore_size = None
