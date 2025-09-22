@@ -363,6 +363,7 @@ class ProjectEdUserProfileSerializer(serializers.ModelSerializer):
     role_name = serializers.CharField(source='role_ref.name', read_only=True)
     position_name = serializers.CharField(source='position_ref.name', read_only=True)
     faculty_name = serializers.CharField(source='faculty_ref.name', read_only=True)
+    faculty_short_name = serializers.CharField(source='faculty_ref.short_name', read_only=True)
     department_name = serializers.CharField(source='department_ref.name', read_only=True)
 
     class Meta:
@@ -381,6 +382,7 @@ class ProjectEdUserProfileSerializer(serializers.ModelSerializer):
             'role_name',
             'position_name',
             'faculty_name',
+            'faculty_short_name',
             'department_name',
             'created_at',
             'updated_at',
