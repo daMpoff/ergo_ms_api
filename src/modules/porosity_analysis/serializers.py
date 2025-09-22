@@ -6,14 +6,16 @@ class PorosityAnalysisSerializer(serializers.ModelSerializer):
     """Сериализатор для анализа пористости"""
     
     result_files = serializers.SerializerMethodField()
+    duration_human = serializers.SerializerMethodField()
     
     class Meta:
         model = PorosityAnalysis
         fields = [
-            'id', 'name', 'description', 'created_at', 'original_image_uuid',
+            'id', 'name', 'description', 'created_at', 'start_time', 'end_time', 'original_image_uuid',
             'results_uuid', 'scale_value', 'pixels_per_micron', 'porosity_percentage',
             'number_of_pores', 'average_pore_size', 'max_pore_size', 'min_pore_size',
-            'pore_density', 'average_interpore_distance', 'status', 'error_message', 'result_files'
+            'pore_density', 'average_interpore_distance', 'status', 'error_message', 'result_files',
+            'duration_seconds', 'duration_human'
         ]
         read_only_fields = [
             'id', 'created_at', 'original_image_uuid', 'results_uuid',
@@ -25,6 +27,22 @@ class PorosityAnalysisSerializer(serializers.ModelSerializer):
     def get_result_files(self, obj):
         """Возвращает список файлов результатов"""
         return obj.get_result_files()
+
+    def get_duration_human(self, obj):
+        seconds = obj.duration_seconds
+        if seconds is None:
+            return None
+        # формат: HH:MM:SS (точность до секунд)
+        try:
+            h = seconds // 3600
+            m = (seconds % 3600) // 60
+            s = seconds % 60
+            if h > 0:
+                return f"{h:02d}:{m:02d}:{s:02d}"
+            else:
+                return f"{m:02d}:{s:02d}"
+        except Exception:
+            return None
 
 
 class CreatePorosityAnalysisSerializer(serializers.ModelSerializer):

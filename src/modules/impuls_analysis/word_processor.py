@@ -83,7 +83,7 @@ def get_analysis_by_protocol_number(protocol_number: str) -> dict:
                     u.email as user_email
                 FROM impuls_analysis_impulsanalysis ia
                 LEFT JOIN auth_user u ON ia.user_id = u.id
-                WHERE ia.protocol_number = %(protocol_number)s
+                WHERE ia.protocol_number = %(protocol_number)s::text
             """
             
             analysis_df = db_manager.fetchall(
@@ -143,7 +143,7 @@ def get_analysis_by_protocol_number(protocol_number: str) -> dict:
                     ifr.force_n,
                     ifr.created_at
                 FROM impuls_analysis_impulsforcerecord ifr
-                WHERE ifr.protocol_number = %(protocol_number)s
+                WHERE ifr.protocol_number = %(protocol_number)s::text
                 ORDER BY ifr.created_at DESC
             """
             
@@ -171,7 +171,7 @@ def get_analysis_by_protocol_number(protocol_number: str) -> dict:
                     ipr.p_n,
                     ipr.created_at
                 FROM impuls_analysis_impulsplanrecord ipr
-                WHERE ipr.protocol_number = %(protocol_number)s
+                WHERE ipr.protocol_number = %(protocol_number)s::text
                 ORDER BY ipr.created_at DESC
             """
             
