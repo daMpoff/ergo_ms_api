@@ -413,12 +413,13 @@ class ProjectEdPositionSerializer(serializers.ModelSerializer):
 class ProjectEdFacultySerializer(serializers.ModelSerializer):
     class Meta:
         model = Faculty
-        fields = ['id', 'name']
+        fields = ['id', 'name', 'short_name']
         read_only_fields = []
 
 
 class ProjectEdDepartmentSerializer(serializers.ModelSerializer):
+    faculty = serializers.PrimaryKeyRelatedField(queryset=Faculty.objects.all(), required=False, allow_null=True)
     class Meta:
         model = Department
-        fields = ['id', 'name']
+        fields = ['id', 'name', 'short_name', 'faculty']
         read_only_fields = []

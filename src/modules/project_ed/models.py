@@ -458,6 +458,14 @@ class Faculty(models.Model):
 class Department(models.Model):
     name = models.CharField('Название', max_length=255, unique=True)
     short_name = models.CharField('Сокращённое название', max_length=10, blank=True, default='')
+    faculty = models.ForeignKey(
+        Faculty,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='departments',
+        verbose_name='Факультет'
+    )
 
     class Meta:
         verbose_name = 'Кафедра ProjectEd'
