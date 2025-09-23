@@ -2,7 +2,7 @@ from rest_framework import serializers
 
 from src.modules.project_ed.models import (
     Project, Category, Subcategory, TargetIndicator, EventBlock, Event,
-    UserProfile, Role, Position, Faculty, Department
+    Role, Position, Faculty, Department
 )
 
 
@@ -354,46 +354,6 @@ class EventBlockCreateUpdateSerializer(serializers.ModelSerializer):
                     )
         
         return instance
-
-
-class ProjectEdUserProfileSerializer(serializers.ModelSerializer):
-    """Сериализатор профиля пользователя ProjectEd."""
-    user_username = serializers.CharField(source='user.username', read_only=True)
-    user_full_name = serializers.SerializerMethodField()
-    role_name = serializers.CharField(source='role_ref.name', read_only=True)
-    position_name = serializers.CharField(source='position_ref.name', read_only=True)
-    faculty_name = serializers.CharField(source='faculty_ref.name', read_only=True)
-    faculty_short_name = serializers.CharField(source='faculty_ref.short_name', read_only=True)
-    department_name = serializers.CharField(source='department_ref.name', read_only=True)
-
-    class Meta:
-        model = UserProfile
-        fields = [
-            'id',
-            'user',
-            'user_username',
-            'user_full_name',
-            # Ссылочные поля (новые)
-            'role_ref',
-            'position_ref',
-            'faculty_ref',
-            'department_ref',
-            # Наименования ссылочных полей
-            'role_name',
-            'position_name',
-            'faculty_name',
-            'faculty_short_name',
-            'department_name',
-            'created_at',
-            'updated_at',
-        ]
-        read_only_fields = ['created_at', 'updated_at']
-
-    def get_user_full_name(self, obj):
-        first = getattr(obj.user, 'first_name', '') or ''
-        last = getattr(obj.user, 'last_name', '') or ''
-        full = f"{first} {last}".strip()
-        return full or getattr(obj.user, 'username', '')
 
 
 class ProjectEdRoleSerializer(serializers.ModelSerializer):

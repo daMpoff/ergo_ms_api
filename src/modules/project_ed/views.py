@@ -1,6 +1,7 @@
 from django.shortcuts import render
 from django.db.models import Prefetch
 from django.db import models as dj_models
+from django.db import models
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
@@ -9,7 +10,7 @@ from rest_framework.response import Response
 from src.core.utils.mixins import SwaggerSafeMixin
 from src.modules.project_ed.models import (
     Project, Category, Subcategory, TargetIndicator, EventBlock, Event,
-    UserProfile, Role, Position, Faculty, Department
+    Role, Position, Faculty, Department
 )
 from src.modules.project_ed.serializers import (
     ProjectSerializer, 
@@ -20,7 +21,6 @@ from src.modules.project_ed.serializers import (
     EventBlockSerializer,
     EventBlockCreateUpdateSerializer,
     EventSerializer,
-    ProjectEdUserProfileSerializer,
     ProjectEdRoleSerializer,
     ProjectEdPositionSerializer,
     ProjectEdFacultySerializer,
@@ -54,7 +54,7 @@ class IsProjectEdAdmin(permissions.BasePermission):
         if not user or not user.is_authenticated:
             return False
 
-        # Проверка через профиль ProjectEd
+        # Проверка через профиль ProjectEd (теперь в подмодуле profiles)
         try:
             profile = getattr(user, 'project_ed_profile', None)
             if profile and (
@@ -521,60 +521,6 @@ class EventViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         }, status=status.HTTP_200_OK)
 
 
-class ProjectEdUserProfileViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
-    """Профили пользователей ProjectEd.
-
-    - Администратор ProjectEd видит все профили
-    - Обычный пользователь видит только свой профиль по ?user=<id>
-    """
-    queryset = UserProfile.objects.select_related('user', 'role_ref').all()
-    serializer_class = ProjectEdUserProfileSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def _is_project_ed_admin(self, user):
-        try:
-            profile = getattr(user, 'project_ed_profile', None)
-            if profile and getattr(getattr(profile, 'role_ref', None), 'name', None) == 'Администратор':
-                return True
-        except Exception:
-            pass
-        try:
-            if user.groups.filter(name='Администратор').exists():
-                return True
-        except Exception:
-            pass
-        return False
-
-    def get_queryset(self):
-        qs = super().get_queryset()
-        request = self.request
-        user = getattr(request, 'user', None)
-        is_admin = self._is_project_ed_admin(user) if (user and user.is_authenticated) else False
-
-        search = request.query_params.get('search')
-        user_id = request.query_params.get('user')
-
-        # Не-админ: только свой профиль при явном указании user=<id>
-        if not is_admin:
-            if user_id and str(user.id) == str(user_id):
-                qs = qs.filter(user_id=user.id)
-            else:
-                return qs.none()
-        else:
-            if user_id:
-                qs = qs.filter(user_id=user_id)
-
-        if search:
-            qs = qs.filter(
-                dj_models.Q(user__username__icontains=search) |
-                dj_models.Q(user__first_name__icontains=search) |
-                dj_models.Q(user__last_name__icontains=search) |
-                dj_models.Q(user__email__icontains=search)
-            )
-
-        return qs.order_by('user__first_name', 'user__last_name')
-
-
 class ProjectEdRoleViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     queryset = Role.objects.all()
     serializer_class = ProjectEdRoleSerializer
@@ -597,3 +543,6 @@ class ProjectEdDepartmentViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     queryset = Department.objects.all()
     serializer_class = ProjectEdDepartmentSerializer
     permission_classes = [permissions.IsAuthenticated, IsProjectEdAdmin]
+
+
+# ProjectEdUserViewSet перенесен в подмодуль profiles для лучшей организации кода

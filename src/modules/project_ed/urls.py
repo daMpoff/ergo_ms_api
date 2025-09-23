@@ -8,7 +8,6 @@ from src.modules.project_ed.views import (
     TargetIndicatorViewSet,
     EventBlockViewSet,
     EventViewSet,
-    ProjectEdUserProfileViewSet,
     ProjectEdRoleViewSet,
     ProjectEdPositionViewSet,
     ProjectEdFacultyViewSet,
@@ -22,7 +21,6 @@ router.register(r'subcategories', SubcategoryViewSet, basename='project-subcateg
 router.register(r'target-indicators', TargetIndicatorViewSet, basename='project-target-indicators')
 router.register(r'event-blocks', EventBlockViewSet, basename='project-event-blocks')
 router.register(r'events', EventViewSet, basename='project-events')
-router.register(r'user-profiles', ProjectEdUserProfileViewSet, basename='project-user-profiles')
 router.register(r'roles', ProjectEdRoleViewSet, basename='project-ed-roles')
 router.register(r'positions', ProjectEdPositionViewSet, basename='project-ed-positions')
 router.register(r'faculties', ProjectEdFacultyViewSet, basename='project-ed-faculties')
@@ -30,4 +28,5 @@ router.register(r'departments', ProjectEdDepartmentViewSet, basename='project-ed
 
 urlpatterns = [
     path('', include(router.urls)),
+    path('profiles/', include('src.modules.project_ed.profiles.urls')),
 ]

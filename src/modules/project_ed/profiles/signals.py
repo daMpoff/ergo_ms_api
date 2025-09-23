@@ -4,7 +4,7 @@ from django.contrib.auth.models import User
 from django.db.utils import ProgrammingError, OperationalError, DatabaseError
 from django.conf import settings
 
-from .models import UserProfile, Role
+from .models import UserProfile
 
 
 @receiver(post_save, sender=User)
@@ -20,6 +20,9 @@ def create_project_ed_user_profile(sender, instance, created, **kwargs):
             profile, profile_created = UserProfile.objects.get_or_create(user=instance)
             
             if profile_created:
+                # Импортируем модель Role из основного модуля
+                from ..models import Role
+                
                 # Получаем или создаем роль "Пользователь"
                 user_role, role_created = Role.objects.get_or_create(
                     name='Пользователь',

@@ -375,49 +375,6 @@ class Event(models.Model):
             raise ValidationError('Год начала не может быть больше года окончания.')
 
 
-class UserProfile(models.Model):
-    """Профиль пользователя для модуля ProjectEd.
-
-    Ссылочная модель на пользователя с дополнительными полями:
-    роль, должность, факультет, кафедра.
-    """
-
-    user = models.OneToOneField(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name='project_ed_profile',
-        verbose_name='Пользователь'
-    )
-
-    # Новые ссылочные поля на справочники
-    role_ref = models.ForeignKey(
-        'Role', on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='profiles', verbose_name='Роль (справочник)'
-    )
-    position_ref = models.ForeignKey(
-        'Position', on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='profiles', verbose_name='Должность (справочник)'
-    )
-    faculty_ref = models.ForeignKey(
-        'Faculty', on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='profiles', verbose_name='Факультет (справочник)'
-    )
-    department_ref = models.ForeignKey(
-        'Department', on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='profiles', verbose_name='Кафедра (справочник)'
-    )
-
-    created_at = models.DateTimeField('Создано', auto_now_add=True)
-    updated_at = models.DateTimeField('Обновлено', auto_now=True)
-
-    class Meta:
-        verbose_name = 'Профиль пользователя проекта'
-        verbose_name_plural = 'Профили пользователей проекта'
-
-    def __str__(self) -> str:
-        return f'UserProfile<{self.user_id}> {getattr(self.user, "username", "")}'
-
-
 class Role(models.Model):
     name = models.CharField('Название', max_length=255, unique=True)
 
