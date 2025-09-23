@@ -14,6 +14,7 @@ import os
 import zipfile
 import io
 import logging
+import re
 
 # Настраиваем логгер
 logger = logging.getLogger('celery.task.porosity_analysis')
@@ -74,10 +75,12 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
         Тело запроса может содержать:
         - analysis_ids | ids: массив чисел
         - input | ids_text: строка с номерами через запятую/пробел/точку с запятой
+        - dry_run: булево; если true, возвратить информацию о том, сколько будет удалено, без фактического удаления
         """
         try:
             ids = request.data.get('analysis_ids') or request.data.get('ids')
             input_text = request.data.get('input') or request.data.get('ids_text') or ''
+            dry_run = bool(request.data.get('dry_run'))
 
             parsed_ids = []
             if isinstance(ids, list):
@@ -104,9 +107,22 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
                     'error': 'Анализы по указанным номерам не найдены'
                 }, status=status.HTTP_404_NOT_FOUND)
 
+            existing_ids = list(queryset.values_list('id', flat=True))
+            not_found = [i for i in parsed_ids if i not in existing_ids]
+
+            # Режим предварительного просмотра (без удаления)
+            if dry_run:
+                return Response({
+                    'success': True,
+                    'requested_count': len(parsed_ids),
+                    'would_delete_count': len(existing_ids),
+                    'existing_ids': existing_ids,
+                    'not_found': not_found or None
+                }, status=status.HTTP_200_OK)
+
             deleted = 0
-            not_found = [i for i in parsed_ids if i not in queryset.values_list('id', flat=True)]
             errors = []
+            deleted_ids = []
 
             for analysis in queryset:
                 try:
@@ -114,8 +130,10 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
                         set_cancel_flag(analysis.id)
                     except Exception:
                         pass
+                    analysis_id = analysis.id
                     analysis.delete()
                     deleted += 1
+                    deleted_ids.append(analysis_id)
                 except Exception as e:
                     errors.append(f"{analysis.id}: {str(e)}")
 
@@ -123,6 +141,7 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
                 'success': True,
                 'deleted_count': deleted,
                 'requested_count': len(parsed_ids),
+                'deleted_ids': deleted_ids or None,
                 'not_found': not_found or None,
                 'errors': errors or None
             }, status=status.HTTP_200_OK)
@@ -301,62 +320,10 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
     
     @action(detail=True, methods=['get'])
     def download_results(self, request, pk=None):
-        """Скачивание результатов анализа в виде ZIP архива (с кэшированием)"""
-        analysis = self.get_object()
-        
-        if analysis.status != 'completed':
-            return Response({
-                'error': 'Анализ еще не завершен'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Получаем список файлов результатов
-        result_files = get_analysis_results_files(analysis)
-        
-        if not result_files:
-            return Response({
-                'error': 'Файлы результатов не найдены'
-            }, status=status.HTTP_404_NOT_FOUND)
-        
-        # Проверяем, что директория результатов существует
-        if not os.path.exists(analysis.results_directory):
-            return Response({
-                'error': 'Директория результатов не найдена'
-            }, status=status.HTTP_404_NOT_FOUND)
-        
-        # Путь к архиву
-        zip_path = os.path.join(analysis.results_directory, f"analysis_{analysis.id}_results.zip")
-        
-        try:
-            # Если архив уже существует и не пустой, просто отдаем его
-            if os.path.exists(zip_path) and os.path.getsize(zip_path) > 0:
-                logger.info(f"Using cached ZIP archive for analysis {analysis.id}")
-                with open(zip_path, 'rb') as f:
-                    response = HttpResponse(f.read(), content_type='application/zip')
-                    response['Content-Disposition'] = f'attachment; filename="analysis_{analysis.id}_results.zip"'
-                    return response
-            
-            # Иначе создаем архив и сохраняем на диск
-            logger.info(f"Creating new ZIP archive for analysis {analysis.id}")
-            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                for file_path in result_files:
-                    if os.path.exists(file_path) and os.path.isfile(file_path):
-                        relative_path = os.path.relpath(file_path, analysis.results_directory)
-                        logger.info(f"Adding file to archive: {file_path} -> {relative_path}")
-                        zip_file.write(file_path, relative_path)
-                    else:
-                        logger.warning(f"File not found or not a file: {file_path}")
-            
-            # Отдаем только что созданный архив
-            with open(zip_path, 'rb') as f:
-                response = HttpResponse(f.read(), content_type='application/zip')
-                response['Content-Disposition'] = f'attachment; filename="analysis_{analysis.id}_results.zip"'
-                return response
-                
-        except Exception as e:
-            logger.error(f"Error creating ZIP archive for analysis {analysis.id}: {e}")
-            return Response({
-                'error': f'Ошибка при создании архива: {str(e)}'
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        """Скачивание архива результатов отключено."""
+        return Response({
+            'error': 'Скачивание архива результатов отключено'
+        }, status=status.HTTP_404_NOT_FOUND)
     
     @action(detail=True, methods=['get'])
     def download_file(self, request, pk=None):
@@ -588,6 +555,250 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     # Убран эндпоинт limits, так как ограничения сняты
+    
+    @action(detail=False, methods=['post'])
+    def download_multiple_reports(self, request):
+        """Скачивание архива отчетов по нескольким анализам.
+        
+        Тело запроса может содержать:
+        - analysis_ids | ids: массив чисел
+        - input | ids_text: строка с номерами через запятую/тире/пробел
+        - report_type: тип отчета ('docx' или 'pdf'), по умолчанию 'docx'
+        """
+        try:
+            ids = request.data.get('analysis_ids') or request.data.get('ids')
+            input_text = request.data.get('input') or request.data.get('ids_text') or ''
+            report_type = request.data.get('report_type', 'docx')
+
+            # Валидация типа отчета
+            if report_type not in ['docx', 'pdf']:
+                return Response({
+                    'success': False,
+                    'error': 'Неподдерживаемый тип отчета. Доступны: docx, pdf'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            parsed_ids = []
+            
+            # Парсим ID из массива
+            if isinstance(ids, list):
+                parsed_ids.extend([int(x) for x in ids if str(x).isdigit()])
+            
+            # Парсим ID из строки (поддерживаем тире для диапазонов)
+            if isinstance(input_text, str) and input_text.strip():
+                import re
+                # Сначала обрабатываем диапазоны (например, "1-5")
+                parts = re.split(r'[,;\s]+', input_text.strip())
+                for part in parts:
+                    part = part.strip()
+                    if '-' in part and not part.startswith('-'):
+                        # Это диапазон
+                        range_parts = part.split('-', 1)
+                        if len(range_parts) == 2 and range_parts[0].isdigit() and range_parts[1].isdigit():
+                            start = int(range_parts[0])
+                            end = int(range_parts[1])
+                            if start <= end:
+                                parsed_ids.extend(range(start, end + 1))
+                    elif part.isdigit():
+                        parsed_ids.append(int(part))
+
+            # Удаляем дубликаты и сортируем
+            parsed_ids = list(sorted(set(parsed_ids)))
+
+            if not parsed_ids:
+                return Response({
+                    'success': False,
+                    'error': 'Не указаны валидные номера анализов'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # Ограничения по количеству анализов сняты для архива отчетов
+            # Логируем большие запросы для мониторинга нагрузки
+            if len(parsed_ids) > 100:
+                logger.info(f"Большой запрос архива отчетов: {len(parsed_ids)} анализов, тип: {report_type}")
+
+            # Получаем анализы
+            queryset = self.get_queryset().filter(id__in=parsed_ids, status='completed')
+            analyses = list(queryset)
+            
+            existing_ids = [analysis.id for analysis in analyses]
+            not_found = [i for i in parsed_ids if i not in existing_ids]
+            
+            # Если нет ни одного завершенного анализа, создаем пустой архив с информацией
+            if not analyses:
+                # Создаем пустой архив с информационным файлом
+                archive_buffer = io.BytesIO()
+                
+                with zipfile.ZipFile(archive_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                    # Добавляем информационный файл
+                    info_content = f"""Информация о запросе архива отчетов
+
+Запрошенные номера анализов: {', '.join(map(str, parsed_ids))}
+Тип отчета: {report_type}
+Дата запроса: {timezone.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+РЕЗУЛЬТАТ:
+Не найдено ни одного завершенного анализа по указанным номерам.
+
+Возможные причины:
+- Анализы с указанными номерами не существуют
+- Анализы еще не завершены (находятся в процессе обработки)
+- Анализы завершились с ошибкой
+
+Проверьте статус анализов в интерфейсе системы.
+"""
+                    zip_file.writestr('ИНФОРМАЦИЯ.txt', info_content.encode('utf-8'))
+                
+                # Подготавливаем архив для скачивания
+                archive_buffer.seek(0)
+                archive_content = archive_buffer.getvalue()
+                
+                # Формируем имя архива
+                timestamp = timezone.now().strftime('%Y%m%d_%H%M%S')
+                archive_filename = f"porosity_reports_empty_{report_type}_{timestamp}.zip"
+                
+                response = HttpResponse(archive_content, content_type='application/zip')
+                response['Content-Disposition'] = f'attachment; filename="{archive_filename}"'
+                response['Content-Length'] = len(archive_content)
+                
+                # Добавляем информационные заголовки
+                response['X-Reports-Count'] = '0'
+                response['X-Failed-Count'] = '0'
+                response['X-Not-Found'] = ','.join(map(str, not_found))
+                
+                logger.info(f"Создан пустой архив: не найдено анализов по номерам {parsed_ids}")
+                
+                return response
+
+            # Создаем временный архив
+            archive_buffer = io.BytesIO()
+            
+            with zipfile.ZipFile(archive_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                successful_reports = 0
+                failed_reports = []
+                
+                # Добавляем информационный файл, если есть не найденные анализы
+                if not_found:
+                    info_content = f"""Информация о запросе архива отчетов
+
+Запрошенные номера анализов: {', '.join(map(str, parsed_ids))}
+Найдено завершенных анализов: {len(existing_ids)} из {len(parsed_ids)}
+Тип отчета: {report_type}
+Дата запроса: {timezone.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+НАЙДЕННЫЕ АНАЛИЗЫ:
+{', '.join(map(str, existing_ids))}
+
+НЕ НАЙДЕННЫЕ АНАЛИЗЫ:
+{', '.join(map(str, not_found))}
+
+Возможные причины отсутствия анализов:
+- Анализы с указанными номерами не существуют
+- Анализы еще не завершены (находятся в процессе обработки)
+- Анализы завершились с ошибкой
+
+Проверьте статус анализов в интерфейсе системы.
+"""
+                    zip_file.writestr('ИНФОРМАЦИЯ_О_ЗАПРОСЕ.txt', info_content.encode('utf-8'))
+                
+                for analysis in analyses:
+                    try:
+                        # Путь к директории отчетов
+                        reports_dir = os.path.join(analysis.results_directory, 'reports')
+                        
+                        # Ищем уже существующий файл нужного типа
+                        report_file = None
+                        if os.path.exists(reports_dir):
+                            for filename in os.listdir(reports_dir):
+                                if filename.endswith(f'.{report_type}'):
+                                    report_file = os.path.join(reports_dir, filename)
+                                    break
+                        
+                        # Если файл не найден, генерируем только нужный тип
+                        if not report_file or not os.path.exists(report_file):
+                            from .report_generator import PorosityReportGenerator
+                            report_generator = PorosityReportGenerator(analysis)
+                            
+                            # Генерируем только нужный тип отчета
+                            report_file = report_generator.generate_single_report(report_type)
+                            
+                            if not report_file or not os.path.exists(report_file):
+                                failed_reports.append(f"Анализ {analysis.id}: не удалось сгенерировать отчет типа {report_type}")
+                                continue
+                        
+                        # Проверяем размер файла
+                        if os.path.getsize(report_file) == 0:
+                            failed_reports.append(f"Анализ {analysis.id}: пустой файл отчета")
+                            continue
+                        
+                        # Формируем имя файла в архиве
+                        safe_name = re.sub(r'[^\w\s-]', '', analysis.name.strip()[:50])
+                        if not safe_name:
+                            safe_name = f"analysis_{analysis.id}"
+                        
+                        archive_filename = f"{safe_name}_{analysis.created_at.strftime('%Y%m%d')}.{report_type}"
+                        
+                        # Добавляем файл в архив
+                        zip_file.write(report_file, archive_filename)
+                        successful_reports += 1
+                        
+                        logger.info(f"Добавлен отчет для анализа {analysis.id} в архив")
+                        
+                    except Exception as e:
+                        logger.error(f"Ошибка при добавлении отчета анализа {analysis.id}: {e}")
+                        failed_reports.append(f"Анализ {analysis.id}: {str(e)}")
+
+            # Если не удалось создать ни одного отчета, но анализы найдены, создаем архив с информацией об ошибках
+            if successful_reports == 0:
+                # Добавляем файл с информацией об ошибках
+                error_info_content = f"""Информация об ошибках при создании отчетов
+
+Запрошенные номера анализов: {', '.join(map(str, parsed_ids))}
+Найдено завершенных анализов: {len(existing_ids)}
+Тип отчета: {report_type}
+Дата запроса: {timezone.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+НАЙДЕННЫЕ АНАЛИЗЫ:
+{', '.join(map(str, existing_ids))}
+
+ОШИБКИ ПРИ СОЗДАНИИ ОТЧЕТОВ:
+{chr(10).join(failed_reports)}
+
+Рекомендации:
+- Проверьте, что анализы действительно завершены успешно
+- Убедитесь, что файлы результатов анализов не повреждены
+- Обратитесь к администратору системы, если проблема повторяется
+"""
+                zip_file.writestr('ОШИБКИ_СОЗДАНИЯ_ОТЧЕТОВ.txt', error_info_content.encode('utf-8'))
+                
+                logger.warning(f"Создан архив только с информацией об ошибках для анализов {existing_ids}")
+
+            # Подготавливаем архив для скачивания
+            archive_buffer.seek(0)
+            archive_content = archive_buffer.getvalue()
+            
+            # Формируем имя архива
+            timestamp = timezone.now().strftime('%Y%m%d_%H%M%S')
+            archive_filename = f"porosity_reports_{report_type}_{timestamp}.zip"
+            
+            response = HttpResponse(archive_content, content_type='application/zip')
+            response['Content-Disposition'] = f'attachment; filename="{archive_filename}"'
+            response['Content-Length'] = len(archive_content)
+            
+            # Добавляем информационные заголовки
+            response['X-Reports-Count'] = str(successful_reports)
+            response['X-Failed-Count'] = str(len(failed_reports))
+            if not_found:
+                response['X-Not-Found'] = ','.join(map(str, not_found))
+            
+            logger.info(f"Создан архив отчетов: {successful_reports} успешно, {len(failed_reports)} ошибок")
+            
+            return response
+            
+        except Exception as e:
+            logger.error(f"Ошибка при создании архива отчетов: {e}")
+            return Response({
+                'success': False,
+                'error': f'Ошибка при создании архива: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     @action(detail=True, methods=['get'])
     def generate_report(self, request, pk=None):

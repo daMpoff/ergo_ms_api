@@ -1,5 +1,4 @@
 import os
-import zipfile
 import logging
 
 # Настройка Matplotlib для работы в фоновом режиме (без GUI)
@@ -13,7 +12,7 @@ from django.utils import timezone
 
 from src.modules.porosity_analysis.models import PorosityAnalysis
 from src.modules.porosity_analysis.config import PorosityAnalysisConfig
-from src.modules.porosity_analysis.utils import is_cancelled, clear_cancel_flag, get_analysis_results_files
+from src.modules.porosity_analysis.utils import is_cancelled, clear_cancel_flag
 
 # Настраиваем логгер для задач анализа пористости
 logger = logging.getLogger('celery.task.porosity_analysis')
@@ -58,7 +57,7 @@ def run_porosity_analysis(self, analysis_id):
             raise FileNotFoundError(f"Исходное изображение не найдено: {analysis.original_image_path}")
         
         # Импортируем необходимые модули для анализа
-        from .scripts.main import run_analysis
+        from .scripts.porosity_analyzer import integrated_analysis
         from .scripts.config import AnalysisConfig
         
         # Создаем конфигурацию анализа
@@ -78,7 +77,11 @@ def run_porosity_analysis(self, analysis_id):
         # Запускаем анализ
         logger.warning(f"Путь к изображению: {analysis.original_image_path}, существует: {os.path.exists(analysis.original_image_path)}")
         # Внутренняя обертка, позволяющая периодически проверять отмену
-        results = run_analysis(config)
+        results = integrated_analysis(
+            image_path=config.input_image_path,
+            scale_value=config.scale_value,
+            save_directory=config.output_directory
+        )
 
         # Логируем результаты для отладки
         # Не логируем весь объект результатов (может быть очень большим)
@@ -130,42 +133,15 @@ def run_porosity_analysis(self, analysis_id):
             pass
         analysis.save()
         
-        # Генерируем отчеты
+        # Генерируем отчеты (встраиваем изображения напрямую, без сохранения PNG)
         try:
             from .report_generator import PorosityReportGenerator
-            report_generator = PorosityReportGenerator(analysis)
+            report_generator = PorosityReportGenerator(analysis, results)
             reports = report_generator.generate_reports()
             logger.info(f"Отчеты сгенерированы: {reports}")
         except Exception as e:
             logger.error(f"Ошибка при генерации отчетов для анализа {analysis_id}: {e}")
             # Не прерываем процесс, если отчеты не удалось создать
-        
-        # Создаем ZIP архив результатов (кэш) сразу в задаче
-        try:
-            if not is_cancelled(analysis_id):
-                result_files = get_analysis_results_files(analysis)
-                zip_path = os.path.join(analysis.results_directory, f"analysis_{analysis_id}_results.zip")
-
-                # Пересоздаем архив
-                if os.path.exists(zip_path):
-                    try:
-                        os.remove(zip_path)
-                    except Exception:
-                        pass
-
-                with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                    for file_path in result_files:
-                        # Не включаем сам архив, если встречается при повторном запуске
-                        if os.path.abspath(file_path) == os.path.abspath(zip_path):
-                            continue
-                        if os.path.exists(file_path) and os.path.isfile(file_path):
-                            relative_path = os.path.relpath(file_path, analysis.results_directory)
-                            zip_file.write(file_path, relative_path)
-                logger.info(f"ZIP архив результатов создан: {zip_path}")
-            else:
-                logger.info(f"Анализ {analysis_id} отменен перед созданием архива. Пропускаем упаковку.")
-        except Exception as e:
-            logger.error(f"Ошибка при создании ZIP архива для анализа {analysis_id}: {e}")
 
         logger.info(f"Анализ пористости завершен успешно для ID: {analysis_id}")
         clear_cancel_flag(analysis_id)
