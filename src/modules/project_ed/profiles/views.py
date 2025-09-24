@@ -47,6 +47,13 @@ class UserProfileViewSet(SwaggerSafeMixin, viewsets.ReadOnlyModelViewSet):
                 models.Q(email__icontains=search)
             )
         
+        # Фильтрация по должности
+        position = self.request.query_params.get('position')
+        if position:
+            queryset = queryset.filter(
+                project_ed_profile__position_ref__name__icontains=position
+            )
+
         # Фильтрация по роли
         role = self.request.query_params.get('role')
         if role:
