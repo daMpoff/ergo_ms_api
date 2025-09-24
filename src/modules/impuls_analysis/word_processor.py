@@ -407,7 +407,7 @@ def create_force_records_table(doc, force_records_df):
                     run.font.size = Pt(14)
 
 
-def create_word_document(analysis_data: dict) -> Document:
+def create_word_document(analysis_data: dict, analysis_uid: Optional[str] = None) -> Document:
     """
     Создает Word документ с более точным форматированием
     
@@ -658,7 +658,9 @@ def create_word_document(analysis_data: dict) -> Document:
     run5.bold = True
 
     # Получаем пути к изображениям по UUID анализа
-    analysis_id = str(analysis_data['analysis']['id'].iloc[0])
+    # ВАЖНО: используем переданный analysis_uid (UUID), если он задан,
+    # так как имена файлов формируются по нему в utils.run_protocol_analysis
+    analysis_id = str(analysis_uid or analysis_data['analysis']['id'].iloc[0])
     analysis_dir = os.path.join(settings.MEDIA_ROOT, 'impuls_analysis', 'analyses')
     
     detailed_image_path = None
@@ -686,6 +688,12 @@ def create_word_document(analysis_data: dict) -> Document:
 
     if plain_image_path and os.path.exists(plain_image_path):
         try:
+            # Доп.проверка: файл не пустой
+            try:
+                if os.path.getsize(plain_image_path) <= 0:
+                    raise ValueError("Файл изображения пустой (0 байт)")
+            except Exception:
+                pass
             # Создаем абзац для картинки с центрированием
             image_paragraph1 = doc.add_paragraph()
             image_paragraph1.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -718,6 +726,12 @@ def create_word_document(analysis_data: dict) -> Document:
 
     if detailed_image_path and os.path.exists(detailed_image_path):
         try:
+            # Доп.проверка: файл не пустой
+            try:
+                if os.path.getsize(detailed_image_path) <= 0:
+                    raise ValueError("Файл изображения пустой (0 байт)")
+            except Exception:
+                pass
             # Создаем абзац для картинки с центрированием
             image_paragraph2 = doc.add_paragraph()
             image_paragraph2.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -777,8 +791,8 @@ def generate_protocol_document(protocol_number: str, analysis_id: str) -> Option
             logger.error(f"Ошибка получения данных анализа: {analysis_data['error']}")
             return None
         
-        # Создаем Word документ
-        doc = create_word_document(analysis_data)
+        # Создаем Word документ (передаем UUID анализа для корректного поиска изображений)
+        doc = create_word_document(analysis_data, analysis_uid=analysis_id)
         
         # Генерируем имя файла по UUID анализа
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

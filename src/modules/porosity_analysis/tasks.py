@@ -141,6 +141,18 @@ def run_porosity_analysis(self, analysis_id):
             logger.info(f"Отчеты сгенерированы: {reports}")
         except Exception as e:
             logger.error(f"Ошибка при генерации отчетов для анализа {analysis_id}: {e}")
+            # Пытаемся создать только DOCX отчет если полная генерация не удалась
+            try:
+                logger.info(f"Пытаемся создать только DOCX отчет для анализа {analysis_id}")
+                from .report_generator import PorosityReportGenerator
+                report_generator = PorosityReportGenerator(analysis, results)
+                docx_report = report_generator.generate_single_report('docx')
+                if docx_report:
+                    logger.info(f"DOCX отчет создан: {docx_report}")
+                else:
+                    logger.warning(f"Не удалось создать DOCX отчет для анализа {analysis_id}")
+            except Exception as docx_error:
+                logger.error(f"Критическая ошибка при создании отчетов для анализа {analysis_id}: {docx_error}")
             # Не прерываем процесс, если отчеты не удалось создать
 
         logger.info(f"Анализ пористости завершен успешно для ID: {analysis_id}")

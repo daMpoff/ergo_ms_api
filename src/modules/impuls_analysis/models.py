@@ -20,6 +20,8 @@ class ImpulsAnalysis(models.Model):
     ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    # Числовой идентификатор анализа для отображения и ссылок во фронтенде
+    number = models.BigIntegerField(null=True, blank=True, unique=True, db_index=True, verbose_name='Номер анализа')
     user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name='Пользователь')
     title = models.CharField(max_length=255, verbose_name='Название')
     description = models.TextField(blank=True, verbose_name='Описание')
@@ -91,6 +93,16 @@ class ImpulsAnalysis(models.Model):
                 setattr(self, key, value)
         
         self.save()
+
+    def save(self, *args, **kwargs):
+        """Присваивает порядковый номер анализа, если он отсутствует.
+        Используется для пользовательского числового идентификатора, отдельного от UUID."""
+        if self.number is None:
+            # Находим последний присвоенный номер и инкрементируем
+            last = ImpulsAnalysis.objects.order_by('-number').only('number').first()
+            next_number = (last.number + 1) if last and last.number is not None else 1
+            self.number = next_number
+        super().save(*args, **kwargs)
 
     def delete(self, using=None, keep_parents=False):
         """Удаляет связанные файлы протоколов и изображения результатов перед удалением записи анализа."""

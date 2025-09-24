@@ -2,6 +2,12 @@ import os
 import logging
 import subprocess
 import shutil
+import signal
+import time
+import uuid
+import tempfile
+from pathlib import Path
+import fcntl
 from datetime import datetime
 from typing import Dict, List, Optional
 from io import BytesIO
@@ -53,6 +59,71 @@ class PorosityReportGenerator:
         self.results_dir = analysis.results_directory
         self.in_memory_results = in_memory_results or {}
         
+    def _compress_image_for_docx(self, image: Image.Image, target_width_inches: float = 5.5, target_dpi: int = 220) -> BytesIO:
+        """
+        Подготавливает изображение для вставки в DOCX с минимальным размером файла
+        без заметной потери качества.
+
+        - Масштабирует до нужной ширины под заданный DPI, сохраняя пропорции
+        - Конвертирует в JPEG (RGB, без альфы) с параметрами для высокого качества
+
+        Args:
+            image: PIL.Image
+            target_width_inches: целевая ширина изображения в документе
+            target_dpi: расчетное DPI для целевой ширины
+
+        Returns:
+            BytesIO: байтовый поток с перекодированным изображением
+        """
+        try:
+            # Приводим режим и убираем прозрачность (если есть)
+            if image.mode in ("RGBA", "LA") or (image.mode == "P" and "transparency" in image.info):
+                background = Image.new("RGB", image.size, (255, 255, 255))
+                alpha = image.convert("RGBA")
+                background.paste(alpha, mask=alpha.split()[-1])
+                work_img = background
+            else:
+                work_img = image.convert("RGB") if image.mode != "RGB" else image
+
+            # Вычисляем целевую ширину в пикселях
+            target_width_px = max(1, int(round(target_width_inches * target_dpi)))
+            orig_w, orig_h = work_img.size
+
+            # Масштабируем только если исходник шире целевого
+            if orig_w > target_width_px:
+                scale = target_width_px / float(orig_w)
+                new_size = (target_width_px, max(1, int(round(orig_h * scale))))
+                work_img = work_img.resize(new_size, Image.LANCZOS)
+
+            bio = BytesIO()
+            # JPEG: высокое качество, оптимизация, прогрессивность, без даунсэмплинга хромы
+            work_img.save(
+                bio,
+                format="JPEG",
+                quality=88,
+                optimize=True,
+                progressive=True,
+                subsampling=1  # 4:4:4
+            )
+            bio.seek(0)
+            return bio
+        except Exception as e:
+            # Фолбек: сохраняем как PNG в поток
+            logger.warning(f"Не удалось сжать изображение в JPEG, используем PNG: {e}")
+            bio = BytesIO()
+            try:
+                png_img = image
+                if png_img.mode in ("RGBA", "LA"):
+                    # Сохраняем альфу для PNG
+                    png_img.save(bio, format="PNG", optimize=True)
+                else:
+                    png_img.convert("RGB").save(bio, format="PNG", optimize=True)
+            except Exception:
+                # Последний фолбек: как есть
+                image.save(bio, format="PNG")
+            bio.seek(0)
+            return bio
+
     def _get_image_descriptions(self) -> Dict[str, Dict[str, str]]:
         """
         Возвращает детальные описания для каждого изображения с метриками
@@ -517,9 +588,12 @@ class PorosityReportGenerator:
             info_table = doc.add_table(rows=4, cols=2)
             info_table.style = 'Table Grid'
             
+            # Используем start_time если доступен, иначе created_at
+            analysis_date = self.analysis.start_time if self.analysis.start_time else self.analysis.created_at
+            
             info_data = [
                 ('Название анализа:', self.analysis.name),
-                ('Дата проведения:', self.analysis.created_at.strftime('%d.%m.%Y %H:%M')),
+                ('Дата проведения:', analysis_date.strftime('%d.%m.%Y %H:%M')),
                 ('Статус:', 'Завершен' if self.analysis.status == 'completed' else self.analysis.status),
                 ('Масштаб:', f'{self.analysis.scale_value} мкм')
             ]
@@ -827,18 +901,25 @@ class PorosityReportGenerator:
                     try:
                         # Добавляем изображение с ограничением размера
                         if isinstance(img_or_path, Image.Image):
-                            bio = BytesIO()
-                            img_or_path.save(bio, format='PNG')
-                            bio.seek(0)
+                            bio = self._compress_image_for_docx(img_or_path, target_width_inches=Inches(5.5).inches, target_dpi=220)
                             pic_paragraph = doc.add_paragraph()
                             pic_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
                             run = pic_paragraph.add_run()
                             run.add_picture(bio, width=Inches(5.5))
                         else:
-                            pic_paragraph = doc.add_paragraph()
-                            pic_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                            run = pic_paragraph.add_run()
-                            run.add_picture(img_or_path, width=Inches(5.5))
+                            # Если вдруг попался путь/байты - пробуем через PIL и сжимаем
+                            try:
+                                pil_img = Image.open(img_or_path) if isinstance(img_or_path, str) else Image.open(BytesIO(img_or_path))
+                                bio = self._compress_image_for_docx(pil_img, target_width_inches=Inches(5.5).inches, target_dpi=220)
+                                pic_paragraph = doc.add_paragraph()
+                                pic_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                                run = pic_paragraph.add_run()
+                                run.add_picture(bio, width=Inches(5.5))
+                            except Exception:
+                                pic_paragraph = doc.add_paragraph()
+                                pic_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                                run = pic_paragraph.add_run()
+                                run.add_picture(img_or_path, width=Inches(5.5))
                         
                         # Добавляем подпись под изображением
                         caption_para = doc.add_paragraph()
@@ -918,53 +999,155 @@ class PorosityReportGenerator:
                         '-o', pdf_path,
                         docx_path
                     ]
-                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+                    logger.debug(f"Запускаем команду unoconv: {' '.join(cmd)}")
                     
-                    if result.returncode == 0 and os.path.exists(pdf_path):
-                        logger.info(f"PDF создан с помощью unoconv: {pdf_path}")
-                        success = True
-                    else:
-                        logger.warning(f"unoconv завершился с ошибкой: {result.stderr}")
+                    # Используем более короткий таймаут и проверяем процесс
+                    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                    try:
+                        stdout, stderr = process.communicate(timeout=30)
+                        returncode = process.returncode
                         
-                except subprocess.TimeoutExpired:
-                    logger.warning("unoconv превысил время ожидания")
+                        if returncode == 0 and os.path.exists(pdf_path):
+                            logger.info(f"PDF создан с помощью unoconv: {pdf_path}")
+                            success = True
+                        else:
+                            logger.warning(f"unoconv завершился с кодом {returncode}, ошибка: {stderr}")
+                            
+                    except subprocess.TimeoutExpired:
+                        logger.warning("unoconv превысил время ожидания, принудительно завершаем процесс")
+                        process.kill()
+                        try:
+                            process.wait(timeout=5)
+                        except subprocess.TimeoutExpired:
+                            logger.error("Не удалось корректно завершить процесс unoconv")
+                        
                 except Exception as e:
                     logger.warning(f"Ошибка при работе с unoconv: {e}")
             
-            # Если unoconv не сработал, пробуем LibreOffice
+            # Если unoconv не сработал, пробуем LibreOffice с уникальным профилем, локами и ретраями
             if not success and ('libreoffice' in available_tools or 'soffice' in available_tools):
+                # Глобальная блокировка для сериализации конвертаций LibreOffice
+                lock_path = "/tmp/lo_convert.lock"
                 try:
-                    # Выбираем команду
-                    soffice_cmd = 'libreoffice' if 'libreoffice' in available_tools else 'soffice'
-                    
-                    cmd = [
-                        soffice_cmd,
-                        '--headless',
-                        '--convert-to', 'pdf',
-                        '--outdir', output_dir,
-                        docx_path
-                    ]
-                    
-                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-                    
-                    # LibreOffice создает PDF с именем исходного файла
-                    docx_basename = os.path.splitext(os.path.basename(docx_path))[0]
-                    generated_pdf = os.path.join(output_dir, f"{docx_basename}.pdf")
-                    
-                    if result.returncode == 0 and os.path.exists(generated_pdf):
-                        # Переименовываем в нужное имя если необходимо
-                        if generated_pdf != pdf_path:
-                            shutil.move(generated_pdf, pdf_path)
-                        
-                        logger.info(f"PDF создан с помощью {soffice_cmd}: {pdf_path}")
-                        success = True
-                    else:
-                        logger.warning(f"{soffice_cmd} завершился с ошибкой: {result.stderr}")
-                        
-                except subprocess.TimeoutExpired:
-                    logger.warning(f"{soffice_cmd} превысил время ожидания")
-                except Exception as e:
-                    logger.warning(f"Ошибка при работе с {soffice_cmd}: {e}")
+                    Path(lock_path).touch(exist_ok=True)
+                except Exception:
+                    pass
+
+                max_retries = 3
+                base_timeout = 60  # базовый таймаут (увеличивается с каждой попыткой)
+                wait_pdf_secs = 5  # ожидание стабилизации PDF
+
+                def _convert_with_lock():
+                    nonlocal success
+                    with open(lock_path, "w") as lockf:
+                        try:
+                            fcntl.flock(lockf.fileno(), fcntl.LOCK_EX)
+                        except Exception:
+                            # Если не удалось поставить лок, все равно пробуем (хуже, но не блокируемся)
+                            pass
+
+                        for attempt in range(1, max_retries + 1):
+                            profile_dir = Path(tempfile.gettempdir()) / f"lo_profile_{uuid.uuid4().hex}"
+                            profile_url = f"file://{profile_dir}"
+                            soffice_cmd = 'libreoffice' if 'libreoffice' in available_tools else 'soffice'
+                            try:
+                                profile_dir.mkdir(parents=True, exist_ok=True)
+
+                                cmd = [
+                                    soffice_cmd,
+                                    '--headless',
+                                    '--invisible',
+                                    '--nodefault',
+                                    '--nolockcheck',
+                                    '--nologo',
+                                    '--norestore',
+                                    f'-env:UserInstallation={profile_url}',
+                                    '--convert-to', 'pdf:writer_pdf_Export',
+                                    '--outdir', output_dir,
+                                    docx_path
+                                ]
+
+                                logger.debug(f"Запускаем команду LibreOffice (попытка {attempt}): {' '.join(cmd)}")
+
+                                env = os.environ.copy()
+                                env['HOME'] = '/tmp'
+                                env['TMPDIR'] = '/tmp'
+
+                                process = subprocess.Popen(
+                                    cmd,
+                                    stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE,
+                                    text=True,
+                                    env=env,
+                                    preexec_fn=os.setsid
+                                )
+
+                                timeout = base_timeout * attempt  # 60, 120, 180
+                                try:
+                                    stdout, stderr = process.communicate(timeout=timeout)
+                                except subprocess.TimeoutExpired:
+                                    logger.warning("LibreOffice превысил время ожидания, принудительно завершаем процесс")
+                                    try:
+                                        os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+                                        process.wait(timeout=5)
+                                    except Exception:
+                                        try:
+                                            os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+                                        except Exception:
+                                            pass
+                                    stdout, stderr = "", "timeout"
+
+                                returncode = process.returncode
+
+                                # LibreOffice создает PDF с именем исходного файла
+                                docx_basename = os.path.splitext(os.path.basename(docx_path))[0]
+                                generated_pdf = os.path.join(output_dir, f"{docx_basename}.pdf")
+
+                                if returncode == 0 and os.path.exists(generated_pdf):
+                                    # Ждем стабилизации размера PDF
+                                    prev_size = -1
+                                    stable = False
+                                    for _ in range(wait_pdf_secs):
+                                        try:
+                                            size = os.path.getsize(generated_pdf)
+                                        except OSError:
+                                            size = -1
+                                        if size > 0 and size == prev_size:
+                                            stable = True
+                                            break
+                                        prev_size = size
+                                        time.sleep(1)
+
+                                    if stable:
+                                        if generated_pdf != pdf_path:
+                                            shutil.move(generated_pdf, pdf_path)
+                                        logger.info(f"PDF создан с помощью {soffice_cmd}: {pdf_path}")
+                                        success = True
+                                        break
+                                    else:
+                                        logger.warning("PDF файл не стабилен по размеру, повторяем попытку")
+                                else:
+                                    err_tail = (stderr or "").strip() if isinstance(stderr, str) else ""
+                                    logger.warning(f"{soffice_cmd} завершился с кодом {returncode}, ошибка: {err_tail}")
+
+                                # Бэкофф перед следующей попыткой
+                                time.sleep(2 * attempt)
+
+                            except Exception as e:
+                                logger.warning(f"Ошибка при работе с {soffice_cmd} (попытка {attempt}): {e}")
+                            finally:
+                                # Чистка временного профиля
+                                try:
+                                    shutil.rmtree(profile_dir, ignore_errors=True)
+                                except Exception:
+                                    pass
+
+                        try:
+                            fcntl.flock(lockf.fileno(), fcntl.LOCK_UN)
+                        except Exception:
+                            pass
+
+                _convert_with_lock()
             
             if success and os.path.exists(pdf_path):
                 logger.info(f"PDF отчет успешно создан: {pdf_path}")
@@ -997,13 +1180,18 @@ class PorosityReportGenerator:
             reports['docx'] = docx_path
             logger.info(f"DOCX отчет создан: {docx_path}")
             
-            # Конвертируем DOCX в PDF
+            # Конвертируем DOCX в PDF с дополнительной защитой от зависания
             pdf_path = os.path.join(reports_dir, f'porosity_report_{timestamp}.pdf')
-            if self.convert_docx_to_pdf(docx_path, pdf_path):
-                reports['pdf'] = pdf_path
-                logger.info(f"PDF отчет создан конвертацией из DOCX: {pdf_path}")
-            else:
-                logger.warning(f"Не удалось конвертировать DOCX в PDF: {pdf_path}")
+            try:
+                # Пытаемся создать PDF, но не блокируемся на долго
+                if self.convert_docx_to_pdf(docx_path, pdf_path):
+                    reports['pdf'] = pdf_path
+                    logger.info(f"PDF отчет создан конвертацией из DOCX: {pdf_path}")
+                else:
+                    logger.warning(f"Не удалось конвертировать DOCX в PDF: {pdf_path}")
+            except Exception as pdf_error:
+                logger.error(f"Ошибка при создании PDF отчета: {pdf_error}")
+                # Продолжаем работу, так как DOCX уже создан
         else:
             logger.error(f"Не удалось создать DOCX отчет: {docx_path}")
         

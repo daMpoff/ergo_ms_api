@@ -29,7 +29,8 @@ from src.modules.impuls_analysis.serializers import (
     ImpulsFileUploadSerializer,
     ImpulsMultipleFileUploadSerializer,
     ImpulsAnalysisBulkDownloadSerializer,
-    ImpulsAnalysisBulkDeleteSerializer
+    ImpulsAnalysisBulkDeleteSerializer,
+    ImpulsAnalysisBulkDeleteByNumbersSerializer
 )
 from src.modules.impuls_analysis.tasks import create_analysis_by_protocol, import_impuls_excel
 
@@ -368,6 +369,42 @@ class ImpulsAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
                 logger.error(f'Ошибка при массовом удалении анализов: {str(e)}')
                 return Response(
                     {'success': False, 'error': f'Ошибка при массовом удалении: {str(e)}'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+        else:
+            return Response({
+                'success': False,
+                'errors': serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['post'])
+    def bulk_delete_by_numbers(self, request):
+        """Массовое удаление анализов по номерам (диапазоны и списки). Удаляет только анализы текущего пользователя."""
+        serializer = ImpulsAnalysisBulkDeleteByNumbersSerializer(data=request.data)
+        if serializer.is_valid():
+            numbers = serializer.validated_data.get('parsed_numbers', [])
+            try:
+                analyses = ImpulsAnalysis.objects.filter(number__in=numbers, user=request.user)
+                total_requested = len(numbers)
+                deleted_count = 0
+                for analysis in analyses:
+                    try:
+                        analysis.delete()
+                        deleted_count += 1
+                        logger.info(f'Удален анализ {analysis.id} (номер {analysis.number}) пользователем {request.user.id}')
+                    except Exception as e:
+                        logger.error(f'Ошибка при удалении анализа {analysis.id}: {str(e)}')
+
+                return Response({
+                    'success': True,
+                    'message': f'Удалено {deleted_count} анализов из {total_requested} запрошенных номеров',
+                    'deleted_count': deleted_count,
+                    'total_requested': total_requested
+                }, status=status.HTTP_200_OK)
+            except Exception as e:
+                logger.error(f'Ошибка при массовом удалении по номерам: {str(e)}')
+                return Response(
+                    {'success': False, 'error': f'Ошибка при массовом удалении по номерам: {str(e)}'},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
         else:

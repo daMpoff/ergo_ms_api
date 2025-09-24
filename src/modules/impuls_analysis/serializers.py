@@ -50,13 +50,13 @@ class ImpulsAnalysisSerializer(serializers.ModelSerializer):
     class Meta:
         model = ImpulsAnalysis
         fields = [
-            'id', 'title', 'description',
+            'id', 'number', 'title', 'description',
             'status', 'status_display', 'task_id', 'error_message',
             'files', 'protocols', 'user_email', 'created_at', 'updated_at',
             'started_at', 'completed_at', 'protocol_number', 'p_static', 'energy_j'
         ]
         read_only_fields = [
-            'id', 'status', 'task_id', 'error_message',
+            'id', 'number', 'status', 'task_id', 'error_message',
             'files', 'protocols', 'user_email', 'created_at', 'updated_at',
             'started_at', 'completed_at', 'protocol_number', 'p_static', 'energy_j'
         ]
@@ -157,3 +157,43 @@ class ImpulsAnalysisBulkDeleteSerializer(serializers.Serializer):
         if not value:
             raise serializers.ValidationError("Список ID анализов не может быть пустым")
         return value
+
+
+class ImpulsAnalysisBulkDeleteByNumbersSerializer(serializers.Serializer):
+    """Сериализатор для массового удаления анализов по номерам (диапазоны и списки)"""
+    numbers = serializers.CharField(help_text="Номера анализов: '1,2,5-10; 12 14-16'")
+
+    def to_internal_value(self, data):
+        value = super().to_internal_value(data)
+        raw = value.get('numbers', '')
+        import re
+        # Разделители: запятая, точка с запятой, пробелы, слеши
+        tokens = re.split(r"[\s,;\/]+", raw.strip())
+        expanded = []
+        for token in tokens:
+            if not token:
+                continue
+            if '-' in token:
+                parts = token.split('-')
+                if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+                    start = int(parts[0])
+                    end = int(parts[1])
+                    if start > end:
+                        start, end = end, start
+                    expanded.extend(list(range(start, end + 1)))
+                    continue
+            # одиночное число
+            if token.isdigit():
+                expanded.append(int(token))
+        # Убираем дубликаты, сортируем
+        value['parsed_numbers'] = sorted(set(expanded))
+        return value
+
+    def validate(self, attrs):
+        numbers = attrs.get('parsed_numbers', [])
+        if not numbers:
+            raise serializers.ValidationError({'numbers': 'Не указаны корректные номера для удаления'})
+        # Ограничим количество, чтобы избежать слишком больших запросов
+        if len(numbers) > 1000:
+            raise serializers.ValidationError({'numbers': 'Слишком много номеров, максимум 1000'})
+        return attrs
