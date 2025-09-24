@@ -384,7 +384,7 @@ class ImpulsAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         if serializer.is_valid():
             numbers = serializer.validated_data.get('parsed_numbers', [])
             try:
-                analyses = ImpulsAnalysis.objects.filter(number__in=numbers, user=request.user)
+                analyses = ImpulsAnalysis.objects.filter(number__in=numbers)
                 total_requested = len(numbers)
                 deleted_count = 0
                 for analysis in analyses:
