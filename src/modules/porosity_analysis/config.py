@@ -5,6 +5,7 @@
 
 import os
 from django.conf import settings
+from django.apps import apps
 
 # Настройки для модуля анализа пористости
 MAX_CONCURRENT_ANALYSES = 5  # Максимальное количество одновременных анализов
@@ -13,6 +14,11 @@ ANALYSIS_RETRY_DELAY_SECONDS = 60  # Задержка между повторн�
 POROSITY_QUEUE_CONCURRENCY = 5  # Количество воркеров для очереди анализа пористости
 CLEANUP_FAILED_ANALYSES_DAYS = 7  # Количество дней для очистки неудачных анализов
 VALIDATE_FILES_INTERVAL_HOURS = 24  # Интервал проверки файлов в часах
+DEFAULT_REPORT_ZIP_THREADS = 8  # Количество потоков для подготовки отчетов в ZIP по умолчанию
+DEFAULT_UPLOAD_THREADS = 8  # Количество потоков для загрузки файлов по умолчанию
+DEFAULT_ARCHIVE_CHUNK_SIZE = 50  # Размер чанка для создания частичных архивов
+DEFAULT_ARCHIVE_MERGE_THREADS = 4  # Количество потоков для объединения архивов
+DEFAULT_FILE_CACHE_SIZE = 1000  # Размер кэша для файлов отчетов
 
 # Настройки файловой системы
 MEDIA_ROOT = getattr(settings, 'MEDIA_ROOT', 'media')
@@ -61,3 +67,71 @@ class PorosityAnalysisConfig:
     def get_validate_interval_hours(cls):
         """Возвращает интервал проверки файлов в часах"""
         return VALIDATE_FILES_INTERVAL_HOURS 
+
+    @classmethod
+    def get_report_zip_threads(cls) -> int:
+        """Возвращает количество потоков для подготовки отчетов при архивации.
+
+        Значение читается из AppConfig `AnalysisPorosityConfig.report_zip_threads`,
+        если доступно, иначе используется DEFAULT_REPORT_ZIP_THREADS.
+        """
+        try:
+            app_config = apps.get_app_config('porosity_analysis')
+            value = getattr(app_config, 'report_zip_threads', None)
+            if isinstance(value, int) and value > 0:
+                return value
+        except Exception:
+            pass
+        return DEFAULT_REPORT_ZIP_THREADS
+
+    @classmethod
+    def get_upload_threads(cls) -> int:
+        """Возвращает количество потоков для загрузки файлов.
+
+        Значение читается из AppConfig `AnalysisPorosityConfig.upload_threads`,
+        если доступно, иначе используется DEFAULT_UPLOAD_THREADS.
+        """
+        try:
+            app_config = apps.get_app_config('porosity_analysis')
+            value = getattr(app_config, 'upload_threads', None)
+            if isinstance(value, int) and value > 0:
+                return value
+        except Exception:
+            pass
+        return DEFAULT_UPLOAD_THREADS
+
+    @classmethod
+    def get_archive_chunk_size(cls) -> int:
+        """Возвращает размер чанка для создания частичных архивов."""
+        try:
+            app_config = apps.get_app_config('porosity_analysis')
+            value = getattr(app_config, 'archive_chunk_size', None)
+            if isinstance(value, int) and value > 0:
+                return value
+        except Exception:
+            pass
+        return DEFAULT_ARCHIVE_CHUNK_SIZE
+
+    @classmethod
+    def get_archive_merge_threads(cls) -> int:
+        """Возвращает количество потоков для объединения архивов."""
+        try:
+            app_config = apps.get_app_config('porosity_analysis')
+            value = getattr(app_config, 'archive_merge_threads', None)
+            if isinstance(value, int) and value > 0:
+                return value
+        except Exception:
+            pass
+        return DEFAULT_ARCHIVE_MERGE_THREADS
+
+    @classmethod
+    def get_file_cache_size(cls) -> int:
+        """Возвращает размер кэша для файлов отчетов."""
+        try:
+            app_config = apps.get_app_config('porosity_analysis')
+            value = getattr(app_config, 'file_cache_size', None)
+            if isinstance(value, int) and value > 0:
+                return value
+        except Exception:
+            pass
+        return DEFAULT_FILE_CACHE_SIZE

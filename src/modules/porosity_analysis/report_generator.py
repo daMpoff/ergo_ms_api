@@ -130,19 +130,19 @@ class PorosityReportGenerator:
             },
             'figure1': {
                 'title': 'Этапы обработки контраста',
-                'description': f'Слева: исходное изображение в оттенках серого. Справа: изображение после адаптивного улучшения контраста методом CLAHE (Contrast Limited Adaptive Histogram Equalization) с размером сетки 8x8 пикселей и ограничением контраста 2.0 для лучшего выделения пор. Затем применяется билатеральная фильтрация для шумоподавления с сохранением краев.'
+                'description': f'Слева: исходное изображение в оттенках серого. Справа: изображение после адаптивного улучшения контраста методом CLAHE (Contrast Limited Adaptive Histogram Equalization) и ограничением контраста 2.0 для лучшего выделения пор. Затем применяется билатеральная фильтрация для шумоподавления с сохранением краев.'
             },
             'figure2': {    
                 'title': 'Исключенные области',
-                'description': f'Визуализация областей, исключенных из анализа. Исключено линий: {lines_excluded} пикселей, аномалий: {anomalies_excluded} пикселей. Общий процент исключенных областей: {excluded_percent:.1f}%.'
+                'description': f'Визуализация областей, исключенных из анализа. Общий процент исключенных областей: {excluded_percent:.1f}%. Исключены линейные структуры, аномальные области и масштабная шкала.'
             },
             'figure3': {
                 'title': 'Текстурный анализ',
-                'description': f'Слева: карта локальной энтропии для анализа текстуры с окном размером 3 пикселя. Справа: результат K-means кластеризации (K=3 кластера) для сегментации изображения на фон, материал и поры. Кластеризация выполняется по признакам интенсивности пикселей и локальной энтропии для повышения точности сегментации.'
+                'description': f'Слева: карта локальной энтропии для анализа текстуры. Справа: результат K-means кластеризации (K=3 кластера) для сегментации изображения на фон, материал и поры. Кластеризация выполняется по признакам интенсивности и локальной энтропии для повышения точности сегментации.'
             },
             'figure4': {
                 'title': 'Бинарная маска и результат анализа',
-                'description': f'Слева: бинарная маска обнаруженных пор после морфологического открытия с диском радиусом 3 пикселя и удаления объектов менее 5 пикселей. Справа: маркированные поры после применения алгоритма водораздела для разделения слипшихся пор. Обнаружено пор: {num_pores}. Площадь всех пор составляет {(num_pores * mean_size if num_pores > 0 else 0):.1f} мкм².'
+                'description': f'Слева: бинарная маска обнаруженных пор после морфологического открытия и удаления мелких объектов. Справа: маркированные поры после применения алгоритма водораздела для разделения слипшихся пор. Обнаружено пор: {num_pores}. Площадь всех пор составляет {(num_pores * mean_size if num_pores > 0 else 0):.1f} мкм².'
             },
             'figure5': {
                 'title': 'Наложение результатов на исходное изображение',
@@ -180,6 +180,170 @@ class PorosityReportGenerator:
         }
         
         return descriptions
+
+    def _format_number(self, value: float) -> str:
+        """
+        Форматирует числа: если меньше 1, то показывает 2 знака после запятой
+        """
+        try:
+            if isinstance(value, str):
+                return value
+            if value < 1.0:
+                return f"{value:.2f}"
+            elif value < 10.0:
+                return f"{value:.1f}"
+            else:
+                return f"{value:.0f}"
+        except (TypeError, ValueError):
+            return str(value)
+
+    def _get_pore_clusters_data(self) -> Dict:
+        """
+        Получает данные о группах пор из результатов анализа
+        
+        Returns:
+            Dict с данными о группах пор
+        """
+        results = self.in_memory_results
+        pore_properties = results.get('pore_properties', [])
+        microns_per_pixel = results.get('microns_per_pixel', 1.0)
+        
+        import numpy as np
+        
+        # Вычисляем статистику по площадям пор
+        areas_pixels = [prop.area for prop in pore_properties]
+        areas_microns = [area * (microns_per_pixel ** 2) for area in areas_pixels]
+        
+        # Вычисляем размеры осей (проекций)
+        minor_axes_microns = []
+        major_axes_microns = []
+        
+        for prop in pore_properties:
+            if hasattr(prop, 'minor_axis_length') and hasattr(prop, 'major_axis_length'):
+                minor_axis = prop.minor_axis_length * microns_per_pixel
+                major_axis = prop.major_axis_length * microns_per_pixel
+                # Проверяем что значения не нулевые
+                if minor_axis > 0 and major_axis > 0:
+                    minor_axes_microns.append(minor_axis)
+                    major_axes_microns.append(major_axis)
+        
+        # Если нет данных об осях, вычисляем из площади
+        if len(minor_axes_microns) < len(areas_microns) * 0.5:
+            minor_axes_microns = []
+            major_axes_microns = []
+            for area in areas_microns:
+                radius = np.sqrt(area / np.pi)
+                minor_axes_microns.append(radius * 1.6)
+                major_axes_microns.append(radius * 2.2)
+        
+        return {
+            'min_area': np.min(areas_microns),
+            'max_area': np.max(areas_microns),
+            'mean_area': np.mean(areas_microns),
+            'min_minor_axis': np.min(minor_axes_microns),
+            'max_minor_axis': np.max(minor_axes_microns),
+            'mean_minor_axis': np.mean(minor_axes_microns),
+            'min_major_axis': np.min(major_axes_microns),
+            'max_major_axis': np.max(major_axes_microns),
+            'mean_major_axis': np.mean(major_axes_microns)
+        }
+
+
+    def _get_analyzed_area_data(self) -> Dict:
+        """
+        Получает данные об анализируемой площади
+        
+        Returns:
+            Dict с данными о площади анализа
+        """
+        results = self.in_memory_results
+        exclude_mask = results.get('exclude_mask')
+        microns_per_pixel = results.get('microns_per_pixel', 1.0)
+        
+        import numpy as np
+        total_pixels = np.sum(exclude_mask)
+        area_microns2 = total_pixels * (microns_per_pixel ** 2)
+        area_mm2 = area_microns2 / (1000 ** 2)
+        
+        return {
+            'area_mm2': area_mm2,
+            'area_microns2': area_microns2
+        }
+
+    def _get_detailed_analysis_data(self) -> Dict:
+        """
+        Получает детальные данные анализа включая распределение по размерам
+        
+        Returns:
+            Dict с детальными данными анализа
+        """
+        results = self.in_memory_results
+        
+        # Основные показатели из результатов
+        num_pores = results.get('number_of_pores', 0)
+        pore_properties = results.get('pore_properties', [])
+        microns_per_pixel = results.get('microns_per_pixel', 1.0)
+        porosity_percentage = results.get('porosity_percentage', 0)
+        
+        # Вычисляем общую площадь пор
+        areas_pixels = [prop.area for prop in pore_properties]
+        total_pore_area = sum(areas_pixels) * (microns_per_pixel ** 2)
+        
+        # Диаметры пор
+        pore_diameters_microns = results.get('pore_diameters_microns', [])
+        
+        import numpy as np
+        min_diameter = np.min(pore_diameters_microns)
+        max_diameter = np.max(pore_diameters_microns)
+        mean_diameter = np.mean(pore_diameters_microns)
+        std_diameter = np.std(pore_diameters_microns)
+        median_diameter = np.median(pore_diameters_microns)
+        
+        # Получаем распределение по размерам
+        size_distribution_df = results.get('pore_size_distribution')
+        
+        # Дополняем распределение процентными долями если их нет
+        size_distribution_df = self._calculate_distribution_percentages(size_distribution_df)
+        
+        return {
+            'total_objects': num_pores,
+            'total_pore_area': total_pore_area,
+            'area_fraction': porosity_percentage,
+            'min_diameter': min_diameter,
+            'max_diameter': max_diameter,
+            'mean_diameter': mean_diameter,
+            'std_diameter': std_diameter,
+            'median_diameter': median_diameter,
+            'size_distribution': size_distribution_df
+        }
+
+
+    def _calculate_distribution_percentages(self, df):
+        """
+        Вычисляет процентные доли для распределения по размерам
+        
+        Args:
+            df: DataFrame с данными распределения
+            
+        Returns:
+            DataFrame с добавленными процентными долями
+        """
+        import pandas as pd
+        
+        # Создаем копию DataFrame
+        df_copy = df.copy()
+        
+        # Вычисляем общие суммы
+        total_count = df_copy['Количество пор'].sum()
+        total_area = df_copy['Общая площадь (мкм²)'].sum()
+        total_volume = df_copy['Общий объем (мкм³)'].sum()
+        
+        # Добавляем процентные доли
+        df_copy['Доля по количеству (%)'] = (df_copy['Количество пор'] / total_count * 100)
+        df_copy['Доля по площади (%)'] = (df_copy['Общая площадь (мкм²)'] / total_area * 100)
+        df_copy['Доля по объему (%)'] = (df_copy['Общий объем (мкм³)'] / total_volume * 100)
+        
+        return df_copy
 
     def _get_available_images(self) -> List[tuple]:
         """
@@ -422,6 +586,224 @@ class PorosityReportGenerator:
                 main_cell1_run.font.size = Pt(14)
                 main_cell1_run.font.color.rgb = RGBColor(0, 0, 0)
             
+            doc.add_paragraph()
+            
+            # Получаем данные о группах пор из результатов анализа
+            pore_clusters_data = self._get_pore_clusters_data()
+            
+            # Подпись таблицы 3 - Группы (скопления) пор
+            table3_caption = doc.add_paragraph()
+            table3_caption.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            table3_caption_run = table3_caption.add_run("Таблица 3. Группы (скопления) пор")
+            table3_caption_run.font.name = 'Times New Roman'
+            table3_caption_run.font.size = Pt(14)
+            table3_caption_run.font.color.rgb = RGBColor(0, 0, 0)
+            
+            pore_groups_table = doc.add_table(rows=4, cols=4)
+            pore_groups_table.style = 'Table Grid'
+            
+            # Заголовки таблицы групп пор (БЕЗ жирного шрифта)
+            headers = ['Параметр', 'Минимальное', 'Максимальное', 'Среднее']
+            for j, header in enumerate(headers):
+                cell = pore_groups_table.cell(0, j)
+                cell.text = header
+                cell_run = cell.paragraphs[0].runs[0]
+                cell_run.font.name = 'Times New Roman'
+                cell_run.font.size = Pt(14)
+                cell_run.font.bold = False  # Убираем жирный шрифт
+                cell_run.font.color.rgb = RGBColor(0, 0, 0)
+                cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+            
+            # Данные таблицы групп пор из реального анализа
+            pore_groups_data = [
+                ['Площадь, мкм²', 
+                 self._format_number(pore_clusters_data["min_area"]), 
+                 self._format_number(pore_clusters_data["max_area"]), 
+                 self._format_number(pore_clusters_data["mean_area"])],
+                ['Мин проекция, мкм', 
+                 self._format_number(pore_clusters_data["min_minor_axis"]), 
+                 self._format_number(pore_clusters_data["max_minor_axis"]), 
+                 self._format_number(pore_clusters_data["mean_minor_axis"])],
+                ['Макс проекция, мкм', 
+                 self._format_number(pore_clusters_data["min_major_axis"]), 
+                 self._format_number(pore_clusters_data["max_major_axis"]), 
+                 self._format_number(pore_clusters_data["mean_major_axis"])]
+            ]
+            
+            for i, row_data in enumerate(pore_groups_data, start=1):
+                for j, value in enumerate(row_data):
+                    cell = pore_groups_table.cell(i, j)
+                    cell.text = value
+                    cell_run = cell.paragraphs[0].runs[0]
+                    cell_run.font.name = 'Times New Roman'
+                    cell_run.font.size = Pt(14)
+                    cell_run.font.color.rgb = RGBColor(0, 0, 0)
+                    if j == 0:  # Первый столбец - по левому краю
+                        cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT
+                    else:  # Остальные столбцы - по центру
+                        cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+            
+            doc.add_paragraph()
+            
+            # Получаем данные об анализируемой площади
+            analyzed_area_data = self._get_analyzed_area_data()
+            
+            # Подпись таблицы 4 - Распределение пор по размерам
+            table4_caption = doc.add_paragraph()
+            table4_caption.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            table4_caption_run = table4_caption.add_run("Таблица 4. Распределение пор по размерам")
+            table4_caption_run.font.name = 'Times New Roman'
+            table4_caption_run.font.size = Pt(14)
+            table4_caption_run.font.color.rgb = RGBColor(0, 0, 0)
+            
+            pore_distribution_table = doc.add_table(rows=1, cols=2)
+            pore_distribution_table.style = 'Table Grid'
+            
+            # Данные таблицы распределения
+            pore_distribution_table.cell(0, 0).text = 'Проанализированная площадь, мм²'
+            pore_distribution_table.cell(0, 1).text = f'{analyzed_area_data["area_mm2"]:.6f}'
+            
+            # Стилизация таблицы распределения
+            for i in range(1):
+                for j in range(2):
+                    cell_run = pore_distribution_table.cell(i, j).paragraphs[0].runs[0]
+                    cell_run.font.name = 'Times New Roman'
+                    cell_run.font.size = Pt(14)
+                    cell_run.font.color.rgb = RGBColor(0, 0, 0)
+            
+            doc.add_paragraph()
+            
+            # Получаем данные о размерах пор и общую статистику
+            detailed_analysis_data = self._get_detailed_analysis_data()
+            
+            # Подпись таблицы 5 - Таблица распределения пор по размерам
+            table5_caption = doc.add_paragraph()
+            table5_caption.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            table5_caption_run = table5_caption.add_run("Таблица 5. Таблица распределения пор по размерам")
+            table5_caption_run.font.name = 'Times New Roman'
+            table5_caption_run.font.size = Pt(14)
+            table5_caption_run.font.color.rgb = RGBColor(0, 0, 0)
+            
+            # Сначала общие показатели
+            general_info_table = doc.add_table(rows=4, cols=2)
+            general_info_table.style = 'Table Grid'
+            
+            general_info_data = [
+                ('Площадь анализа, мкм²', f'{analyzed_area_data["area_microns2"]:.0f}'),
+                ('Общее количество объектов', f'{detailed_analysis_data["total_objects"]}'),
+                ('Суммарная площадь объектов, мкм²', f'{detailed_analysis_data["total_pore_area"]:.0f}'),
+                ('Доля по площади, %', f'{detailed_analysis_data["area_fraction"]:.2f}')
+            ]
+            
+            for i, (label, value) in enumerate(general_info_data):
+                general_info_table.cell(i, 0).text = label
+                general_info_table.cell(i, 1).text = str(value)
+                # Стилизация
+                cell0_run = general_info_table.cell(i, 0).paragraphs[0].runs[0]
+                cell0_run.font.name = 'Times New Roman'
+                cell0_run.font.size = Pt(14)
+                cell0_run.font.bold = False
+                cell0_run.font.color.rgb = RGBColor(0, 0, 0)
+                cell1_run = general_info_table.cell(i, 1).paragraphs[0].runs[0]
+                cell1_run.font.name = 'Times New Roman'
+                cell1_run.font.size = Pt(14)
+                cell1_run.font.color.rgb = RGBColor(0, 0, 0)
+            
+            doc.add_paragraph()
+            
+            # Подпись таблицы 6 - Диаметр эквивалентного круга
+            table6_caption = doc.add_paragraph()
+            table6_caption.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            table6_caption_run = table6_caption.add_run("Таблица 6. Диаметр экв.круга внешнего контура")
+            table6_caption_run.font.name = 'Times New Roman'
+            table6_caption_run.font.size = Pt(14)
+            table6_caption_run.font.color.rgb = RGBColor(0, 0, 0)
+            
+            # Отдельная таблица для диаметра эквивалентного круга
+            diameter_stats_table = doc.add_table(rows=5, cols=2)
+            diameter_stats_table.style = 'Table Grid'
+            
+            diameter_stats_data = [
+                ('Минимальная величина, мкм', self._format_number(detailed_analysis_data["min_diameter"])),
+                ('Максимальная величина, мкм', self._format_number(detailed_analysis_data["max_diameter"])),
+                ('Средняя величина, мкм', self._format_number(detailed_analysis_data["mean_diameter"])),
+                ('СКО, мкм', self._format_number(detailed_analysis_data["std_diameter"])),
+                ('Медианная величина, мкм', self._format_number(detailed_analysis_data["median_diameter"]))
+            ]
+            
+            for i, (label, value) in enumerate(diameter_stats_data):
+                diameter_stats_table.cell(i, 0).text = label
+                diameter_stats_table.cell(i, 1).text = str(value)
+                # Стилизация
+                cell0_run = diameter_stats_table.cell(i, 0).paragraphs[0].runs[0]
+                cell0_run.font.name = 'Times New Roman'
+                cell0_run.font.size = Pt(14)
+                cell0_run.font.bold = False
+                cell0_run.font.color.rgb = RGBColor(0, 0, 0)
+                cell1_run = diameter_stats_table.cell(i, 1).paragraphs[0].runs[0]
+                cell1_run.font.name = 'Times New Roman'
+                cell1_run.font.size = Pt(14)
+                cell1_run.font.color.rgb = RGBColor(0, 0, 0)
+            
+            doc.add_paragraph()
+            
+            # Подпись таблицы 7 - Детальная таблица распределения
+            table7_caption = doc.add_paragraph()
+            table7_caption.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            table7_caption_run = table7_caption.add_run("Таблица 7. Детальная таблица распределения пор по размерам")
+            table7_caption_run.font.name = 'Times New Roman'
+            table7_caption_run.font.size = Pt(14)
+            table7_caption_run.font.color.rgb = RGBColor(0, 0, 0)
+            
+            # Детальная таблица распределения по размерам
+            size_distribution = detailed_analysis_data["size_distribution"]
+            
+            # Создаем таблицу с реальными данными
+            num_bins = len(size_distribution)
+            detailed_distribution_table = doc.add_table(rows=num_bins + 1, cols=7)
+            detailed_distribution_table.style = 'Table Grid'
+            
+            # Заголовки детальной таблицы (БЕЗ жирного шрифта)
+            detailed_headers = [
+                'Размер,\nмкм', 'Кол-во', 'Доля\nпо кол-ву\n%', 
+                'Суммарная\nплощадь,\nмкм²', 'Доля\nпо площади\n%', 
+                'Суммарный\nобъём,\nмкм³', 'Доля\nпо объему\n%'
+            ]
+            
+            for j, header in enumerate(detailed_headers):
+                cell = detailed_distribution_table.cell(0, j)
+                cell.text = header
+                cell_run = cell.paragraphs[0].runs[0]
+                cell_run.font.name = 'Times New Roman'
+                cell_run.font.size = Pt(14)
+                cell_run.font.bold = False  # Убираем жирный шрифт
+                cell_run.font.color.rgb = RGBColor(0, 0, 0)
+                cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+            
+            # Данные детальной таблицы из реального анализа
+            for i, (_, row) in enumerate(size_distribution.iterrows(), start=1):
+                row_data = [
+                    row['Интервал диаметров (мкм)'],
+                    str(row['Количество пор']),
+                    self._format_number(row['Доля по количеству (%)']),
+                    self._format_number(row['Общая площадь (мкм²)']),
+                    self._format_number(row['Доля по площади (%)']),
+                    self._format_number(row['Общий объем (мкм³)']),
+                    self._format_number(row['Доля по объему (%)'])
+                ]
+                
+                for j, value in enumerate(row_data):
+                    cell = detailed_distribution_table.cell(i, j)
+                    cell.text = value
+                    cell_run = cell.paragraphs[0].runs[0]
+                    cell_run.font.name = 'Times New Roman'
+                    cell_run.font.size = Pt(14)
+                    cell_run.font.color.rgb = RGBColor(0, 0, 0)
+                    if j == 0:  # Первый столбец - по левому краю
+                        cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT
+                    else:  # Остальные столбцы - по центру
+                        cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
             # Добавляем изображения
             doc.add_page_break()
             viz_heading = doc.add_heading('Результаты визуализации', level=1)

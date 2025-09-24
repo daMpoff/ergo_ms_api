@@ -15,6 +15,7 @@ import zipfile
 import io
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Настраиваем логгер
 logger = logging.getLogger('celery.task.porosity_analysis')
@@ -462,6 +463,22 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
             'success_rate': (completed / total * 100) if total > 0 else 0
         })
     
+    @action(detail=False, methods=['get'])
+    def upload_config(self, request):
+        """Получение конфигурации загрузки файлов"""
+        try:
+            upload_threads = PorosityAnalysisConfig.get_upload_threads()
+            return Response({
+                'upload_threads': upload_threads,
+                'max_concurrent_uploads': upload_threads
+            })
+        except Exception as e:
+            logger.error(f"Ошибка при получении конфигурации загрузки: {e}")
+            return Response({
+                'upload_threads': 8,  # Значение по умолчанию
+                'max_concurrent_uploads': 8
+            })
+    
     @action(detail=False, methods=['post'])
     def restart_multiple(self, request):
         """Массовый перезапуск анализов"""
@@ -556,9 +573,115 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
     
     # Убран эндпоинт limits, так как ограничения сняты
     
+    def _prepare_report_file_cached(self, analysis, report_type, file_cache):
+        """Подготовка файла отчета с использованием кэша"""
+        cache_key = f"{analysis.id}_{report_type}"
+        
+        # Проверяем кэш
+        if cache_key in file_cache:
+            cached_file = file_cache[cache_key]
+            if os.path.exists(cached_file) and os.path.getsize(cached_file) > 0:
+                return cached_file, None
+        
+        try:
+            # Ищем существующий файл отчета
+            reports_dir = os.path.join(analysis.results_directory, 'reports')
+            report_file = None
+            
+            if os.path.exists(reports_dir):
+                for filename in os.listdir(reports_dir):
+                    if filename.endswith(f'.{report_type}'):
+                        report_file = os.path.join(reports_dir, filename)
+                        break
+            
+            # Если файл не найден, генерируем новый
+            if not report_file or not os.path.exists(report_file):
+                from .report_generator import PorosityReportGenerator
+                report_generator = PorosityReportGenerator(analysis)
+                report_file = report_generator.generate_single_report(report_type)
+            
+            # Проверяем валидность файла
+            if not report_file or not os.path.exists(report_file) or os.path.getsize(report_file) == 0:
+                return None, f"Анализ {analysis.id}: не удалось подготовить отчет типа {report_type}"
+            
+            # Кэшируем файл
+            file_cache[cache_key] = report_file
+            return report_file, None
+            
+        except Exception as e:
+            return None, f"Анализ {analysis.id}: {str(e)}"
+
+    def _create_partial_archive(self, analyses_chunk, report_type, file_cache):
+        """Создание частичного архива для группы анализов"""
+        try:
+            archive_buffer = io.BytesIO()
+            successful_reports = 0
+            failed_reports = []
+            
+            with zipfile.ZipFile(archive_buffer, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as zip_file:
+                for analysis in analyses_chunk:
+                    try:
+                        report_file, error = self._prepare_report_file_cached(analysis, report_type, file_cache)
+                        
+                        if error:
+                            failed_reports.append(error)
+                            continue
+                        
+                        # Создаем безопасное имя файла
+                        safe_name = re.sub(r'[^\w\s-]', '', analysis.name.strip()[:50])
+                        if not safe_name:
+                            safe_name = f"analysis_{analysis.id}"
+                        archive_filename = f"{safe_name}_{analysis.created_at.strftime('%Y%m%d')}.{report_type}"
+                        
+                        # Добавляем файл в архив
+                        zip_file.write(report_file, archive_filename)
+                        successful_reports += 1
+                        
+                    except Exception as e:
+                        failed_reports.append(f"Анализ {analysis.id}: {str(e)}")
+            
+            archive_buffer.seek(0)
+            return archive_buffer.getvalue(), successful_reports, failed_reports
+            
+        except Exception as e:
+            return None, 0, [f"Ошибка создания частичного архива: {str(e)}"]
+
+    def _merge_archives_fast(self, archive_parts, info_content=None):
+        """Быстрое объединение частичных архивов"""
+        try:
+            final_buffer = io.BytesIO()
+            
+            with zipfile.ZipFile(final_buffer, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as final_zip:
+                # Добавляем информационный файл, если есть
+                if info_content:
+                    final_zip.writestr('ИНФОРМАЦИЯ_О_ЗАПРОСЕ.txt', info_content.encode('utf-8'))
+                
+                # Объединяем все частичные архивы
+                for i, archive_data in enumerate(archive_parts):
+                    if archive_data is None:
+                        continue
+                        
+                    with zipfile.ZipFile(io.BytesIO(archive_data), 'r') as partial_zip:
+                        for file_info in partial_zip.infolist():
+                            # Читаем данные файла
+                            file_data = partial_zip.read(file_info.filename)
+                            # Добавляем в финальный архив с префиксом для избежания конфликтов
+                            final_filename = f"part_{i+1}/{file_info.filename}"
+                            final_zip.writestr(final_filename, file_data)
+            
+            final_buffer.seek(0)
+            return final_buffer.getvalue()
+            
+        except Exception as e:
+            logger.error(f"Ошибка объединения архивов: {e}")
+            return None
+
     @action(detail=False, methods=['post'])
     def download_multiple_reports(self, request):
-        """Скачивание архива отчетов по нескольким анализам.
+        """Оптимизированное скачивание архива отчетов по нескольким анализам.
+        
+        Использует многопоточную подготовку файлов, кэширование и создание частичных архивов
+        для максимальной скорости обработки больших объемов данных.
         
         Тело запроса может содержать:
         - analysis_ids | ids: массив чисел
@@ -585,7 +708,6 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
             
             # Парсим ID из строки (поддерживаем тире для диапазонов)
             if isinstance(input_text, str) and input_text.strip():
-                import re
                 # Сначала обрабатываем диапазоны (например, "1-5")
                 parts = re.split(r'[,;\s]+', input_text.strip())
                 for part in parts:
@@ -610,7 +732,6 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
                     'error': 'Не указаны валидные номера анализов'
                 }, status=status.HTTP_400_BAD_REQUEST)
 
-            # Ограничения по количеству анализов сняты для архива отчетов
             # Логируем большие запросы для мониторинга нагрузки
             if len(parsed_ids) > 100:
                 logger.info(f"Большой запрос архива отчетов: {len(parsed_ids)} анализов, тип: {report_type}")
@@ -624,11 +745,9 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
             
             # Если нет ни одного завершенного анализа, создаем пустой архив с информацией
             if not analyses:
-                # Создаем пустой архив с информационным файлом
                 archive_buffer = io.BytesIO()
                 
                 with zipfile.ZipFile(archive_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                    # Добавляем информационный файл
                     info_content = f"""Информация о запросе архива отчетов
 
 Запрошенные номера анализов: {', '.join(map(str, parsed_ids))}
@@ -647,11 +766,9 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
 """
                     zip_file.writestr('ИНФОРМАЦИЯ.txt', info_content.encode('utf-8'))
                 
-                # Подготавливаем архив для скачивания
                 archive_buffer.seek(0)
                 archive_content = archive_buffer.getvalue()
                 
-                # Формируем имя архива
                 timestamp = timezone.now().strftime('%Y%m%d_%H%M%S')
                 archive_filename = f"porosity_reports_empty_{report_type}_{timestamp}.zip"
                 
@@ -659,25 +776,37 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
                 response['Content-Disposition'] = f'attachment; filename="{archive_filename}"'
                 response['Content-Length'] = len(archive_content)
                 
-                # Добавляем информационные заголовки
                 response['X-Reports-Count'] = '0'
                 response['X-Failed-Count'] = '0'
                 response['X-Not-Found'] = ','.join(map(str, not_found))
                 
                 logger.info(f"Создан пустой архив: не найдено анализов по номерам {parsed_ids}")
-                
                 return response
 
-            # Создаем временный архив
-            archive_buffer = io.BytesIO()
+            # ОПТИМИЗИРОВАННАЯ ОБРАБОТКА
+            from src.modules.porosity_analysis.config import PorosityAnalysisConfig
             
-            with zipfile.ZipFile(archive_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                successful_reports = 0
-                failed_reports = []
+            # Инициализируем кэш файлов
+            file_cache = {}
+            cache_size_limit = PorosityAnalysisConfig.get_file_cache_size()
+            
+            # Определяем стратегию обработки в зависимости от количества анализов
+            chunk_size = PorosityAnalysisConfig.get_archive_chunk_size()
+            merge_threads = PorosityAnalysisConfig.get_archive_merge_threads()
+            
+            total_analyses = len(analyses)
+            successful_reports = 0
+            failed_reports = []
+            
+            # Для небольших объемов используем простую обработку
+            if total_analyses <= chunk_size:
+                logger.info(f"Обработка {total_analyses} анализов в одном потоке")
                 
-                # Добавляем информационный файл, если есть не найденные анализы
-                if not_found:
-                    info_content = f"""Информация о запросе архива отчетов
+                archive_buffer = io.BytesIO()
+                with zipfile.ZipFile(archive_buffer, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as zip_file:
+                    # Добавляем информационный файл, если есть не найденные анализы
+                    if not_found:
+                        info_content = f"""Информация о запросе архива отчетов
 
 Запрошенные номера анализов: {', '.join(map(str, parsed_ids))}
 Найдено завершенных анализов: {len(existing_ids)} из {len(parsed_ids)}
@@ -697,59 +826,102 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
 
 Проверьте статус анализов в интерфейсе системы.
 """
-                    zip_file.writestr('ИНФОРМАЦИЯ_О_ЗАПРОСЕ.txt', info_content.encode('utf-8'))
-                
-                for analysis in analyses:
-                    try:
-                        # Путь к директории отчетов
-                        reports_dir = os.path.join(analysis.results_directory, 'reports')
-                        
-                        # Ищем уже существующий файл нужного типа
-                        report_file = None
-                        if os.path.exists(reports_dir):
-                            for filename in os.listdir(reports_dir):
-                                if filename.endswith(f'.{report_type}'):
-                                    report_file = os.path.join(reports_dir, filename)
-                                    break
-                        
-                        # Если файл не найден, генерируем только нужный тип
-                        if not report_file or not os.path.exists(report_file):
-                            from .report_generator import PorosityReportGenerator
-                            report_generator = PorosityReportGenerator(analysis)
+                        zip_file.writestr('ИНФОРМАЦИЯ_О_ЗАПРОСЕ.txt', info_content.encode('utf-8'))
+                    
+                    # Обрабатываем анализы последовательно для небольших объемов
+                    for analysis in analyses:
+                        try:
+                            report_file, error = self._prepare_report_file_cached(analysis, report_type, file_cache)
                             
-                            # Генерируем только нужный тип отчета
-                            report_file = report_generator.generate_single_report(report_type)
-                            
-                            if not report_file or not os.path.exists(report_file):
-                                failed_reports.append(f"Анализ {analysis.id}: не удалось сгенерировать отчет типа {report_type}")
+                            if error:
+                                failed_reports.append(error)
                                 continue
-                        
-                        # Проверяем размер файла
-                        if os.path.getsize(report_file) == 0:
-                            failed_reports.append(f"Анализ {analysis.id}: пустой файл отчета")
-                            continue
-                        
-                        # Формируем имя файла в архиве
-                        safe_name = re.sub(r'[^\w\s-]', '', analysis.name.strip()[:50])
-                        if not safe_name:
-                            safe_name = f"analysis_{analysis.id}"
-                        
-                        archive_filename = f"{safe_name}_{analysis.created_at.strftime('%Y%m%d')}.{report_type}"
-                        
-                        # Добавляем файл в архив
-                        zip_file.write(report_file, archive_filename)
-                        successful_reports += 1
-                        
-                        logger.info(f"Добавлен отчет для анализа {analysis.id} в архив")
-                        
-                    except Exception as e:
-                        logger.error(f"Ошибка при добавлении отчета анализа {analysis.id}: {e}")
-                        failed_reports.append(f"Анализ {analysis.id}: {str(e)}")
+                            
+                            # Создаем безопасное имя файла
+                            safe_name = re.sub(r'[^\w\s-]', '', analysis.name.strip()[:50])
+                            if not safe_name:
+                                safe_name = f"analysis_{analysis.id}"
+                            archive_filename = f"{safe_name}_{analysis.created_at.strftime('%Y%m%d')}.{report_type}"
+                            
+                            # Добавляем файл в архив
+                            zip_file.write(report_file, archive_filename)
+                            successful_reports += 1
+                            
+                        except Exception as e:
+                            failed_reports.append(f"Анализ {analysis.id}: {str(e)}")
+                
+                archive_content = archive_buffer.getvalue()
+                
+            else:
+                # Для больших объемов используем многопоточную обработку с частичными архивами
+                logger.info(f"Обработка {total_analyses} анализов в {merge_threads} потоках с чанками по {chunk_size}")
+                
+                # Разбиваем анализы на чанки
+                analysis_chunks = [analyses[i:i + chunk_size] for i in range(0, total_analyses, chunk_size)]
+                
+                # Создаем частичные архивы в нескольких потоках
+                archive_parts = []
+                with ThreadPoolExecutor(max_workers=merge_threads) as executor:
+                    # Создаем задачи для каждого чанка
+                    future_to_chunk = {
+                        executor.submit(self._create_partial_archive, chunk, report_type, file_cache): i 
+                        for i, chunk in enumerate(analysis_chunks)
+                    }
+                    
+                    # Собираем результаты
+                    for future in as_completed(future_to_chunk):
+                        chunk_index = future_to_chunk[future]
+                        try:
+                            archive_data, chunk_successful, chunk_failed = future.result()
+                            archive_parts.append(archive_data)
+                            successful_reports += chunk_successful
+                            failed_reports.extend(chunk_failed)
+                            logger.info(f"Обработан чанк {chunk_index + 1}/{len(analysis_chunks)}: {chunk_successful} успешно, {len(chunk_failed)} ошибок")
+                        except Exception as e:
+                            logger.error(f"Ошибка обработки чанка {chunk_index + 1}: {e}")
+                            archive_parts.append(None)
+                            failed_reports.append(f"Чанк {chunk_index + 1}: {str(e)}")
+                
+                # Подготавливаем информационный контент
+                info_content = None
+                if not_found or failed_reports:
+                    info_content = f"""Информация о запросе архива отчетов
 
-            # Если не удалось создать ни одного отчета, но анализы найдены, создаем архив с информацией об ошибках
-            if successful_reports == 0:
-                # Добавляем файл с информацией об ошибках
-                error_info_content = f"""Информация об ошибках при создании отчетов
+Запрошенные номера анализов: {', '.join(map(str, parsed_ids))}
+Найдено завершенных анализов: {len(existing_ids)} из {len(parsed_ids)}
+Тип отчета: {report_type}
+Дата запроса: {timezone.now().strftime('%Y-%m-%d %H:%M:%S')}
+Обработано чанков: {len(analysis_chunks)}
+
+НАЙДЕННЫЕ АНАЛИЗЫ:
+{', '.join(map(str, existing_ids))}
+
+НЕ НАЙДЕННЫЕ АНАЛИЗЫ:
+{', '.join(map(str, not_found))}
+
+ОШИБКИ ПРИ ОБРАБОТКЕ:
+{chr(10).join(failed_reports) if failed_reports else 'Ошибок не обнаружено'}
+
+Возможные причины отсутствия анализов:
+- Анализы с указанными номерами не существуют
+- Анализы еще не завершены (находятся в процессе обработки)
+- Анализы завершились с ошибкой
+
+Проверьте статус анализов в интерфейсе системы.
+"""
+                
+                # Объединяем частичные архивы
+                archive_content = self._merge_archives_fast(archive_parts, info_content)
+                
+                if archive_content is None:
+                    raise Exception("Не удалось объединить частичные архивы")
+
+            # Если не удалось создать ни одного отчета, но анализы найдены
+            if successful_reports == 0 and analyses:
+                # Создаем архив только с информацией об ошибках
+                archive_buffer = io.BytesIO()
+                with zipfile.ZipFile(archive_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                    error_info_content = f"""Информация об ошибках при создании отчетов
 
 Запрошенные номера анализов: {', '.join(map(str, parsed_ids))}
 Найдено завершенных анализов: {len(existing_ids)}
@@ -767,14 +939,11 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
 - Убедитесь, что файлы результатов анализов не повреждены
 - Обратитесь к администратору системы, если проблема повторяется
 """
-                zip_file.writestr('ОШИБКИ_СОЗДАНИЯ_ОТЧЕТОВ.txt', error_info_content.encode('utf-8'))
+                    zip_file.writestr('ОШИБКИ_СОЗДАНИЯ_ОТЧЕТОВ.txt', error_info_content.encode('utf-8'))
                 
+                archive_content = archive_buffer.getvalue()
                 logger.warning(f"Создан архив только с информацией об ошибках для анализов {existing_ids}")
 
-            # Подготавливаем архив для скачивания
-            archive_buffer.seek(0)
-            archive_content = archive_buffer.getvalue()
-            
             # Формируем имя архива
             timestamp = timezone.now().strftime('%Y%m%d_%H%M%S')
             archive_filename = f"porosity_reports_{report_type}_{timestamp}.zip"
@@ -789,7 +958,11 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
             if not_found:
                 response['X-Not-Found'] = ','.join(map(str, not_found))
             
-            logger.info(f"Создан архив отчетов: {successful_reports} успешно, {len(failed_reports)} ошибок")
+            # Добавляем информацию о производительности
+            response['X-Processing-Method'] = 'optimized' if total_analyses > chunk_size else 'simple'
+            response['X-Cache-Size'] = str(len(file_cache))
+            
+            logger.info(f"Создан архив отчетов: {successful_reports} успешно, {len(failed_reports)} ошибок, метод: {'оптимизированный' if total_analyses > chunk_size else 'простой'}")
             
             return response
             
