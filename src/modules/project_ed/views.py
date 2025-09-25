@@ -549,9 +549,28 @@ class ProjectEdPositionViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
 
 
 class ProjectEdFacultyViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
-    queryset = Faculty.objects.all()
+    queryset = Faculty.objects.prefetch_related('departments').all()
     serializer_class = ProjectEdFacultySerializer
     permission_classes = [permissions.IsAuthenticated, IsProjectEdAdmin]
+    
+    def get_queryset(self):
+        """Переопределяем get_queryset для поддержки поиска по всем полям."""
+        from django.db.models import Q
+        
+        queryset = Faculty.objects.prefetch_related('departments').all()
+        search_term = self.request.query_params.get('search', '').strip()
+        
+        if search_term:
+            # Поиск по названию факультета, короткому имени факультета, названию кафедры и короткому имени кафедры
+            search_query = Q(
+                Q(name__icontains=search_term) |
+                Q(short_name__icontains=search_term) |
+                Q(departments__name__icontains=search_term) |
+                Q(departments__short_name__icontains=search_term)
+            )
+            queryset = queryset.filter(search_query).distinct()
+        
+        return queryset
 
     @action(detail=False, methods=['get'])
     def department_counts(self, request):
@@ -598,9 +617,28 @@ class ProjectEdFacultyViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
 
 
 class ProjectEdDepartmentViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
-    queryset = Department.objects.all()
+    queryset = Department.objects.select_related('faculty').all()
     serializer_class = ProjectEdDepartmentSerializer
     permission_classes = [permissions.IsAuthenticated, IsProjectEdAdmin]
+    
+    def get_queryset(self):
+        """Переопределяем get_queryset для поддержки поиска по всем полям."""
+        from django.db.models import Q
+        
+        queryset = Department.objects.select_related('faculty').all()
+        search_term = self.request.query_params.get('search', '').strip()
+        
+        if search_term:
+            # Поиск по названию кафедры, короткому имени кафедры, названию факультета и короткому имени факультета
+            search_query = Q(
+                Q(name__icontains=search_term) |
+                Q(short_name__icontains=search_term) |
+                Q(faculty__name__icontains=search_term) |
+                Q(faculty__short_name__icontains=search_term)
+            )
+            queryset = queryset.filter(search_query)
+        
+        return queryset
     
     @action(detail=False, methods=['get'])
     def user_counts(self, request):

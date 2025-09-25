@@ -384,7 +384,10 @@ class ProjectEdFacultySerializer(serializers.ModelSerializer):
 
 class ProjectEdDepartmentSerializer(serializers.ModelSerializer):
     faculty = serializers.PrimaryKeyRelatedField(queryset=Faculty.objects.all(), required=False, allow_null=True)
+    faculty_name = serializers.CharField(source='faculty.name', read_only=True)
+    faculty_short_name = serializers.CharField(source='faculty.short_name', read_only=True)
+    
     class Meta:
         model = Department
-        fields = ['id', 'name', 'short_name', 'faculty']
-        read_only_fields = []
+        fields = ['id', 'name', 'short_name', 'faculty', 'faculty_name', 'faculty_short_name']
+        read_only_fields = ['faculty_name', 'faculty_short_name']
