@@ -524,6 +524,29 @@ class ProjectEdPositionViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     serializer_class = ProjectEdPositionSerializer
     permission_classes = [permissions.IsAuthenticated, IsProjectEdAdmin]
 
+    @action(detail=False, methods=['get'])
+    def user_counts(self, request):
+        """Получить количество пользователей по должностям (включая непубличные профили)."""
+        from django.contrib.auth import get_user_model
+        from django.db.models import Count
+        
+        User = get_user_model()
+        
+        counts = User.objects.filter(
+            project_ed_profile__position_ref__isnull=False
+        ).values(
+            'project_ed_profile__position_ref'
+        ).annotate(
+            user_count=Count('id')
+        )
+        
+        result = {}
+        for item in counts:
+            pos_id = item['project_ed_profile__position_ref']
+            result[pos_id] = item['user_count']
+        
+        return Response(result)
+
 
 class ProjectEdFacultyViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     queryset = Faculty.objects.all()
