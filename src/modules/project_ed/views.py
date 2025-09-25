@@ -553,6 +553,49 @@ class ProjectEdFacultyViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     serializer_class = ProjectEdFacultySerializer
     permission_classes = [permissions.IsAuthenticated, IsProjectEdAdmin]
 
+    @action(detail=False, methods=['get'])
+    def department_counts(self, request):
+        """Получить количество кафедр по факультетам."""
+        from django.db.models import Count
+        
+        counts = Department.objects.filter(
+            faculty__isnull=False
+        ).values(
+            'faculty'
+        ).annotate(
+            department_count=Count('id')
+        )
+        
+        result = {}
+        for item in counts:
+            faculty_id = item['faculty']
+            result[faculty_id] = item['department_count']
+        
+        return Response(result)
+
+    @action(detail=False, methods=['get'])
+    def user_counts(self, request):
+        """Получить количество пользователей по факультетам (включая непубличные профили)."""
+        from django.contrib.auth import get_user_model
+        from django.db.models import Count
+        
+        User = get_user_model()
+        
+        counts = User.objects.filter(
+            project_ed_profile__faculty_ref__isnull=False
+        ).values(
+            'project_ed_profile__faculty_ref'
+        ).annotate(
+            user_count=Count('id')
+        )
+        
+        result = {}
+        for item in counts:
+            faculty_id = item['project_ed_profile__faculty_ref']
+            result[faculty_id] = item['user_count']
+        
+        return Response(result)
+
 
 class ProjectEdDepartmentViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     queryset = Department.objects.all()
