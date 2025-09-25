@@ -6,8 +6,10 @@ import os
 import subprocess
 import sys
 import zipfile
+import tarfile
 import requests
 import shutil
+import platform
 from pathlib import Path
 
 from src.config.settings.static import PACKAGES_PATH
@@ -57,21 +59,21 @@ class Command(BaseCommand):
             # Создаем временную папку
             temp_dir.mkdir(exist_ok=True)
             
-            # Определяем версию ffmpeg для Windows
+            # Определяем версию ffmpeg и URL в зависимости от ОС
             ffmpeg_version = options['ffmpeg_version']
-            ffmpeg_url = f"https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
+            ffmpeg_url = self._get_ffmpeg_url()
             
             self.stdout.write(f"📥 Загружаю ffmpeg версии {ffmpeg_version}...")
             
             # Загружаем ffmpeg
-            zip_path = self._download_ffmpeg(ffmpeg_url, temp_dir)
-            if not zip_path:
+            archive_path = self._download_ffmpeg(ffmpeg_url, temp_dir)
+            if not archive_path:
                 raise CommandError("Не удалось загрузить ffmpeg")
             
             self.stdout.write("📦 Распаковываю архив...")
             
             # Распаковываем архив
-            if not self._extract_ffmpeg(zip_path, temp_dir, ffmpeg_dir):
+            if not self._extract_ffmpeg(archive_path, temp_dir, ffmpeg_dir):
                 raise CommandError("Не удалось распаковать архив ffmpeg")
             
             self.stdout.write("🔧 Настраиваю структуру папок...")
@@ -96,13 +98,21 @@ class Command(BaseCommand):
     
     def _is_ffmpeg_installed(self, ffmpeg_dir: Path) -> bool:
         """Проверяет, установлен ли уже ffmpeg."""
-        ffmpeg_exe = ffmpeg_dir / "bin" / "ffmpeg.exe"
+        system = platform.system().lower()
+        if system == "windows":
+            ffmpeg_exe = ffmpeg_dir / "bin" / "ffmpeg.exe"
+        else:
+            ffmpeg_exe = ffmpeg_dir / "bin" / "ffmpeg"
         return ffmpeg_exe.exists()
     
     def _download_ffmpeg(self, url: str, temp_dir: Path) -> Path:
         """Загружает архив ffmpeg."""
         try:
-            zip_path = temp_dir / "ffmpeg.zip"
+            # Определяем расширение файла по URL
+            if url.endswith('.tar.xz'):
+                archive_path = temp_dir / "ffmpeg.tar.xz"
+            else:
+                archive_path = temp_dir / "ffmpeg.zip"
             
             self.stdout.write(f"📥 Загружаю {url}...")
             response = requests.get(url, stream=True)
@@ -111,7 +121,7 @@ class Command(BaseCommand):
             total_size = int(response.headers.get('content-length', 0))
             downloaded = 0
             
-            with open(zip_path, 'wb') as f:
+            with open(archive_path, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     if chunk:
                         f.write(chunk)
@@ -122,7 +132,7 @@ class Command(BaseCommand):
                             self.stdout.flush()
             
             self.stdout.write()  # Новая строка после прогресса
-            return zip_path
+            return archive_path
             
         except Exception as e:
             self.stdout.write(
@@ -130,11 +140,17 @@ class Command(BaseCommand):
             )
             return None
     
-    def _extract_ffmpeg(self, zip_path: Path, temp_dir: Path, ffmpeg_dir: Path) -> bool:
+    def _extract_ffmpeg(self, archive_path: Path, temp_dir: Path, ffmpeg_dir: Path) -> bool:
         """Распаковывает архив ffmpeg."""
         try:
-            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                zip_ref.extractall(temp_dir)
+            if archive_path.suffix == '.xz' or str(archive_path).endswith('.tar.xz'):
+                # Распаковываем tar.xz архив
+                with tarfile.open(archive_path, 'r:xz') as tar_ref:
+                    tar_ref.extractall(temp_dir)
+            else:
+                # Распаковываем zip архив
+                with zipfile.ZipFile(archive_path, 'r') as zip_ref:
+                    zip_ref.extractall(temp_dir)
             
             # Ищем папку с распакованным ffmpeg
             extracted_dirs = [d for d in temp_dir.iterdir() if d.is_dir() and d.name.startswith('ffmpeg')]
@@ -161,9 +177,21 @@ class Command(BaseCommand):
     def _setup_ffmpeg_structure(self, ffmpeg_dir: Path) -> bool:
         """Настраивает структуру папок ffmpeg."""
         try:
+            system = platform.system().lower()
+            
             # Проверяем, что основные файлы на месте
-            ffmpeg_exe = ffmpeg_dir / "bin" / "ffmpeg.exe"
-            ffprobe_exe = ffmpeg_dir / "bin" / "ffprobe.exe"
+            if system == "windows":
+                ffmpeg_exe = ffmpeg_dir / "bin" / "ffmpeg.exe"
+                ffprobe_exe = ffmpeg_dir / "bin" / "ffprobe.exe"
+            else:
+                ffmpeg_exe = ffmpeg_dir / "bin" / "ffmpeg"
+                ffprobe_exe = ffmpeg_dir / "bin" / "ffprobe"
+                
+                # На Linux делаем файлы исполняемыми
+                if ffmpeg_exe.exists():
+                    os.chmod(ffmpeg_exe, 0o755)
+                if ffprobe_exe.exists():
+                    os.chmod(ffprobe_exe, 0o755)
             
             if not ffmpeg_exe.exists() or not ffprobe_exe.exists():
                 self.stdout.write(
@@ -197,6 +225,30 @@ class Command(BaseCommand):
                 self.style.ERROR(f"❌ Ошибка при настройке структуры: {e}")
             )
             return False
+    
+    def _get_ffmpeg_url(self) -> str:
+        """Возвращает URL для загрузки ffmpeg в зависимости от ОС."""
+        system = platform.system().lower()
+        machine = platform.machine().lower()
+        
+        if system == "windows":
+            return "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
+        elif system == "linux":
+            if machine in ["x86_64", "amd64"]:
+                return "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz"
+            elif machine in ["aarch64", "arm64"]:
+                return "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linuxarm64-gpl.tar.xz"
+            else:
+                raise CommandError(f"Неподдерживаемая архитектура Linux: {machine}")
+        elif system == "darwin":  # macOS
+            if machine in ["x86_64", "amd64"]:
+                return "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-macos64-gpl.zip"
+            elif machine in ["arm64"]:
+                return "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-macosarm64-gpl.zip"
+            else:
+                raise CommandError(f"Неподдерживаемая архитектура macOS: {machine}")
+        else:
+            raise CommandError(f"Неподдерживаемая операционная система: {system}")
     
     def _cleanup(self, temp_dir: Path):
         """Очищает временные файлы."""
