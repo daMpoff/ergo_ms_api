@@ -123,12 +123,6 @@ class Subcategory(models.Model):
 class TargetIndicator(models.Model):
     """Целевой показатель проекта."""
     
-    project = models.ForeignKey(
-        Project,
-        on_delete=models.CASCADE,
-        related_name='project_target_indicators',
-        verbose_name='Проект'
-    )
     category = models.ForeignKey(
         Category,
         on_delete=models.CASCADE,
@@ -147,10 +141,7 @@ class TargetIndicator(models.Model):
     )
     
     name = models.CharField('Название показателя', max_length=255)
-    description = models.TextField('Описание показателя', blank=True)
     unit = models.CharField('Единица измерения', max_length=50, blank=True)
-    target_value = models.DecimalField('Целевое значение', max_digits=10, decimal_places=2, null=True, blank=True)
-    current_value = models.DecimalField('Текущее значение', max_digits=10, decimal_places=2, null=True, blank=True)
     
     # Связь с блоком мероприятий
     event_block = models.ForeignKey(

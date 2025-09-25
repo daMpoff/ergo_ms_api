@@ -154,24 +154,22 @@ class TargetIndicatorSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source='category.name', read_only=True)
     subcategory_name = serializers.CharField(source='subcategory.name', read_only=True)
     event_block_title = serializers.CharField(source='event_block.title', read_only=True)
+    event_block_short_name = serializers.SerializerMethodField()
     responsible_name = serializers.SerializerMethodField()
     
     class Meta:
         model = TargetIndicator
         fields = [
             'id',
-            'project',
             'category',
             'subcategory',
             'category_name',
             'subcategory_name',
             'name',
-            'description',
             'unit',
-            'target_value',
-            'current_value',
             'event_block',
             'event_block_title',
+            'event_block_short_name',
             'responsible',
             'responsible_name',
             'values_by_year',
@@ -179,13 +177,20 @@ class TargetIndicatorSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
         ]
-        read_only_fields = ['project', 'created_at', 'updated_at']
+        read_only_fields = ['created_at', 'updated_at']
     
     def get_responsible_name(self, obj):
         """Получить полное имя ответственного."""
         if obj.responsible:
             return f"{obj.responsible.first_name} {obj.responsible.last_name}".strip() or obj.responsible.username
         return None
+
+    def get_event_block_short_name(self, obj):
+        blk = getattr(obj, 'event_block', None)
+        if not blk:
+            return None
+        # Короткое имя: предпочитаем код, иначе заголовок
+        return getattr(blk, 'code', None) or getattr(blk, 'title', None)
     
     def validate(self, attrs):
         """Валидация: подкатегория должна принадлежать выбранной категории."""

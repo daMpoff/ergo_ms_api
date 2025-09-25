@@ -250,14 +250,11 @@ class TargetIndicatorViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
-        project_id = self.request.query_params.get('project_id')
         category_id = self.request.query_params.get('category_id')
         subcategory_id = self.request.query_params.get('subcategory_id')
         
         queryset = TargetIndicator.objects.filter(is_active=True)
         
-        if project_id:
-            queryset = queryset.filter(project_id=project_id)
         if category_id:
             queryset = queryset.filter(category_id=category_id)
         if subcategory_id:
@@ -266,12 +263,7 @@ class TargetIndicatorViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         return queryset
     
     def perform_create(self, serializer):
-        # Автоматически устанавливаем проект из контекста
-        project_id = self.request.data.get('project_id')
-        if project_id:
-            serializer.save(project_id=project_id)
-        else:
-            serializer.save()
+        serializer.save()
 
 
 class EventBlockViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
