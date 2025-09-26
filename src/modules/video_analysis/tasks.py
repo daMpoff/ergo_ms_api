@@ -20,8 +20,7 @@ from src.modules.video_analysis.scripts import (
     preload_models,
     generate_tts_from_subtitles,
     combine_tts_audio_segments,
-    add_tts_audio_to_video,
-    FFMPEG_PATH
+    add_tts_audio_to_video
 )
 from src.modules.video_analysis.utils import (
     log_task_start, 
@@ -369,7 +368,6 @@ def translate_video_analysis(self, video_name, user_id=1, use_gpu=None, analysis
                     video_path_abs,
                     srt_path_abs,
                     str(temp_video_with_subs),
-                    str(FFMPEG_PATH),
                     subtitle_lines_count=analysis.subtitle_lines_count,
                     subtitle_font_size=analysis.subtitle_font_size,
                     subtitle_font_color=analysis.subtitle_font_color,
@@ -393,7 +391,6 @@ def translate_video_analysis(self, video_name, user_id=1, use_gpu=None, analysis
                     str(temp_video_with_subs),
                     tts_audio_path,
                     output_video_path_abs,
-                    str(FFMPEG_PATH),
                     volume=analysis.tts_volume
                 )
                 
@@ -414,7 +411,6 @@ def translate_video_analysis(self, video_name, user_id=1, use_gpu=None, analysis
                     video_path_abs,
                     srt_path_abs,
                     output_video_path_abs,
-                    str(FFMPEG_PATH),
                     subtitle_lines_count=analysis.subtitle_lines_count,
                     subtitle_font_size=analysis.subtitle_font_size,
                     subtitle_font_color=analysis.subtitle_font_color,

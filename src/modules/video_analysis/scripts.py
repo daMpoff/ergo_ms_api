@@ -39,9 +39,13 @@ except ImportError:
 FRAME_CHUNK_SIZE = 4000  # Размер блока чтения аудио в фреймах
 BATCH_CHUNK_SIZE = 8000  # Размер блока для batch-обработки GPU
 
-FFMPEG_PATH = Path(VideoAnalysisConfig.PACKAGES_PATH) / 'ffmpeg' / 'bin' / 'ffmpeg.exe'
-FFPROBE_PATH = Path(VideoAnalysisConfig.PACKAGES_PATH) / 'ffmpeg' / 'bin' / 'ffprobe.exe'
+system_name = platform.system().lower()
+ffmpeg_bin_name = 'ffmpeg.exe' if system_name == 'windows' else 'ffmpeg'
+ffprobe_bin_name = 'ffprobe.exe' if system_name == 'windows' else 'ffprobe'
+
 FFMPEG_BIN_DIR = (Path(VideoAnalysisConfig.PACKAGES_PATH) / 'ffmpeg' / 'bin')
+FFMPEG_PATH = FFMPEG_BIN_DIR / ffmpeg_bin_name
+FFPROBE_PATH = FFMPEG_BIN_DIR / ffprobe_bin_name
 
 # Гарантируем наличие ffmpeg/ffprobe в PATH и переменных окружения до импортов pydub
 try:
@@ -53,6 +57,8 @@ try:
         os.environ['FFMPEG_BINARY'] = str(FFMPEG_PATH)
     if FFPROBE_PATH.is_file():
         os.environ['FFPROBE_BINARY'] = str(FFPROBE_PATH)
+    logger = logging.getLogger('video_analysis')
+    logger.info(f"FFmpeg autodetect: system={platform.system()}, bin_dir={FFMPEG_BIN_DIR}, ffmpeg={FFMPEG_PATH} (exists={FFMPEG_PATH.is_file()}), ffprobe={FFPROBE_PATH} (exists={FFPROBE_PATH.is_file()})")
 except Exception:
     pass
 
@@ -1287,6 +1293,8 @@ def convert_wav_to_bilingual_subtitles(wav_file_path, output_srt_path=None, mode
     total_frames = int(wf.getnframes())  # Явно приводим к int
     processed_frames = 0
     subtitle_count = 0
+    logger.info(f"Распознавание запущено: total_frames={total_frames}, frame_rate={frame_rate}")
+    logger.info("CPU режим может занять продолжительное время на длинных видео")
     
     # Проверяем корректность полученных значений
     if total_frames <= 0:
@@ -1294,17 +1302,19 @@ def convert_wav_to_bilingual_subtitles(wav_file_path, output_srt_path=None, mode
         wf.close()
         return None, None
     
-    # Создаем список для хранения результатов для DataFrame
-    recognition_results = []
+    # Буферы сегментов до перевода
+    segments_raw = []  # [{start_time, end_time, russian_text}]
     
-    # Список для накопления всех субтитров перед группировкой
-    all_subtitles = []
+    # Итоги
+    recognition_results = []  # для DataFrame (после перевода)
+    all_subtitles = []        # итоговые субтитры (после перевода и разбиения)
     
     # Статистика времени
     total_translation_time = 0
     translation_count = 0
     
     # Читаем аудиофайл по частям и распознаем
+    last_progress_reported = -1
     while True:
         data = wf.readframes(FRAME_CHUNK_SIZE)  # Читаем блок данных
         if len(data) == 0:
@@ -1324,7 +1334,10 @@ def convert_wav_to_bilingual_subtitles(wav_file_path, output_srt_path=None, mode
         # Безопасное вычисление прогресса
         try:
             progress = min(100, int(processed_frames / total_frames * 100))
-            logger.debug(f"Прогресс распознавания: {progress}%")
+            # Логируем каждые 5%
+            if progress >= last_progress_reported + 5:
+                logger.info(f"Прогресс распознавания: {progress}%")
+                last_progress_reported = progress
         except (TypeError, ZeroDivisionError) as e:
             logger.error(f"Ошибка при вычислении прогресса: {e}")
             break
@@ -1332,26 +1345,13 @@ def convert_wav_to_bilingual_subtitles(wav_file_path, output_srt_path=None, mode
         if recognizer.AcceptWaveform(data):
             result = json.loads(recognizer.Result())
             
-            # Извлекаем текст
             ru_text = result.get('text', '')
-            
             if ru_text:
-                # Переводим текст на французский
-                translation_start = time.time()
-                fr_text = translate_text_ru_to_fr(ru_text, use_gpu=use_gpu)
-                translation_time = time.time() - translation_start
-                total_translation_time += translation_time
-                translation_count += 1
-                
                 # Получаем временные метки для фрагмента
-                start_time = None
-                end_time = None
-                
                 if 'result' in result and result['result']:
                     start_time = result['result'][0]['start']
                     end_time = result['result'][-1]['end']
                 else:
-                    # Если нет детальной информации о словах, используем приблизительное время
                     try:
                         current_frame = processed_frames - FRAME_CHUNK_SIZE
                         start_time = max(0, (current_frame - FRAME_CHUNK_SIZE) / frame_rate)
@@ -1360,52 +1360,21 @@ def convert_wav_to_bilingual_subtitles(wav_file_path, output_srt_path=None, mode
                         logger.error(f"Ошибка при вычислении времени: {e}")
                         start_time = 0
                         end_time = 1
-                
-                # Создаем данные субтитра
-                subtitle_data = {
+                segments_raw.append({
                     'start_time': format_srt_time(start_time),
                     'end_time': format_srt_time(end_time),
-                    'russian_text': ru_text,
-                    'french_text': fr_text
-                }
-                
-                # Сохраняем результат для DataFrame
-                recognition_results.append({
-                    'id': len(recognition_results) + 1,
-                    'start_time': subtitle_data['start_time'],
-                    'end_time': subtitle_data['end_time'],
-                    'russian_text': subtitle_data['russian_text'],
-                    'french_text': subtitle_data['french_text']
+                    'russian_text': ru_text
                 })
-                
-                # Разбиваем длинные субтитры на короткие сегменты с учетом размера шрифта
-                split_segments = split_subtitle_with_timing(
-                    subtitle_data, 
-                    max_chars_per_line=80,  # Максимум для безопасности
-                    font_size=font_size,
-                    video_width=video_width
-                )
-                
-                # Добавляем все сегменты в общий список
-                all_subtitles.extend(split_segments)
     
     # Обрабатываем финальный результат
     final_result = json.loads(recognizer.FinalResult())
     final_ru_text = final_result.get('text', '')
-    
     if final_ru_text:
-        # Переводим финальный текст
-        final_fr_text = translate_text_ru_to_fr(final_ru_text)
-        
-        # Получаем временные метки для финального фрагмента
-        start_time = None
-        end_time = None
-        
+        # Временные метки финального фрагмента
         if 'result' in final_result and final_result['result']:
             start_time = final_result['result'][0]['start']
             end_time = final_result['result'][-1]['end']
         else:
-            # Если нет детальной информации о словах, используем приблизительное время
             try:
                 start_time = (processed_frames - FRAME_CHUNK_SIZE) / frame_rate
                 end_time = processed_frames / frame_rate
@@ -1413,34 +1382,90 @@ def convert_wav_to_bilingual_subtitles(wav_file_path, output_srt_path=None, mode
                 logger.error(f"Ошибка при вычислении финального времени: {e}")
                 start_time = 0
                 end_time = 1
-        
-        # Создаем данные финального субтитра
-        final_subtitle_data = {
+        segments_raw.append({
             'start_time': format_srt_time(start_time),
             'end_time': format_srt_time(end_time),
-            'russian_text': final_ru_text,
-            'french_text': final_fr_text
+            'russian_text': final_ru_text
+        })
+
+    # Батч-перевод всех сегментов после ASR
+    try:
+        import math
+        import os as _os
+        texts = [s['russian_text'] for s in segments_raw]
+        # Ограничим размер батча и потоки для CPU
+        batch_size = 4
+        translated_texts = []
+        device = str(next(translation_model.parameters()).device)
+
+        # Отключаем многопоточность токенизатора и ограничиваем потоки torch
+        _os.environ.setdefault('TOKENIZERS_PARALLELISM', 'false')
+        try:
+            torch.set_num_threads(2)
+            torch.set_num_interop_threads(1)
+        except Exception:
+            pass
+
+        # Ограничим длину входа/выхода, чтобы не уходить в экспоненциальный рост
+        max_input_tokens = 128
+        max_new_tokens = 64
+
+        total_batches = math.ceil(len(texts) / batch_size) if texts else 0
+        logger.info(f"Начало батч-перевода {len(texts)} сегментов, batch_size={batch_size}, threads=2")
+        start_ts = time.time()
+        for b in range(total_batches):
+            batch = texts[b*batch_size:(b+1)*batch_size]
+            if not batch:
+                continue
+            inputs = tokenizer(batch, return_tensors="pt", padding=True, truncation=True, max_length=max_input_tokens)
+            inputs = {k: v.to(device) for k, v in inputs.items()}
+            with torch.inference_mode():
+                outputs = translation_model.generate(
+                    **inputs,
+                    max_new_tokens=max_new_tokens,
+                    num_beams=1,
+                    do_sample=False,
+                    early_stopping=True
+                )
+            for i in range(outputs.size(0)):
+                translated_texts.append(tokenizer.decode(outputs[i], skip_special_tokens=True))
+            pct = int((b+1) / total_batches * 100) if total_batches else 100
+            logger.info(f"Прогресс перевода: {pct}% ({b+1}/{total_batches})")
+        total_translation_time += (time.time() - start_ts)
+        translation_count += len(texts)
+    except Exception as e:
+        logger.error(f"Ошибка батч-перевода: {e}")
+        # Фоллбек: поштучный перевод при ошибке батча
+        translated_texts = []
+        for idx, s in enumerate(segments_raw):
+            fr_text = translate_text_ru_to_fr(s['russian_text'], use_gpu=use_gpu)
+            translated_texts.append(fr_text)
+            if (idx + 1) % 10 == 0:
+                logger.info(f"Прогресс перевода (fallback): {idx+1}/{len(segments_raw)}")
+
+    # Сборка результатов после перевода
+    for i, s in enumerate(segments_raw):
+        fr_text = translated_texts[i] if i < len(translated_texts) else ''
+        subtitle_data = {
+            'start_time': s['start_time'],
+            'end_time': s['end_time'],
+            'russian_text': s['russian_text'],
+            'french_text': replace_html_entities(fr_text)
         }
-        
-        # Сохраняем финальный результат для DataFrame
         recognition_results.append({
             'id': len(recognition_results) + 1,
-            'start_time': final_subtitle_data['start_time'],
-            'end_time': final_subtitle_data['end_time'],
-            'russian_text': final_subtitle_data['russian_text'],
-            'french_text': final_subtitle_data['french_text']
+            'start_time': subtitle_data['start_time'],
+            'end_time': subtitle_data['end_time'],
+            'russian_text': subtitle_data['russian_text'],
+            'french_text': subtitle_data['french_text']
         })
-        
-        # Разбиваем финальный длинный субтитр на короткие сегменты с учетом размера шрифта
-        final_split_segments = split_subtitle_with_timing(
-            final_subtitle_data, 
-            max_chars_per_line=80,  # Максимум для безопасности
+        split_segments = split_subtitle_with_timing(
+            subtitle_data,
+            max_chars_per_line=80,
             font_size=font_size,
             video_width=video_width
         )
-        
-        # Добавляем все сегменты в общий список
-        all_subtitles.extend(final_split_segments)
+        all_subtitles.extend(split_segments)
     
     # Теперь группируем и записываем все субтитры
     def write_grouped_subtitles_to_file():
@@ -1472,9 +1497,9 @@ def convert_wav_to_bilingual_subtitles(wav_file_path, output_srt_path=None, mode
     
     # Выводим статистику времени
     if translation_count > 0:
-        avg_translation_time = total_translation_time / translation_count
+        avg_translation_time = total_translation_time / max(translation_count, 1)
         logger.info(f"Статистика перевода:")
-        logger.info(f"  Всего переводов: {translation_count}")
+        logger.info(f"  Всего сегментов к переводу: {translation_count}")
         logger.info(f"  Общее время перевода: {total_translation_time:.2f} сек")
         logger.info(f"  Среднее время на перевод: {avg_translation_time:.3f} сек")
     
@@ -1817,6 +1842,10 @@ def add_subtitles_to_video(video_path, srt_path, output_video_path, ffmpeg_path=
         subprocess.run(command, check=True)
         logger.info(f"Субтитры успешно добавлены. Результат сохранен в {output_video_path}")
         return True
+    except FileNotFoundError as e:
+        logger.error(f"FFmpeg не найден: {e}. Ожидался путь: {ffmpeg_path}")
+        logger.error(f"Команда: {' '.join(command)}")
+        return False
     except subprocess.CalledProcessError as e:
         logger.error(f"Ошибка при добавлении субтитров: {e}")
         logger.error(f"Команда, которая вызвала ошибку: {' '.join(command)}")
@@ -1878,6 +1907,10 @@ def add_tts_audio_to_video(video_path, tts_audio_path, output_video_path, ffmpeg
         subprocess.run(command, check=True)
         logger.info(f"TTS аудио успешно добавлено. Результат сохранен в {output_video_path}")
         return True
+    except FileNotFoundError as e:
+        logger.error(f"FFmpeg не найден: {e}. Ожидался путь: {ffmpeg_path}")
+        logger.error(f"Команда: {' '.join(command)}")
+        return False
     except subprocess.CalledProcessError as e:
         logger.error(f"Ошибка при добавлении TTS аудио: {e}")
         logger.error(f"Команда, которая вызвала ошибку: {' '.join(command)}")

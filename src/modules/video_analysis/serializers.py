@@ -111,7 +111,7 @@ class BulkVideoAnalysisCreateSerializer(serializers.Serializer):
         help_text="Цвет фона субтитров в формате HEX (#000000)"
     )
     subtitle_background_transparent = serializers.BooleanField(
-        default=False,
+        default=True,
         help_text="Прозрачный фон субтитров"
     )
     subtitle_alignment = serializers.ChoiceField(
@@ -212,7 +212,7 @@ class VideoAnalysisCreateSerializer(serializers.Serializer):
         help_text="Цвет фона субтитров в формате HEX (#000000)"
     )
     subtitle_background_transparent = serializers.BooleanField(
-        default=False,
+        default=True,
         help_text="Прозрачный фон субтитров"
     )
     subtitle_alignment = serializers.ChoiceField(

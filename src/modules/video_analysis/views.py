@@ -103,7 +103,7 @@ class VideoAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         subtitle_font_size = serializer.validated_data.get('subtitle_font_size', 24)
         subtitle_font_color = serializer.validated_data.get('subtitle_font_color', '#FFFFFF')
         subtitle_background_color = serializer.validated_data.get('subtitle_background_color', '#000000')
-        subtitle_background_transparent = serializer.validated_data.get('subtitle_background_transparent', False)
+        subtitle_background_transparent = serializer.validated_data.get('subtitle_background_transparent', True)
         subtitle_alignment = serializer.validated_data.get('subtitle_alignment', 'bottom')
         subtitle_margin_vertical = serializer.validated_data.get('subtitle_margin_vertical', 20)
         subtitle_margin_horizontal = serializer.validated_data.get('subtitle_margin_horizontal', 0)
@@ -112,7 +112,7 @@ class VideoAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         if isinstance(subtitle_background_transparent, str):
             subtitle_background_transparent = subtitle_background_transparent.lower() in ('true', '1', 'yes', 'on')
         elif subtitle_background_transparent is None:
-            subtitle_background_transparent = False
+            subtitle_background_transparent = True
         
         # Получаем настройки TTS
         tts_enabled = serializer.validated_data.get('tts_enabled', False)
@@ -256,7 +256,7 @@ class VideoAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         subtitle_font_size = int(request.data.get('subtitle_font_size', 24))
         subtitle_font_color = request.data.get('subtitle_font_color', '#FFFFFF')
         subtitle_background_color = request.data.get('subtitle_background_color', '#000000')
-        subtitle_background_transparent = request.data.get('subtitle_background_transparent', False)
+        subtitle_background_transparent = request.data.get('subtitle_background_transparent', True)
         subtitle_alignment = request.data.get('subtitle_alignment', 'bottom')
         subtitle_margin_vertical = int(request.data.get('subtitle_margin_vertical', 20))
         subtitle_margin_horizontal = int(request.data.get('subtitle_margin_horizontal', 0))
@@ -271,7 +271,7 @@ class VideoAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         if isinstance(subtitle_background_transparent, str):
             subtitle_background_transparent = subtitle_background_transparent.lower() in ('true', '1', 'yes', 'on')
         elif subtitle_background_transparent is None:
-            subtitle_background_transparent = False
+            subtitle_background_transparent = True
         
         if isinstance(tts_enabled, str):
             tts_enabled = tts_enabled.lower() in ('true', '1', 'yes', 'on')
@@ -317,7 +317,7 @@ class VideoAnalysisViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         subtitle_font_size = validated_data.get('subtitle_font_size', 24)
         subtitle_font_color = validated_data.get('subtitle_font_color', '#FFFFFF')
         subtitle_background_color = validated_data.get('subtitle_background_color', '#000000')
-        subtitle_background_transparent = validated_data.get('subtitle_background_transparent', False)
+        subtitle_background_transparent = validated_data.get('subtitle_background_transparent', True)
         subtitle_alignment = validated_data.get('subtitle_alignment', 'bottom')
         subtitle_margin_vertical = validated_data.get('subtitle_margin_vertical', 20)
         subtitle_margin_horizontal = validated_data.get('subtitle_margin_horizontal', 0)
