@@ -10,6 +10,7 @@ from pathlib import Path
 from django.core.management.base import BaseCommand, CommandError
 
 from src.config.settings.static import PACKAGES_PATH
+from src.config.settings.base import API_DIR
 
 
 class Command(BaseCommand):
@@ -64,5 +65,15 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS('hubconf.py обновлён по требованиям проекта'))
         except Exception as e:
             raise CommandError(f'Не удалось обновить hubconf.py: {e}')
+
+        # Удаляем локальную копию списка моделей, если она была создана ранее
+        try:
+            latest_models_yaml = API_DIR / 'latest_silero_models.yml'
+            if latest_models_yaml.exists():
+                latest_models_yaml.unlink()
+                self.stdout.write(self.style.WARNING('Удалён устаревший latest_silero_models.yml из папки api'))
+        except Exception as e:
+            # Не прерываем установку из-за ошибки очистки, просто сообщаем
+            self.stdout.write(self.style.WARNING(f'Не удалось удалить latest_silero_models.yml: {e}'))
 
         self.stdout.write(self.style.SUCCESS('Локальный репозиторий Silero готов'))

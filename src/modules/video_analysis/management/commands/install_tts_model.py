@@ -11,6 +11,7 @@ from pathlib import Path
 from django.core.management.base import BaseCommand, CommandError
 
 from src.modules.video_analysis.apps import VideoAnalysisConfig
+from src.config.settings.base import API_DIR
 
 logger = logging.getLogger('video_analysis')
 
@@ -220,6 +221,16 @@ class Command(BaseCommand):
             msg = "\n".join(details)
             logger.error(msg)
             raise CommandError(msg)
+
+        finally:
+            # Автоудаление локальной копии списка моделей Silero, если он присутствует
+            try:
+                latest_models_yaml = API_DIR / 'latest_silero_models.yml'
+                if latest_models_yaml.exists():
+                    latest_models_yaml.unlink()
+                    self.stdout.write(self.style.WARNING('Удалён устаревший latest_silero_models.yml из папки api'))
+            except Exception as e:
+                self.stdout.write(self.style.WARNING(f'Не удалось удалить latest_silero_models.yml: {e}'))
 
     def get_available_models(self):
         """Получает список доступных TTS моделей"""
