@@ -55,7 +55,6 @@ class Project(models.Model):
     def __str__(self) -> str:
         return self.short_name or f'Project #{self.pk}'
 
-
 class Category(models.Model):
     """Категория показателей проекта."""
     
@@ -64,7 +63,6 @@ class Category(models.Model):
     order = models.PositiveIntegerField('Порядок сортировки', default=0)
     is_active = models.BooleanField('Активна', default=True)
     
-    # Служебные поля
     created_at = models.DateTimeField('Создано', auto_now_add=True)
     updated_at = models.DateTimeField('Обновлено', auto_now=True)
     
@@ -101,7 +99,6 @@ class Subcategory(models.Model):
     order = models.PositiveIntegerField('Порядок сортировки', default=0)
     is_active = models.BooleanField('Активна', default=True)
     
-    # Служебные поля
     created_at = models.DateTimeField('Создано', auto_now_add=True)
     updated_at = models.DateTimeField('Обновлено', auto_now=True)
     
