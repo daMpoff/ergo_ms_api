@@ -13,6 +13,7 @@ from src.modules.project_ed.views import (
     ProjectEdFacultyViewSet,
     ProjectEdDepartmentViewSet
 )
+from src.modules.project_ed.api_views.import_views import import_excel
 
 router = DefaultRouter()
 router.register(r'projects', ProjectViewSet, basename='project-projects')
@@ -29,4 +30,5 @@ router.register(r'departments', ProjectEdDepartmentViewSet, basename='project-ed
 urlpatterns = [
     path('', include(router.urls)),
     path('profiles/', include('src.modules.project_ed.profiles.urls')),
+    path('import/excel/', import_excel, name='import-excel'),
 ]

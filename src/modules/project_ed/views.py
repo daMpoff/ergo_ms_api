@@ -665,6 +665,3 @@ class ProjectEdDepartmentViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
             result[dept_id] = item['user_count']
         
         return Response(result)
-
-
-# ProjectEdUserViewSet перенесен в подмодуль profiles для лучшей организации кода
