@@ -185,16 +185,12 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
             # Сохраняем изображение
             save_uploaded_image(image_file, analysis.original_image_uuid)
             
-            # Если имя анализа не задано пользователем (или это автогенерация), формируем от названия файла
+            # Устанавливаем имя анализа строго по имени исходного фото (без расширения)
             try:
                 original_filename = getattr(image_file, 'name', None) or ''
                 base_name, _ = os.path.splitext(original_filename)
-                # Переопределяем, если имя пустое или похоже на авто-сгенерированное
-                if not analysis.name or not analysis.name.strip() or analysis.name.strip().startswith('Анализ пористости'):
-                    safe_base = base_name.strip() or 'изображение'
-                    analysis.name = f"Анализ пористости — {safe_base}"
+                analysis.name = (base_name or 'изображение').strip()
             except Exception:
-                # Тихо игнорируем проблемы с именем файла
                 pass
             
             # Убрана проверка лимита одновременных анализов
@@ -627,11 +623,10 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
                             failed_reports.append(error)
                             continue
                         
-                        # Создаем безопасное имя файла
-                        safe_name = re.sub(r'[^\w\s-]', '', analysis.name.strip()[:50])
-                        if not safe_name:
-                            safe_name = f"analysis_{analysis.id}"
-                        archive_filename = f"{safe_name}_{analysis.created_at.strftime('%Y%m%d')}.{report_type}"
+                        # Имя файла в архиве = имя исходного фото без расширения
+                        base_photo_name = (analysis.name or '').strip() or f"analysis_{analysis.id}"
+                        safe_name = re.sub(r'[^\w\s\-]', '', base_photo_name)[:100] or f"analysis_{analysis.id}"
+                        archive_filename = f"{safe_name}.{report_type}"
                         
                         # Добавляем файл в архив
                         zip_file.write(report_file, archive_filename)
@@ -837,11 +832,10 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
                                 failed_reports.append(error)
                                 continue
                             
-                            # Создаем безопасное имя файла
-                            safe_name = re.sub(r'[^\w\s-]', '', analysis.name.strip()[:50])
-                            if not safe_name:
-                                safe_name = f"analysis_{analysis.id}"
-                            archive_filename = f"{safe_name}_{analysis.created_at.strftime('%Y%m%d')}.{report_type}"
+                            # Имя файла в архиве = имя исходного фото без расширения
+                            base_photo_name = (analysis.name or '').strip() or f"analysis_{analysis.id}"
+                            safe_name = re.sub(r'[^\w\s\-]', '', base_photo_name)[:100] or f"analysis_{analysis.id}"
+                            archive_filename = f"{safe_name}.{report_type}"
                             
                             # Добавляем файл в архив
                             zip_file.write(report_file, archive_filename)
@@ -1123,8 +1117,13 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
             with open(file_path, 'rb') as f:
                 file_content = f.read()
                 
+                # Имя скачиваемого файла = имя исходного фото без расширения
+                base_photo_name = (analysis.name or '').strip() or f"analysis_{analysis.id}"
+                safe_base = re.sub(r'[^\w\s\-]', '', base_photo_name)[:100] or f"analysis_{analysis.id}"
+                download_filename = f"{safe_base}.{report_type}"
+
                 response = HttpResponse(file_content, content_type=content_type)
-                response['Content-Disposition'] = f'attachment; filename="porosity_analysis_{analysis.id}_{analysis.created_at.strftime("%Y%m%d")}.{report_type}"'
+                response['Content-Disposition'] = f'attachment; filename="{download_filename}"'
                 response['Content-Length'] = len(file_content)
                 return response
             

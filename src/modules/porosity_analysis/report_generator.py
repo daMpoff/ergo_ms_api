@@ -1,4 +1,5 @@
 import os
+import re
 import logging
 import subprocess
 import shutil
@@ -1168,20 +1169,22 @@ class PorosityReportGenerator:
             dict: Словарь с путями к созданным файлам отчетов
         """
         reports = {}
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        # Формируем безопасное имя файла на основе названия анализа
+        base_photo_name = (self.analysis.name or '').strip() or f"analysis_{self.analysis.id}"
+        safe_name = re.sub(r'[^\w\s\-]', '', base_photo_name).strip() or f"analysis_{self.analysis.id}"
         
         # Создаем директорию для отчетов если её нет
         reports_dir = os.path.join(self.results_dir, 'reports')
         os.makedirs(reports_dir, exist_ok=True)
         
-        # Генерируем DOCX отчет
-        docx_path = os.path.join(reports_dir, f'porosity_report_{timestamp}.docx')
+        # Генерируем DOCX отчет с именем, соответствующим названию анализа
+        docx_path = os.path.join(reports_dir, f'{safe_name}.docx')
         if self.generate_docx_report(docx_path):
             reports['docx'] = docx_path
             logger.info(f"DOCX отчет создан: {docx_path}")
             
             # Конвертируем DOCX в PDF с дополнительной защитой от зависания
-            pdf_path = os.path.join(reports_dir, f'porosity_report_{timestamp}.pdf')
+            pdf_path = os.path.join(reports_dir, f'{safe_name}.pdf')
             try:
                 # Пытаемся создать PDF, но не блокируемся на долго
                 if self.convert_docx_to_pdf(docx_path, pdf_path):
@@ -1211,7 +1214,9 @@ class PorosityReportGenerator:
             logger.error(f"Неподдерживаемый тип отчета: {report_type}")
             return None
             
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        # Формируем безопасное имя файла на основе названия анализа
+        base_photo_name = (self.analysis.name or '').strip() or f"analysis_{self.analysis.id}"
+        safe_name = re.sub(r'[^\w\s\-]', '', base_photo_name).strip() or f"analysis_{self.analysis.id}"
         
         # Создаем директорию для отчетов если её нет
         reports_dir = os.path.join(self.results_dir, 'reports')
@@ -1219,7 +1224,7 @@ class PorosityReportGenerator:
         
         if report_type == 'docx':
             # Генерируем только DOCX
-            docx_path = os.path.join(reports_dir, f'porosity_report_{timestamp}.docx')
+            docx_path = os.path.join(reports_dir, f'{safe_name}.docx')
             if self.generate_docx_report(docx_path):
                 logger.info(f"DOCX отчет создан: {docx_path}")
                 return docx_path
@@ -1229,8 +1234,8 @@ class PorosityReportGenerator:
                 
         elif report_type == 'pdf':
             # Сначала создаем DOCX, затем конвертируем в PDF
-            docx_path = os.path.join(reports_dir, f'porosity_report_{timestamp}.docx')
-            pdf_path = os.path.join(reports_dir, f'porosity_report_{timestamp}.pdf')
+            docx_path = os.path.join(reports_dir, f'{safe_name}.docx')
+            pdf_path = os.path.join(reports_dir, f'{safe_name}.pdf')
             
             if self.generate_docx_report(docx_path):
                 if self.convert_docx_to_pdf(docx_path, pdf_path):
