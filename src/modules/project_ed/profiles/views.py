@@ -33,6 +33,14 @@ class UserProfileViewSet(SwaggerSafeMixin, viewsets.ReadOnlyModelViewSet):
             return UserListSerializer
         return UserDetailSerializer
     
+    def _is_project_ed_admin(self, user):
+        profile = getattr(user, 'project_ed_profile', None)
+        try:
+            role_name = getattr(profile, 'role_name', None)
+        except Exception:
+            role_name = None
+        return bool(role_name == 'Администратор') or bool(getattr(user, 'is_staff', False) or getattr(user, 'is_superuser', False))
+
     def get_queryset(self):
         """Фильтрация пользователей."""
         queryset = super().get_queryset()
@@ -53,12 +61,22 @@ class UserProfileViewSet(SwaggerSafeMixin, viewsets.ReadOnlyModelViewSet):
             queryset = queryset.filter(
                 project_ed_profile__position_ref__name__icontains=position
             )
+        position_exact = self.request.query_params.get('position_exact')
+        if position_exact:
+            queryset = queryset.filter(
+                project_ed_profile__position_ref__name__iexact=position_exact
+            )
 
         # Фильтрация по роли
         role = self.request.query_params.get('role')
         if role:
             queryset = queryset.filter(
                 project_ed_profile__role_ref__name__icontains=role
+            )
+        role_exact = self.request.query_params.get('role_exact')
+        if role_exact:
+            queryset = queryset.filter(
+                project_ed_profile__role_ref__name__iexact=role_exact
             )
         
         # Фильтрация по факультету
@@ -75,13 +93,47 @@ class UserProfileViewSet(SwaggerSafeMixin, viewsets.ReadOnlyModelViewSet):
                 project_ed_profile__department_ref__name__icontains=department
             )
         
-        # Только публичные профили
-        queryset = queryset.filter(
-            models.Q(project_ed_profile__isnull=True) |  # Если нет профиля, считаем публичным
-            models.Q(project_ed_profile__is_public=True)
-        )
+        # Только публичные профили для обычных пользователей; админам — все
+        if not self._is_project_ed_admin(self.request.user):
+            include_private = str(self.request.query_params.get('include_private', '')).lower() in ('1', 'true', 'yes')
+            # Если явно просили приватные, но не админ — игнорируем флаг
+            # Разрешаем автоматически видеть руководителей (ректор/проректор), чтобы наполнялись селекты
+            position_query = (self.request.query_params.get('position') or '').lower()
+            position_exact_query = (self.request.query_params.get('position_exact') or '').lower()
+            is_leadership_query = ('ректор' in position_query) or ('проректор' in position_query) or ('ректор' in position_exact_query) or ('проректор' in position_exact_query)
+            if not include_private and not is_leadership_query:
+                queryset = queryset.filter(
+                    models.Q(project_ed_profile__isnull=True) |  # Если нет профиля, считаем публичным
+                    models.Q(project_ed_profile__is_public=True)
+                )
         
         return queryset.order_by('first_name', 'last_name')
+
+    @action(detail=False, methods=['get'])
+    def leadership(self, request):
+        """
+        Список пользователей по руководящим должностям.
+        Поддерживаем параметры:
+        - position: подстрочный поиск (например, 'ректор' или 'проректор')
+        - position_exact: точное совпадение названия должности
+
+        Для этого эндпоинта ослабляем фильтр приватности, чтобы упростить наполнение селектов.
+        """
+        position = (request.query_params.get('position') or '').strip()
+        position_exact = (request.query_params.get('position_exact') or '').strip()
+
+        qs = super().get_queryset()
+        if position_exact:
+            qs = qs.filter(project_ed_profile__position_ref__name__iexact=position_exact)
+        elif position:
+            qs = qs.filter(project_ed_profile__position_ref__name__icontains=position)
+        else:
+            # По умолчанию возвращаем всех, у кого позиция содержит 'ректор'
+            qs = qs.filter(project_ed_profile__position_ref__name__icontains='ректор')
+
+        # Этот спец-эндпоинт намеренно не режет приватность, чтобы заполнить выпадающие списки
+        serializer = UserListSerializer(qs.order_by('first_name', 'last_name'), many=True, context={'request': request})
+        return Response(serializer.data)
     
     @action(detail=True, methods=['get'])
     def projects(self, request, pk=None):
