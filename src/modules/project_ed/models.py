@@ -175,13 +175,6 @@ class TargetIndicator(models.Model):
     
     def __str__(self) -> str:
         return self.name
-    
-    def clean(self):
-        """Валидация: подкатегория должна принадлежать выбранной категории."""
-        from django.core.exceptions import ValidationError
-        
-        if self.subcategory and self.category and self.subcategory.category != self.category:
-            raise ValidationError('Подкатегория должна принадлежать выбранной категории.')
 
 
 class EventBlock(models.Model):
@@ -191,15 +184,7 @@ class EventBlock(models.Model):
     title = models.CharField('Название блока', max_length=255)
     description = models.TextField('Описание блока', blank=True)
     
-    # Связь с категорией и подкатегорией (опционально)
-    category = models.ForeignKey(
-        Category,
-        on_delete=models.SET_NULL,
-        related_name='event_blocks',
-        verbose_name='Категория',
-        null=True,
-        blank=True
-    )
+    # Связь с подкатегорией (опционально)
     subcategory = models.ForeignKey(
         Subcategory,
         on_delete=models.SET_NULL,
@@ -224,11 +209,6 @@ class EventBlock(models.Model):
         return self.title
     
     @property
-    def category_name(self):
-        """Название категории."""
-        return self.category.name if self.category else None
-    
-    @property
     def subcategory_name(self):
         """Название подкатегории."""
         return self.subcategory.name if self.subcategory else None
@@ -237,13 +217,6 @@ class EventBlock(models.Model):
     def events_count(self):
         """Количество мероприятий в блоке."""
         return self.events.count()
-    
-    def clean(self):
-        """Валидация: подкатегория должна принадлежать выбранной категории."""
-        from django.core.exceptions import ValidationError
-        
-        if self.subcategory and self.category and self.subcategory.category != self.category:
-            raise ValidationError('Подкатегория должна принадлежать выбранной категории.')
     
     def save(self, *args, **kwargs):
         """Переопределяем save для обновления кодов мероприятий при изменении кода блока."""

@@ -449,26 +449,25 @@ def parse_excel_file(file):
                             })
                             continue
                         
-                        # Найти категорию и подкатегорию по коду блока
+                        # Найти подкатегорию по коду блока
                         results['logs'].append({
                             'level': 'debug',
-                            'message': f'🔍 Поиск категории и подкатегории для блока "{block_code}"'
+                            'message': f'🔍 Поиск подкатегории для блока "{block_code}"'
                         })
                         
-                        category, subcategory = find_category_and_subcategory_by_code(block_code, name)
+                        _category, subcategory = find_category_and_subcategory_by_code(block_code, name)
                         
-                        if not category or not subcategory:
-                            warning_msg = f'⚠️ Не найдены категория/подкатегория для блока "{block_code}": "{name}"'
+                        if not subcategory:
+                            warning_msg = f'⚠️ Не найдена подкатегория для блока "{block_code}": "{name}"'
                             results['warnings'].append(warning_msg)
                             results['logs'].append({
                                 'level': 'warn',
                                 'message': warning_msg
                             })
                             
-                            # Используем первую доступную категорию и подкатегорию
-                            category = Category.objects.first()
+                            # Используем первую доступную подкатегорию
                             subcategory = Subcategory.objects.first()
-                            fallback_msg = f'🔄 Используем fallback: категория="{category.name if category else None}", подкатегория="{subcategory.name if subcategory else None}"'
+                            fallback_msg = f'🔄 Используем fallback: подкатегория="{subcategory.name if subcategory else None}"'
                             results['logs'].append({
                                 'level': 'warn',
                                 'message': fallback_msg
@@ -476,7 +475,7 @@ def parse_excel_file(file):
                         else:
                             results['logs'].append({
                                 'level': 'success',
-                                'message': f'✅ Найдены категория "{category.name}" и подкатегория "{subcategory.name}" для блока "{block_code}"'
+                                'message': f'✅ Найдена подкатегория "{subcategory.name}" для блока "{block_code}"'
                             })
                         
                         # Создаем EventBlock
@@ -484,7 +483,6 @@ def parse_excel_file(file):
                             code=block_code,
                             title=name,
                             description=name,  # Используем название как описание
-                            category=category,
                             subcategory=subcategory,
                             order=order_counter,
                             is_active=True
@@ -507,10 +505,6 @@ def parse_excel_file(file):
                         results['logs'].append({
                             'level': 'info',
                             'message': f'   📝 Название: {name}'
-                        })
-                        results['logs'].append({
-                            'level': 'info',
-                            'message': f'   🏷️ Категория: {category.name if category else "Не указана"}'
                         })
                         results['logs'].append({
                             'level': 'info',

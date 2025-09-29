@@ -270,7 +270,6 @@ class EventBlockViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     """ViewSet для управления блоками мероприятий."""
     queryset = EventBlock.objects.filter(is_active=True).prefetch_related(
         Prefetch('events', queryset=Event.objects.filter(is_active=True)),
-        'category', 
         'subcategory'
     )
     permission_classes = [permissions.IsAuthenticated]
@@ -310,13 +309,12 @@ class EventBlockViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         queryset = EventBlock.objects.filter(is_active=True)
         
         if category_id:
-            queryset = queryset.filter(category_id=category_id)
+            queryset = queryset.filter(subcategory__category_id=category_id)
         if subcategory_id:
             queryset = queryset.filter(subcategory_id=subcategory_id)
         
         return queryset.prefetch_related(
             Prefetch('events', queryset=Event.objects.filter(is_active=True)),
-            'category', 
             'subcategory'
         )
     
