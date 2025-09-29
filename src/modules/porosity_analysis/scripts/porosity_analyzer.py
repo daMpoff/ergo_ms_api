@@ -539,6 +539,13 @@ class PorosityAnalyzer:
         except Exception:
             pass
 
+        # На всякий случай закрываем все оставшиеся открытые фигуры,
+        # чтобы не копить их в памяти и не получать предупреждения matplotlib
+        try:
+            plt.close('all')
+        except Exception:
+            pass
+
         return images
     
     def _create_visualization_tasks(
