@@ -152,6 +152,7 @@ class CategoryCreateUpdateSerializer(serializers.ModelSerializer):
 class TargetIndicatorSerializer(serializers.ModelSerializer):
     """Сериализатор для целевых показателей."""
     category_name = serializers.CharField(source='category.name', read_only=True)
+    category_description = serializers.CharField(source='category.description', read_only=True)
     subcategory_name = serializers.CharField(source='subcategory.name', read_only=True)
     event_block_title = serializers.CharField(source='event_block.title', read_only=True)
     event_block_short_name = serializers.SerializerMethodField()
@@ -164,6 +165,7 @@ class TargetIndicatorSerializer(serializers.ModelSerializer):
             'category',
             'subcategory',
             'category_name',
+            'category_description',
             'subcategory_name',
             'name',
             'unit',
