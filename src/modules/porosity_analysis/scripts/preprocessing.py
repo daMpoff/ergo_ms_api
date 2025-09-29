@@ -261,21 +261,55 @@ class ScaleDetector:
     
     def _find_horizontal_lines(self, image: np.ndarray, image_width: int) -> list:
         """Находит горизонтальные линии (потенциальные линейки)"""
-        # Бинаризация для выделения белых элементов
+        # 1) Усиление контраста, чтобы стабилизировать пороги на «светлых» и «тёмных» фото
+        # CLAHE хорошо работает для микроскопии с неравномерным освещением
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        enhanced = clahe.apply(image)
+
+        # 2) Формируем несколько бинаризаций с разной полярностью
         threshold = self.config['BINARY_THRESHOLD']
-        _, binary = cv2.threshold(image, threshold, 255, cv2.THRESH_BINARY)
-        
-        contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        
+        _, binary_white = cv2.threshold(enhanced, threshold, 255, cv2.THRESH_BINARY)
+        _, binary_black = cv2.threshold(enhanced, threshold, 255, cv2.THRESH_BINARY_INV)
+        # запасные варианты, если фиксированный порог не подходит
+        _, binary_otsu = cv2.threshold(enhanced, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        _, binary_otsu_inv = cv2.threshold(enhanced, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+
+        binaries = [binary_white, binary_black, binary_otsu, binary_otsu_inv]
+
         candidates = []
         min_width = image_width * self.config['MIN_WIDTH_FRACTION']
         aspect_ratio_threshold = self.config['ASPECT_RATIO_THRESHOLD']
-        
-        for contour in contours:
-            x, y, w, h = cv2.boundingRect(contour)
-            if h > 0 and w > aspect_ratio_threshold * h and w > min_width:
-                candidates.append((x, y, w, h))
-        
+
+        for bin_img in binaries:
+            contours, _ = cv2.findContours(bin_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            for contour in contours:
+                x, y, w, h = cv2.boundingRect(contour)
+                if h > 0 and w > aspect_ratio_threshold * h and w > min_width:
+                    candidates.append((x, y, w, h))
+
+        # Убираем дубликаты кандидатов (после разных бинаризаций) по близким bbox
+        if candidates:
+            merged = []
+            for cand in sorted(candidates, key=lambda c: (-c[2], c[3])):
+                if not merged:
+                    merged.append(cand)
+                    continue
+                x, y, w, h = cand
+                is_dup = False
+                for mx, my, mw, mh in merged:
+                    # если пересечение велико, считаем дубликатом
+                    inter_w = max(0, min(x + w, mx + mw) - max(x, mx))
+                    inter_h = max(0, min(y + h, my + mh) - max(y, my))
+                    inter_area = inter_w * inter_h
+                    area = w * h
+                    m_area = mw * mh
+                    if inter_area > 0.6 * min(area, m_area):
+                        is_dup = True
+                        break
+                if not is_dup:
+                    merged.append(cand)
+            candidates = merged
+
         return candidates
     
     def _process_scale_bar_results(

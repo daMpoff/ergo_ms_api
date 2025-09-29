@@ -1128,7 +1128,7 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
                 return response
             
         except Exception as e:
-            print(f"Error reading file: {str(e)}")
+            logger.error(f"Ошибка при чтении файла отчета: {str(e)}")
             return Response({
                 'error': f'Ошибка при скачивании отчета: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

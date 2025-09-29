@@ -1,5 +1,6 @@
 import os
 import logging
+import threading
 
 # Настройка Matplotlib для работы в фоновом режиме (без GUI)
 # ДОЛЖНО БЫТЬ ДО ИМПОРТА matplotlib
@@ -17,6 +18,9 @@ from src.modules.porosity_analysis.utils import is_cancelled, clear_cancel_flag
 # Настраиваем логгер для задач анализа пористости
 logger = logging.getLogger('celery.task.porosity_analysis')
 
+# Глобальный семафор для ограничения одновременных задач анализа пористости
+porosity_analysis_semaphore = threading.Semaphore(PorosityAnalysisConfig.get_max_concurrent_analyses())
+
 
 def check_concurrent_analyses_limit():
     """
@@ -26,7 +30,7 @@ def check_concurrent_analyses_limit():
     return True
 
 
-@shared_task(bind=True, max_retries=3)
+@shared_task(bind=True, max_retries=None, default_retry_delay=PorosityAnalysisConfig.get_retry_delay())
 def run_porosity_analysis(self, analysis_id):
     """
     Асинхронная задача для выполнения анализа пористости
@@ -34,9 +38,12 @@ def run_porosity_analysis(self, analysis_id):
     Args:
         analysis_id (int): ID анализа в базе данных
     """
+    # Пытаемся захватить слот семафора для ограничения параллелизма
+    if not porosity_analysis_semaphore.acquire(blocking=False):
+        logger.warning(f"Достигнут лимит одновременных задач porosity_analysis. Задача {self.request.id} отложена.")
+        raise self.retry(countdown=PorosityAnalysisConfig.get_retry_delay())
+
     try:
-        # Убрана проверка лимита одновременных анализов
-        
         # Отмена до старта
         if is_cancelled(analysis_id):
             logger.info(f"Анализ {analysis_id} отменен до запуска. Завершаем задачу.")
@@ -75,7 +82,11 @@ def run_porosity_analysis(self, analysis_id):
         os.environ['POROSITY_ANALYSIS_ID'] = str(analysis_id)
 
         # Запускаем анализ
-        logger.warning(f"Путь к изображению: {analysis.original_image_path}, существует: {os.path.exists(analysis.original_image_path)}")
+        image_exists = os.path.exists(analysis.original_image_path)
+        if not image_exists:
+            logger.warning(f"Путь к изображению не найден: {analysis.original_image_path}")
+        else:
+            logger.info(f"Путь к изображению: {analysis.original_image_path}, существует: {image_exists}")
         # Внутренняя обертка, позволяющая периодически проверять отмену
         results = integrated_analysis(
             image_path=config.input_image_path,
@@ -124,16 +135,11 @@ def run_porosity_analysis(self, analysis_id):
         analysis.min_pore_size = min_pore_size
         analysis.pore_density = pore_density
         analysis.average_interpore_distance = average_interpore_distance
-        analysis.status = 'completed'
-        analysis.end_time = timezone.now()
-        try:
-            if analysis.start_time and analysis.end_time:
-                analysis.duration_seconds = int((analysis.end_time - analysis.start_time).total_seconds())
-        except Exception:
-            pass
+        # На этом этапе еще не завершаем анализ: сначала должны быть готовы все отчеты
         analysis.save()
-        
+
         # Генерируем отчеты (встраиваем изображения напрямую, без сохранения PNG)
+        reports = {}
         try:
             from .report_generator import PorosityReportGenerator
             report_generator = PorosityReportGenerator(analysis, results)
@@ -148,14 +154,44 @@ def run_porosity_analysis(self, analysis_id):
                 report_generator = PorosityReportGenerator(analysis, results)
                 docx_report = report_generator.generate_single_report('docx')
                 if docx_report:
+                    reports['docx'] = docx_report
                     logger.info(f"DOCX отчет создан: {docx_report}")
                 else:
                     logger.warning(f"Не удалось создать DOCX отчет для анализа {analysis_id}")
             except Exception as docx_error:
                 logger.error(f"Критическая ошибка при создании отчетов для анализа {analysis_id}: {docx_error}")
-            # Не прерываем процесс, если отчеты не удалось создать
 
-        logger.info(f"Анализ пористости завершен успешно для ID: {analysis_id}")
+        # Статус "Завершен" только если есть все отчеты (DOCX и PDF)
+        all_reports_ready = ('docx' in reports and 'pdf' in reports)
+        if all_reports_ready:
+            analysis.status = 'completed'
+            analysis.end_time = timezone.now()
+            try:
+                if analysis.start_time and analysis.end_time:
+                    analysis.duration_seconds = int((analysis.end_time - analysis.start_time).total_seconds())
+            except Exception:
+                pass
+            analysis.error_message = ''
+            analysis.save()
+            logger.info(f"Анализ пористости завершен успешно для ID: {analysis_id}")
+        else:
+            # Если не удалось подготовить все отчеты, считаем анализ неуспешным
+            missing = []
+            if 'docx' not in reports:
+                missing.append('DOCX')
+            if 'pdf' not in reports:
+                missing.append('PDF')
+            analysis.status = 'failed'
+            analysis.end_time = timezone.now()
+            try:
+                if analysis.start_time and analysis.end_time:
+                    analysis.duration_seconds = int((analysis.end_time - analysis.start_time).total_seconds())
+            except Exception:
+                pass
+            analysis.error_message = f"Не все отчеты созданы: отсутствует {', '.join(missing)}"
+            analysis.save()
+            logger.warning(f"Анализ {analysis_id} помечен как 'failed' — отсутствуют отчеты: {missing}")
+
         clear_cancel_flag(analysis_id)
         
     except PorosityAnalysis.DoesNotExist:
@@ -177,12 +213,18 @@ def run_porosity_analysis(self, analysis_id):
         
         # Повторяем задачу если не превышено максимальное количество попыток
         retry_delay = PorosityAnalysisConfig.get_retry_delay()
-        if self.request.retries < self.max_retries:
+        if (self.max_retries is not None) and (self.request.retries < self.max_retries):
             logger.info(f"Повторная попытка анализа {analysis_id}, попытка {self.request.retries + 1}")
             raise self.retry(countdown=retry_delay * (2 ** self.request.retries))  # Экспоненциальная задержка
         else:
-            logger.error(f"Анализ {analysis_id} завершился неудачно после {self.max_retries} попыток")
+            logger.error("Анализ завершился неудачно, дальнейшие ретраи отключены для ошибок выполнения")
             raise
+    finally:
+        # Освобождаем слот семафора в любом случае
+        try:
+            porosity_analysis_semaphore.release()
+        except Exception:
+            pass
 
 
 @shared_task

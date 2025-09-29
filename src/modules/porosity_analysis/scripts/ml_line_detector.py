@@ -11,6 +11,9 @@ from scipy.spatial.distance import pdist
 
 import joblib
 import os
+import logging
+
+logger = logging.getLogger('celery.task.porosity_analysis')
 
 
 class MLLineDetector:
@@ -272,10 +275,10 @@ class MLLineDetector:
         all_features = []
         all_labels = []
         
-        print("Извлечение признаков из обучающих изображений...")
+        logger.info("Извлечение признаков из обучающих изображений...")
         
         for i, image in enumerate(training_images):
-            print(f"Обработка изображения {i+1}/{len(training_images)}")
+            logger.info(f"Обработка изображения {i+1}/{len(training_images)}")
             features, labels = self.create_training_data(image, interactive=False)
             
             if len(features) > 0:
@@ -289,8 +292,8 @@ class MLLineDetector:
         X = np.vstack(all_features)
         y = np.array(all_labels)
         
-        print(f"Всего образцов: {len(X)}")
-        print(f"Пор: {np.sum(y == 0)}, Линий: {np.sum(y == 1)}")
+        logger.info(f"Всего образцов: {len(X)}")
+        logger.info(f"Пор: {np.sum(y == 0)}, Линий: {np.sum(y == 1)}")
         
         # Разделяем на обучающую и валидационную выборки
         X_train, X_val, y_train, y_val = train_test_split(
@@ -309,7 +312,7 @@ class MLLineDetector:
             max_features='sqrt'  # Улучшает обобщение
         )
         
-        print("Обучение модели...")
+        logger.info("Обучение модели...")
         self.model.fit(X_train, y_train)
         
         # Оценка модели
@@ -318,24 +321,23 @@ class MLLineDetector:
         
         y_pred = self.model.predict(X_val)
         
-        print(f"Точность на обучающей выборке: {train_score:.3f}")
-        print(f"Точность на валидационной выборке: {val_score:.3f}")
-        print("\nОтчет по классификации:")
-        print(classification_report(y_val, y_pred, target_names=['Поры', 'Линии']))
+        logger.info(f"Точность на обучающей выборке: {train_score:.3f}")
+        logger.info(f"Точность на валидационной выборке: {val_score:.3f}")
+        logger.info("Отчет по классификации:\n" + classification_report(y_val, y_pred, target_names=['Поры', 'Линии']))
         
         # Важность признаков
         feature_importance = self.model.feature_importances_
         importance_pairs = list(zip(self.feature_names, feature_importance))
         importance_pairs.sort(key=lambda x: x[1], reverse=True)
         
-        print("\nВажность признаков:")
+        logger.info("Важность признаков:")
         for feature, importance in importance_pairs[:10]:
-            print(f"{feature}: {importance:.3f}")
+            logger.info(f"{feature}: {importance:.3f}")
         
         # Сохранение модели
         if save_path:
             self.save_model(save_path)
-            print(f"Модель сохранена в {save_path}")
+            logger.info(f"Модель сохранена в {save_path}")
         
         return {
             'train_score': train_score,
@@ -391,8 +393,8 @@ class MLLineDetector:
         # Инвертируем маску (True там, где НЕТ линий)
         final_mask = ~lines_mask
         
-        print(f"Обнаружено {np.sum(refined_predictions)} линейных объектов")
-        print(f"Исключено {np.sum(lines_mask)} пикселей ({(np.sum(lines_mask)/image.size)*100:.2f}%)")
+        logger.info(f"Обнаружено {np.sum(refined_predictions)} линейных объектов")
+        logger.info(f"Исключено {np.sum(lines_mask)} пикселей ({(np.sum(lines_mask)/image.size)*100:.2f}%)")
         
         return final_mask
     
@@ -537,8 +539,8 @@ class MLLineDetector:
         
         results = {}
         
-        print("Анализ качества детекции линий:")
-        print("=" * 50)
+        logger.info("Анализ качества детекции линий:")
+        logger.info("=" * 50)
         
         for conf_thresh in confidence_thresholds:
             for dil_size in dilation_sizes:
@@ -568,16 +570,16 @@ class MLLineDetector:
                     'excluded_pixels': np.sum(lines_mask)
                 }
                 
-                print(f"Порог: {conf_thresh}, Расширение: {dil_size} -> "
-                      f"Линий: {detected_lines}, Исключено: {excluded_percentage:.2f}%")
+                logger.info(f"Порог: {conf_thresh}, Расширение: {dil_size} -> "
+                            f"Линий: {detected_lines}, Исключено: {excluded_percentage:.2f}%")
         
         # Рекомендуемые параметры (баланс между чувствительностью и точностью)
         best_params = min(results.items(), 
                          key=lambda x: abs(x[1]['excluded_percentage'] - 5))  # Целевое исключение ~5%
         
-        print("\nРекомендуемые параметры:")
-        print(f"confidence_threshold: {best_params[1]['confidence_threshold']}")
-        print(f"dilation_size: {best_params[1]['dilation_size']}")
+        logger.info("Рекомендуемые параметры:")
+        logger.info(f"confidence_threshold: {best_params[1]['confidence_threshold']}")
+        logger.info(f"dilation_size: {best_params[1]['dilation_size']}")
         
         return results
 
@@ -628,43 +630,43 @@ def create_sample_training_data(image_paths=None, save_path=None):
         # Загружаем реальные изображения
         training_images = []
         for path in image_paths:
-            print(f"Загрузка изображения: {path}")
+            logger.info(f"Загрузка изображения: {path}")
             img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
             if img is not None:
-                print(f"  Размер изображения: {img.shape}")
+                logger.info(f"  Размер изображения: {img.shape}")
                 binary = detector._preprocess_image(img)
                 training_images.append(binary)
             else:
-                print(f"  Предупреждение: не удалось загрузить изображение {path}")
+                logger.warning(f"  Предупреждение: не удалось загрузить изображение {path}")
     
     # Обучаем модель
     if training_images:
-        print(f"Обучение на {len(training_images)} изображениях...")
+        logger.info(f"Обучение на {len(training_images)} изображениях...")
         detector.train_model(training_images, save_path=save_path)
     else:
-        print("Ошибка: нет доступных изображений для обучения")
+        logger.error("Ошибка: нет доступных изображений для обучения")
     
     return detector
 
 
 if __name__ == "__main__":
     # Пример использования улучшенного детектора
-    print("Создание и обучение улучшенной модели детектора линий...")
+    logger.info("Создание и обучение улучшенной модели детектора линий...")
     
     # Создаем детектор с синтетическими данными
     detector = create_sample_training_data()
     
-    print("\nДетектор готов к использованию!")
-    print("\nДля использования с реальными изображениями:")
-    print("1. Загрузите изображение: img = cv2.imread('path_to_image.jpg', cv2.IMREAD_GRAYSCALE)")
-    print("2. Проанализируйте качество: detector.analyze_detection_quality(img)")
-    print("3. Настройте параметры и детектируйте: mask = detector.detect_and_exclude_lines(img, confidence_threshold=0.4)")
-    print("4. Примените маску для исключения линий в анализе пористости")
+    logger.info("Детектор готов к использованию!")
+    logger.info("Для использования с реальными изображениями:")
+    logger.info("1. Загрузите изображение: img = cv2.imread('path_to_image.jpg', cv2.IMREAD_GRAYSCALE)")
+    logger.info("2. Проанализируйте качество: detector.analyze_detection_quality(img)")
+    logger.info("3. Настройте параметры и детектируйте: mask = detector.detect_and_exclude_lines(img, confidence_threshold=0.4)")
+    logger.info("4. Примените маску для исключения линий в анализе пористости")
     
-    print("\nНовые улучшения:")
-    print("- Более точные эвристические правила для линий")
-    print("- Дополнительные признаки (компактность, удлинение и др.)")
-    print("- Улучшенная предобработка с морфологическим градиентом")
-    print("- Балансировка классов в модели")
-    print("- Дополнительная геометрическая фильтрация")
-    print("- Анализ качества детекции с разными параметрами") 
+    logger.info("Новые улучшения:")
+    logger.info("- Более точные эвристические правила для линий")
+    logger.info("- Дополнительные признаки (компактность, удлинение и др.)")
+    logger.info("- Улучшенная предобработка с морфологическим градиентом")
+    logger.info("- Балансировка классов в модели")
+    logger.info("- Дополнительная геометрическая фильтрация")
+    logger.info("- Анализ качества детекции с разными параметрами") 

@@ -8,6 +8,7 @@
 Настройки можно изменить в переменных ниже.
 """
 import os
+import logging
 import sys
 
 # Настройка Matplotlib для работы в фоновом режиме (без GUI)
@@ -20,6 +21,8 @@ from typing import Optional
 import os
 
 from src.modules.porosity_analysis.scripts.porosity_analyzer import PorosityAnalyzer
+
+logger = logging.getLogger('celery.task.porosity_analysis')
 
 
 def run_analysis(config):
@@ -61,7 +64,7 @@ def run_analysis(config):
             return None
             
     except Exception as e:
-        print(f"Ошибка при выполнении анализа: {e}")
+        logger.error(f"Ошибка при выполнении анализа: {e}")
         return None
 
 
@@ -112,16 +115,16 @@ class PorosityAnalysisApp:
         from src.modules.porosity_analysis.utils import is_cancelled
         analysis_id_env = os.environ.get('POROSITY_ANALYSIS_ID')
         if analysis_id_env and is_cancelled(int(analysis_id_env)):
-            print(f"Задача анализа {analysis_id_env} отменена перед запуском. Прерывание.")
+            logger.info(f"Задача анализа {analysis_id_env} отменена перед запуском. Прерывание.")
             return None
 
         # Запуск анализа
-        # print("Начинаем анализ пористости...")
+        # logger.info("Начинаем анализ пористости...")
         results = self.analyzer.integrated_analysis(image_path, scale_value, save_directory)
         
         # Проверка отмены после выполнения
         if analysis_id_env and is_cancelled(int(analysis_id_env)):
-            # print(f"Задача анализа {analysis_id_env} отменена во время выполнения. Результаты не сохраняем.")
+            # logger.info(f"Задача анализа {analysis_id_env} отменена во время выполнения. Результаты не сохраняем.")
             return None
 
         # Обработка результатов
@@ -130,22 +133,22 @@ class PorosityAnalysisApp:
     
     def _print_startup_info(self, image_path: str, scale_value: float, save_directory: str) -> None:
         """Выводит информацию о запуске анализа"""
-        print("=== АНАЛИЗ ПОРИСТОСТИ ИЗОБРАЖЕНИЙ ===")
-        print(f"Путь к изображению: {image_path}")
-        print(f"Значение шкалы: {scale_value} мкм")
-        print(f"Папка для сохранения результатов: {save_directory}")
-        print("=" * 40)
+        logger.info("=== АНАЛИЗ ПОРИСТОСТИ ИЗОБРАЖЕНИЙ ===")
+        logger.info(f"Путь к изображению: {image_path}")
+        logger.info(f"Значение шкалы: {scale_value} мкм")
+        logger.info(f"Папка для сохранения результатов: {save_directory}")
+        logger.info("=" * 40)
     
     def _validate_inputs(self, image_path: str, save_directory: str) -> bool:
         """Проверяет входные данные"""
         # Проверка существования изображения
         if not os.path.exists(image_path):
-            print(f"ОШИБКА: Файл изображения не найден: {image_path}")
+            logger.error(f"ОШИБКА: Файл изображения не найден: {image_path}")
             return False
         
         # Создание директории для результатов если не существует
         if not os.path.exists(save_directory):
-            print(f"Создание директории для результатов: {save_directory}")
+            logger.info(f"Создание директории для результатов: {save_directory}")
             os.makedirs(save_directory, exist_ok=True)
         
         return True
@@ -161,11 +164,11 @@ class PorosityAnalysisApp:
     
     def _print_success_message(self, save_directory: str) -> None:
         """Выводит сообщение об успешном завершении"""
-        print("\n" + "=" * 40)
-        print("АНАЛИЗ ЗАВЕРШЕН УСПЕШНО!")
-        print("=" * 40)
-        print(f"Результаты сохранены в папке: {save_directory}")
-        print("Созданы следующие файлы:")
+        logger.info("\n" + "=" * 40)
+        logger.info("АНАЛИЗ ЗАВЕРШЕН УСПЕШНО!")
+        logger.info("=" * 40)
+        logger.info(f"Результаты сохранены в папке: {save_directory}")
+        logger.info("Созданы следующие файлы:")
         
         # Список созданных файлов
         output_files = [
@@ -186,14 +189,14 @@ class PorosityAnalysisApp:
         ]
         
         for file_desc in output_files:
-            print(f"  - {file_desc}")
+            logger.info(f"  - {file_desc}")
     
     def _print_error_message(self) -> None:
         """Выводит сообщение об ошибке"""
-        print("\n" + "=" * 40)
-        print("АНАЛИЗ ЗАВЕРШЕН С ОШИБКОЙ!")
-        print("=" * 40)
-        print("Проверьте сообщения об ошибках выше.")
+        logger.error("\n" + "=" * 40)
+        logger.error("АНАЛИЗ ЗАВЕРШЕН С ОШИБКОЙ!")
+        logger.error("=" * 40)
+        logger.error("Проверьте сообщения об ошибках выше.")
 
 
 def main():
@@ -213,10 +216,10 @@ def main():
         sys.exit(0 if success else 1)
         
     except KeyboardInterrupt:
-        print("\nАнализ прерван пользователем.")
+        logger.warning("Анализ прерван пользователем.")
         sys.exit(1)
     except Exception as e:
-        print(f"Критическая ошибка: {e}")
+        logger.critical(f"Критическая ошибка: {e}")
         sys.exit(1)
 
 

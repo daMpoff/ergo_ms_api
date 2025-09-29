@@ -15,6 +15,9 @@ from scipy import ndimage as ndi
 from sklearn.cluster import KMeans
 
 from src.modules.porosity_analysis.scripts.utils import batch_process_properties
+import logging
+
+logger = logging.getLogger('celery.task.porosity_analysis')
 from src.modules.porosity_analysis.scripts.preprocessing import detect_and_exclude_anomalies
 from src.modules.porosity_analysis.scripts.ml_line_detector import MLLineDetector, create_sample_training_data
 
@@ -52,7 +55,7 @@ def advanced_porosity_analysis(image_path, pixels_per_micron, scale_region, save
     scale_exclude_mask[sy:sy+sh, sx:sx+sw] = False
     
     # Обнаружение и исключение линий с помощью ML детектора
-    print("Обнаружение линий с помощью ML детектора...")
+    logger.info("Обнаружение линий с помощью ML детектора...")
     
     # Получаем директорию с данными анализа для поиска модели
     if save_directory is None:
@@ -68,15 +71,15 @@ def advanced_porosity_analysis(image_path, pixels_per_micron, scale_region, save
         # Пытаемся загрузить существующую модель
         if os.path.exists(model_path):
             ml_detector = MLLineDetector(model_path)
-            print(f"  - Загружена предобученная модель: {model_path}")
+            logger.info(f"  - Загружена предобученная модель: {model_path}")
         else:
             # Создаем и обучаем новую модель на текущем изображении
-            print("  - Создание и обучение новой ML модели...")
+            logger.info("  - Создание и обучение новой ML модели...")
             ml_detector = create_sample_training_data(
                 image_paths=[image_path], 
                 save_path=model_path
             )
-            print(f"  - Модель сохранена в: {model_path}")
+            logger.info(f"  - Модель сохранена в: {model_path}")
         
         # Детекция линий с оптимизированными параметрами
         lines_exclude_mask = ml_detector.detect_and_exclude_lines(
@@ -84,23 +87,23 @@ def advanced_porosity_analysis(image_path, pixels_per_micron, scale_region, save
             dilation_size=5,
             confidence_threshold=0.4  # Немного снижен для лучшего захвата линий
         )
-        print(f"  - ML детектор успешно применен")
+        logger.info(f"  - ML детектор успешно применен")
         
     except Exception as e:
-        print(f"  - Ошибка ML детектора: {e}")
+        logger.warning(f"  - Ошибка ML детектора: {e}")
     
     # Обнаружение и исключение аномалий
-    print("Обнаружение аномалий для исключения...")
+    logger.info("Обнаружение аномалий для исключения...")
     anomalies_exclude_mask = detect_and_exclude_anomalies(gray)
     
     # Комбинирование всех масок исключения
     exclude_mask = scale_exclude_mask & lines_exclude_mask & anomalies_exclude_mask
     
-    print(f"Исключено из анализа:")
-    print(f"  - Область шкалы: {np.sum(~scale_exclude_mask)} пикселей")
-    print(f"  - Области линий: {np.sum(~lines_exclude_mask)} пикселей")
-    print(f"  - Аномальные области: {np.sum(~anomalies_exclude_mask)} пикселей")
-    print(f"  - Общая исключенная область: {np.sum(~exclude_mask)} пикселей ({(np.sum(~exclude_mask)/gray.size)*100:.2f}%)")
+    logger.info("Исключено из анализа:")
+    logger.info(f"  - Область шкалы: {np.sum(~scale_exclude_mask)} пикселей")
+    logger.info(f"  - Области линий: {np.sum(~lines_exclude_mask)} пикселей")
+    logger.info(f"  - Аномальные области: {np.sum(~anomalies_exclude_mask)} пикселей")
+    logger.info(f"  - Общая исключенная область: {np.sum(~exclude_mask)} пикселей ({(np.sum(~exclude_mask)/gray.size)*100:.2f}%)")
     
     # 1. Улучшение контраста изображения
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))

@@ -5,6 +5,7 @@ import os
 import cv2
 import traceback
 from typing import Dict, Any, Optional
+import logging
 
 # Настройка Matplotlib для работы в фоновом режиме (без GUI)
 # ДОЛЖНО БЫТЬ ДО ИМПОРТА matplotlib
@@ -34,6 +35,9 @@ import matplotlib.pyplot as plt
 from src.modules.porosity_analysis.scripts.config import FILES, MESSAGES
 from src.modules.porosity_analysis.scripts.utils import calculate_basic_pore_statistics
 from src.modules.porosity_analysis.utils import is_cancelled
+
+# Логгер модуля
+logger = logging.getLogger('celery.task.porosity_analysis')
 
 
 class PorosityAnalyzer:
@@ -65,7 +69,7 @@ class PorosityAnalyzer:
             # Ранняя проверка отмены
             analysis_id_env = os.environ.get('POROSITY_ANALYSIS_ID')
             if analysis_id_env and is_cancelled(int(analysis_id_env)):
-                print(f"Задача анализа {analysis_id_env} отменена до выполнения. Выход.")
+                logger.info(f"Задача анализа {analysis_id_env} отменена до выполнения. Выход.")
                 return None
             # 1. Определение масштаба по линейке
             scale_results = self._detect_scale(image_path, scale_value, save_directory)
@@ -79,7 +83,7 @@ class PorosityAnalyzer:
             # Проверка отмены перед тяжелым этапом
             analysis_id_env = os.environ.get('POROSITY_ANALYSIS_ID')
             if analysis_id_env and is_cancelled(int(analysis_id_env)):
-                print(f"Задача анализа {analysis_id_env} отменена перед основным этапом. Выход.")
+                logger.info(f"Задача анализа {analysis_id_env} отменена перед основным этапом. Выход.")
                 return None
 
             core_results = advanced_porosity_analysis(
@@ -101,7 +105,7 @@ class PorosityAnalyzer:
             # 5. Создание визуализаций (с проверкой отмены)
             analysis_id_env = os.environ.get('POROSITY_ANALYSIS_ID')
             if analysis_id_env and is_cancelled(int(analysis_id_env)):
-                print(f"Задача анализа {analysis_id_env} отменена перед визуализациями. Выход.")
+                logger.info(f"Задача анализа {analysis_id_env} отменена перед визуализациями. Выход.")
                 return None
             # Формируем изображения для отчета в памяти, без сохранения на диск
             in_memory_images = self._create_visualizations_in_memory(results)
@@ -131,8 +135,7 @@ class PorosityAnalyzer:
             return results
             
         except Exception as e:
-            print(f"Ошибка при анализе изображения: {e}")
-            traceback.print_exc()
+            logger.exception(f"Ошибка при анализе изображения: {e}")
             return None
     
     def _detect_scale(self, image_path: str, scale_value: float, save_directory: str) -> tuple:

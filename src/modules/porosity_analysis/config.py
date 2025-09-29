@@ -8,7 +8,7 @@ from django.conf import settings
 from django.apps import apps
 
 # Настройки для модуля анализа пористости
-MAX_CONCURRENT_ANALYSES = 5  # Максимальное количество одновременных анализов
+MAX_CONCURRENT_ANALYSES = 6  # Максимальное количество одновременных анализов
 ANALYSIS_TIMEOUT_SECONDS = 1800  # Таймаут анализа в секундах (30 минут)
 ANALYSIS_RETRY_DELAY_SECONDS = 60  # Задержка между повторными попытками в секундах
 POROSITY_QUEUE_CONCURRENCY = 5  # Количество воркеров для очереди анализа пористости

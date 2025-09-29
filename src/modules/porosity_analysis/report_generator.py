@@ -8,7 +8,6 @@ import time
 import uuid
 import tempfile
 from pathlib import Path
-import fcntl
 from datetime import datetime
 from typing import Dict, List, Optional
 from io import BytesIO
@@ -19,6 +18,51 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT
 import matplotlib
 matplotlib.use('Agg')
+
+# Кроссплатформенная блокировка файлов: fcntl на Unix, msvcrt на Windows
+try:
+    import fcntl  # type: ignore
+except Exception:
+    fcntl = None  # type: ignore
+try:
+    import msvcrt  # type: ignore
+except Exception:
+    msvcrt = None  # type: ignore
+
+def _acquire_file_lock(lockf):
+    """Ставит эксклюзивную блокировку на файл по возможности.
+    На Unix — через fcntl, на Windows — через msvcrt, иначе — no-op.
+    """
+    try:
+        if fcntl is not None:
+            try:
+                fcntl.flock(lockf.fileno(), fcntl.LOCK_EX)
+            except Exception:
+                pass
+        elif os.name == 'nt' and msvcrt is not None:
+            try:
+                # Блокируем 1 байт файла
+                msvcrt.locking(lockf.fileno(), msvcrt.LK_LOCK, 1)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+def _release_file_lock(lockf):
+    """Снимает блокировку с файла, если ранее ставили."""
+    try:
+        if fcntl is not None:
+            try:
+                fcntl.flock(lockf.fileno(), fcntl.LOCK_UN)
+            except Exception:
+                pass
+        elif os.name == 'nt' and msvcrt is not None:
+            try:
+                msvcrt.locking(lockf.fileno(), msvcrt.LK_UNLCK, 1)
+            except Exception:
+                pass
+    except Exception:
+        pass
 
 # Проверяем доступность LibreOffice или unoconv для конвертации
 def check_conversion_tools():
@@ -1027,8 +1071,8 @@ class PorosityReportGenerator:
             
             # Если unoconv не сработал, пробуем LibreOffice с уникальным профилем, локами и ретраями
             if not success and ('libreoffice' in available_tools or 'soffice' in available_tools):
-                # Глобальная блокировка для сериализации конвертаций LibreOffice
-                lock_path = "/tmp/lo_convert.lock"
+                # Глобальная блокировка для сериализации конвертаций LibreOffice (временная директория ОС)
+                lock_path = str(Path(tempfile.gettempdir()) / "lo_convert.lock")
                 try:
                     Path(lock_path).touch(exist_ok=True)
                 except Exception:
@@ -1041,11 +1085,7 @@ class PorosityReportGenerator:
                 def _convert_with_lock():
                     nonlocal success
                     with open(lock_path, "w") as lockf:
-                        try:
-                            fcntl.flock(lockf.fileno(), fcntl.LOCK_EX)
-                        except Exception:
-                            # Если не удалось поставить лок, все равно пробуем (хуже, но не блокируемся)
-                            pass
+                        _acquire_file_lock(lockf)
 
                         for attempt in range(1, max_retries + 1):
                             profile_dir = Path(tempfile.gettempdir()) / f"lo_profile_{uuid.uuid4().hex}"
@@ -1143,10 +1183,7 @@ class PorosityReportGenerator:
                                 except Exception:
                                     pass
 
-                        try:
-                            fcntl.flock(lockf.fileno(), fcntl.LOCK_UN)
-                        except Exception:
-                            pass
+                        _release_file_lock(lockf)
 
                 _convert_with_lock()
             
