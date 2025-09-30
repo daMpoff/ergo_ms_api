@@ -3,6 +3,23 @@ from django.db import models
 from django.utils import timezone
 
 
+class PorosityGroup(models.Model):
+    """Группа анализов пористости"""
+
+    name = models.CharField(max_length=255, unique=True, verbose_name="Название группы")
+    description = models.TextField(blank=True, verbose_name="Описание")
+    created_at = models.DateTimeField(default=timezone.now, verbose_name="Дата создания")
+
+    class Meta:
+        db_table = 'porosity_analysis_group'
+        verbose_name = "Группа анализов пористости"
+        verbose_name_plural = "Группы анализов пористости"
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
 class PorosityAnalysis(models.Model):
     """Модель для хранения результатов анализа пористости"""
     
@@ -10,6 +27,15 @@ class PorosityAnalysis(models.Model):
     name = models.CharField(max_length=255, verbose_name="Название анализа")
     description = models.TextField(blank=True, verbose_name="Описание")
     created_at = models.DateTimeField(default=timezone.now, verbose_name="Дата создания")
+    # Группа (необязательно)
+    group = models.ForeignKey(
+        'porosity_analysis.PorosityGroup',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='analyses',
+        verbose_name="Группа"
+    )
     # Времена выполнения
     start_time = models.DateTimeField(null=True, blank=True, verbose_name="Время старта")
     end_time = models.DateTimeField(null=True, blank=True, verbose_name="Время завершения")
