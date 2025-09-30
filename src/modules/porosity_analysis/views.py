@@ -20,12 +20,13 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # Настраиваем логгер
 logger = logging.getLogger('celery.task.porosity_analysis')
 
-from src.modules.porosity_analysis.models import PorosityAnalysis
+from src.modules.porosity_analysis.models import PorosityAnalysis, PorosityGroup
 from src.modules.porosity_analysis.serializers import (
     PorosityAnalysisSerializer,
     CreatePorosityAnalysisSerializer,
     PorosityAnalysisStatusSerializer,
-    PorosityAnalysisResultsSerializer
+    PorosityAnalysisResultsSerializer,
+    PorosityGroupSerializer
 )
 from src.modules.porosity_analysis.tasks import run_porosity_analysis, check_concurrent_analyses_limit
 from src.modules.porosity_analysis.utils import save_uploaded_image, get_analysis_results_files, create_analysis_summary, set_cancel_flag
@@ -39,15 +40,26 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
     serializer_class = PorosityAnalysisSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ['status', 'created_at']
+    filterset_fields = ['status', 'created_at', 'group']
     search_fields = ['name', 'description']
-    ordering_fields = ['created_at', 'name', 'porosity_percentage']
+    ordering_fields = ['created_at', 'name', 'porosity_percentage', 'group__name']
     ordering = ['-created_at']
     pagination_class = PageNumberPagination
     
     def get_queryset(self):
-        """Возвращаем queryset с явной сортировкой для консистентной пагинации"""
-        return PorosityAnalysis.objects.all().order_by('-created_at', 'id')
+        """Возвращаем queryset с явной сортировкой для консистентной пагинации, поддержка фильтра по группе"""
+        qs = PorosityAnalysis.objects.select_related('group').all().order_by('-created_at', 'id')
+        group_id = self.request.query_params.get('group') or self.request.query_params.get('group_id')
+        if group_id:
+            try:
+                qs = qs.filter(group_id=int(group_id))
+            except Exception:
+                pass
+        # Поддержка серверной сортировки по group__name
+        ordering = self.request.query_params.get('ordering')
+        if ordering in ('group__name', '-group__name'):
+            qs = qs.order_by(ordering, '-created_at', 'id')
+        return qs
     
     def get_serializer_class(self):
         """Выбор сериализатора в зависимости от действия"""
@@ -68,6 +80,67 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
             return self.get_paginated_response(serializer.data)
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
+
+    @action(detail=True, methods=['post'])
+    def set_group(self, request, pk=None):
+        """Назначить/сменить группу для анализа. Передайте group_id или new_group_name. Можно снять группу с remove=true."""
+        analysis = self.get_object()
+        group_id = request.data.get('group_id')
+        new_group_name = str(request.data.get('new_group_name') or '').strip()
+        remove = bool(request.data.get('remove'))
+
+        try:
+            if remove:
+                analysis.group = None
+                analysis.save(update_fields=['group'])
+                return Response({'success': True, 'message': 'Группа снята'})
+
+            group = None
+            if new_group_name:
+                group, _ = PorosityGroup.objects.get_or_create(name=new_group_name)
+            elif group_id:
+                group = PorosityGroup.objects.filter(id=group_id).first()
+
+            if group is None:
+                return Response({'success': False, 'error': 'Группа не найдена'}, status=status.HTTP_400_BAD_REQUEST)
+
+            analysis.group = group
+            analysis.save(update_fields=['group'])
+            return Response({'success': True, 'group': PorosityGroupSerializer(group).data})
+        except Exception as e:
+            return Response({'success': False, 'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['post'])
+    def bulk_set_group(self, request):
+        """Массовое назначение группы анализам: { analysis_ids: [], group_id?, new_group_name?, remove? }"""
+        ids = request.data.get('analysis_ids') or []
+        remove = bool(request.data.get('remove'))
+        group_id = request.data.get('group_id')
+        new_group_name = str(request.data.get('new_group_name') or '').strip()
+
+        if not isinstance(ids, list) or not ids:
+            return Response({'success': False, 'error': 'Не указаны номера анализов'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            group = None
+            if not remove:
+                if new_group_name:
+                    group, _ = PorosityGroup.objects.get_or_create(name=new_group_name)
+                elif group_id:
+                    group = PorosityGroup.objects.filter(id=group_id).first()
+                if group is None:
+                    return Response({'success': False, 'error': 'Группа не найдена'}, status=status.HTTP_400_BAD_REQUEST)
+
+            queryset = self.get_queryset().filter(id__in=ids)
+            updated = 0
+            for a in queryset:
+                a.group = None if remove else group
+                a.save(update_fields=['group'])
+                updated += 1
+
+            return Response({'success': True, 'updated': updated, 'group': PorosityGroupSerializer(group).data if group else None})
+        except Exception as e:
+            return Response({'success': False, 'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=True, methods=['get'])
     def download_original(self, request, pk=None):
@@ -481,8 +554,26 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
             'failed': failed,
             'success_rate': (completed / total * 100) if total > 0 else 0
         })
+
+
+class PorosityGroupViewSet(viewsets.ModelViewSet):
+    """CRUD групп анализов пористости"""
+    serializer_class = PorosityGroupSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [SearchFilter, OrderingFilter]
+    search_fields = ['name', 'description']
+    ordering_fields = ['name', 'created_at']
+    ordering = ['name']
+
+    def get_queryset(self):
+        return PorosityGroup.objects.all().order_by('name')
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
     
-    @action(detail=False, methods=['get'])
+    @action(detail=False, methods=['get'], url_path='upload_config')
     def upload_config(self, request):
         """Получение конфигурации загрузки файлов"""
         try:
