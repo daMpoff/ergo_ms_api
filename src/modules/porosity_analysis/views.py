@@ -69,6 +69,29 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
 
+    @action(detail=True, methods=['get'])
+    def download_original(self, request, pk=None):
+        """Скачать исходное изображение анализа (PNG)."""
+        analysis = self.get_object()
+        file_path = analysis.original_image_path
+
+        if not file_path or not os.path.exists(file_path):
+            return Response({
+                'error': 'Исходное изображение не найдено'
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            filename = os.path.basename(file_path)
+            with open(file_path, 'rb') as f:
+                file_content = f.read()
+                response = HttpResponse(file_content, content_type='image/png')
+                response['Content-Disposition'] = f'attachment; filename="{filename}"'
+                return response
+        except Exception as e:
+            return Response({
+                'error': f'Ошибка при чтении файла: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
     @action(detail=False, methods=['post'])
     def delete_multiple(self, request):
         """Массовое удаление анализов по списку ID или строке номеров.
