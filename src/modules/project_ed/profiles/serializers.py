@@ -71,6 +71,9 @@ class UserDetailSerializer(serializers.ModelSerializer):
     faculty_name = serializers.CharField(source='project_ed_profile.faculty_name', read_only=True)
     department_name = serializers.CharField(source='project_ed_profile.department_name', read_only=True)
     
+    # Аватар пользователя
+    avatar_url = serializers.SerializerMethodField()
+    
     # Расширенные данные профиля
     profile = UserProfileSerializer(source='project_ed_profile', read_only=True)
     
@@ -84,7 +87,7 @@ class UserDetailSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'username', 'first_name', 'last_name', 'email',
             'role_name', 'position_name', 'faculty_name', 'department_name',
-            'profile', 'projects_count', 'active_projects_count', 
+            'avatar_url', 'profile', 'projects_count', 'active_projects_count', 
             'completed_projects_count'
         ]
     
@@ -99,6 +102,13 @@ class UserDetailSerializer(serializers.ModelSerializer):
     def get_completed_projects_count(self, obj):
         """Количество завершенных проектов."""
         return obj.project_ed_projects.filter(status='completed').count()
+    
+    def get_avatar_url(self, obj):
+        """Получить URL аватара пользователя."""
+        request = self.context.get('request')
+        if request and hasattr(obj, 'avatar') and obj.avatar and obj.avatar.image:
+            return request.build_absolute_uri(obj.avatar.image.url)
+        return None
     
     
     def to_representation(self, instance):
@@ -126,6 +136,9 @@ class UserListSerializer(serializers.ModelSerializer):
     faculty_name = serializers.CharField(source='project_ed_profile.faculty_name', read_only=True)
     department_name = serializers.CharField(source='project_ed_profile.department_name', read_only=True)
     
+    # Аватар пользователя
+    avatar_url = serializers.SerializerMethodField()
+    
     # Идентификаторы и короткие имена для админ-страниц
     profile_id = serializers.SerializerMethodField()
     role_ref = serializers.SerializerMethodField()
@@ -143,6 +156,7 @@ class UserListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'username', 'first_name', 'last_name',
             'role_name', 'position_name', 'faculty_name', 'department_name',
+            'avatar_url',
             'profile_id', 'role_ref', 'position_ref', 'faculty_ref', 'department_ref',
             'faculty_short_name', 'department_short_name',
             'projects_count'
@@ -151,6 +165,13 @@ class UserListSerializer(serializers.ModelSerializer):
     def get_projects_count(self, obj):
         """Общее количество проектов пользователя."""
         return obj.project_ed_projects.count()
+
+    def get_avatar_url(self, obj):
+        """Получить URL аватара пользователя."""
+        request = self.context.get('request')
+        if request and hasattr(obj, 'avatar') and obj.avatar and obj.avatar.image:
+            return request.build_absolute_uri(obj.avatar.image.url)
+        return None
 
     def _get_profile(self, obj):
         return getattr(obj, 'project_ed_profile', None)

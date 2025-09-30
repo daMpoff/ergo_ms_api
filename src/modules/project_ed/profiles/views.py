@@ -23,7 +23,8 @@ class UserProfileViewSet(SwaggerSafeMixin, viewsets.ReadOnlyModelViewSet):
         'project_ed_profile__role_ref',
         'project_ed_profile__position_ref', 
         'project_ed_profile__faculty_ref',
-        'project_ed_profile__department_ref'
+        'project_ed_profile__department_ref',
+        'avatar'
     ).all()
     
     permission_classes = [permissions.IsAuthenticated]
