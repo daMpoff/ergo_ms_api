@@ -17,33 +17,77 @@ class Project(models.Model):
         verbose_name='Владелец проекта'
     )
 
+    # Статус проекта
+    class Status(models.TextChoices):
+        DRAFT = 'draft', 'Черновик'
+        PENDING = 'pending', 'На согласовании'
+        REJECTED = 'rejected', 'Отклонён'
+        ACTIVE = 'active', 'Активен'
+        DONE = 'done', 'Завершён'
+
+    status = models.CharField('Статус', max_length=32, choices=Status.choices, default=Status.DRAFT)
+
+    # Связи с программой мероприятий
+    event_block = models.ForeignKey(
+        'EventBlock',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='projects',
+        verbose_name='Блок мероприятий'
+    )
+    event = models.ForeignKey(
+        'Event',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='projects',
+        verbose_name='Мероприятие'
+    )
+
     # Основные поля паспорта проекта (для быстрого поиска и отображения)
     short_name = models.CharField('Краткое наименование', max_length=255)
     name = models.TextField('Наименование проекта')
     name_clarification = models.CharField('Уточняющее наименование', max_length=255, blank=True)
+    goal = models.TextField('Цель проекта', blank=True, default='')
 
     # Даты проекта
     start_date = models.DateField('Дата начала проекта')
     end_date = models.DateField('Дата окончания проекта')
 
-    # Роли/участники (в минимальной форме – как текстовые/числовые идентификаторы)
-    curator_id = models.IntegerField('Куратор (ID)', null=True, blank=True)
-    customer_name = models.CharField('Заказчик', max_length=255, blank=True)
-    manager_name = models.CharField('Руководитель проекта', max_length=255, blank=True)
+    # Роли/участники
+    curator = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='project_ed_curated_projects',
+        verbose_name='Куратор проекта'
+    )
+    customer = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='project_ed_customer_projects',
+        verbose_name='Заказчик проекта'
+    )
+    manager = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='project_ed_managed_projects',
+        verbose_name='Руководитель проекта'
+    )
 
     # Быстрые агрегаты
-    budget_total = models.DecimalField('Бюджет (с учетом взносов)', max_digits=12, decimal_places=2, default=0)
+    budget_total = models.DecimalField('Бюджет (с учетом взносов)', max_digits=14, decimal_places=2, default=0)
 
-    # Сырые структуры формы
-    event = models.JSONField('Выбранное мероприятие', null=True, blank=True)
-    basic_provisions = models.JSONField('Основные положения', default=dict)
-    target_indicators = models.JSONField('Целевые показатели', default=list)
-    calendar_plan = models.JSONField('Календарный план', default=dict)
-    budget = models.JSONField('Бюджет', default=dict)
-    additional_info = models.JSONField('Дополнительная информация', default=dict)
+    # Дополнительная информация
+    additional_info = models.TextField('Дополнительная информация', blank=True, default='')
 
     # Служебные поля
-    status = models.CharField('Статус', max_length=32, default='draft')  # draft, pending, rejected, active, done
     created_at = models.DateTimeField('Создано', auto_now_add=True)
     updated_at = models.DateTimeField('Обновлено', auto_now=True)
 
