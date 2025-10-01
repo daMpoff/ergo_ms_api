@@ -1,4 +1,6 @@
 from rest_framework import serializers
+import json
+from decimal import Decimal, ROUND_HALF_UP
 
 from src.modules.project_ed.models import (
     Project, Category, Subcategory, TargetIndicator, EventBlock, Event,
@@ -7,31 +9,94 @@ from src.modules.project_ed.models import (
 
 
 class ProjectSerializer(serializers.ModelSerializer):
+    # Принимаем гибкие входы
+    budget_total = serializers.FloatField(required=False)
+    additional_info = serializers.JSONField(required=False, allow_null=True)
     class Meta:
         model = Project
         fields = [
             'id',
             'owner',
+            'status',
+            'event_block_id',
+            'event_id',
             'short_name',
             'name',
             'name_clarification',
+            'goal',
             'start_date',
             'end_date',
             'curator_id',
-            'customer_name',
-            'manager_name',
+            'customer_id',
+            'manager_id',
             'budget_total',
-            'event',
-            'basic_provisions',
-            'target_indicators',
-            'calendar_plan',
-            'budget',
             'additional_info',
-            'status',
             'created_at',
             'updated_at',
         ]
         read_only_fields = ['owner', 'status', 'created_at', 'updated_at']
+
+    def validate_budget_total(self, value):
+        try:
+            return Decimal(value).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        except Exception:
+            return value
+
+    def validate_additional_info(self, value):
+        if value is None:
+            return ''
+        if isinstance(value, (dict, list)):
+            try:
+                return json.dumps(value, ensure_ascii=False)
+            except Exception:
+                return str(value)
+        return str(value)
+
+    def create(self, validated_data):
+        # Нормализуем значения перед сохранением
+        bt = validated_data.pop('budget_total', None)
+        ai = validated_data.pop('additional_info', None)
+
+        if bt is not None:
+            try:
+                validated_data['budget_total'] = Decimal(str(bt)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            except Exception:
+                validated_data['budget_total'] = Decimal('0.00')
+
+        if ai is not None:
+            if isinstance(ai, (dict, list)):
+                try:
+                    validated_data['additional_info'] = json.dumps(ai, ensure_ascii=False)
+                except Exception:
+                    validated_data['additional_info'] = str(ai)
+            else:
+                validated_data['additional_info'] = str(ai)
+
+        request = self.context.get('request')
+        if request and request.user and request.user.is_authenticated:
+            validated_data['owner'] = request.user
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        bt = validated_data.pop('budget_total', None)
+        ai = validated_data.pop('additional_info', None)
+
+        if bt is not None:
+            try:
+                validated_data['budget_total'] = Decimal(str(bt)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            except Exception:
+                pass
+
+        if ai is not None:
+            if isinstance(ai, (dict, list)):
+                try:
+                    validated_data['additional_info'] = json.dumps(ai, ensure_ascii=False)
+                except Exception:
+                    validated_data['additional_info'] = str(ai)
+            else:
+                validated_data['additional_info'] = str(ai)
+
+        return super().update(instance, validated_data)
 
     def validate(self, attrs):
         start = attrs.get('start_date') or getattr(self.instance, 'start_date', None)

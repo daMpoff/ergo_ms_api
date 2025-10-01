@@ -26,6 +26,10 @@ from src.modules.project_ed.serializers import (
     ProjectEdFacultySerializer,
     ProjectEdDepartmentSerializer
 )
+from src.modules.project_ed.projects.serializers import (
+    ProjectCreateSerializer,
+    ProjectReadSerializer,
+)
 
 
 class ProjectPagination(PageNumberPagination):
@@ -79,6 +83,13 @@ class ProjectViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     serializer_class = ProjectSerializer
     permission_classes = [permissions.IsAuthenticated, IsOwnerOrReadOnly]
     pagination_class = ProjectPagination
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return ProjectCreateSerializer
+        if self.action in ['list', 'retrieve']:
+            return ProjectReadSerializer
+        return ProjectSerializer
 
     def get_queryset(self):
         base_qs = super().get_queryset()
