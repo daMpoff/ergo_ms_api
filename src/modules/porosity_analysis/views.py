@@ -49,12 +49,18 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """Возвращаем queryset с явной сортировкой для консистентной пагинации, поддержка фильтра по группе"""
         qs = PorosityAnalysis.objects.select_related('group').all().order_by('-created_at', 'id')
-        group_id = self.request.query_params.get('group') or self.request.query_params.get('group_id')
-        if group_id:
-            try:
-                qs = qs.filter(group_id=int(group_id))
-            except Exception:
-                pass
+        group_param = self.request.query_params.get('group')
+        group_id = group_param if group_param is not None else self.request.query_params.get('group_id')
+        if group_id is not None:
+            group_id_str = str(group_id).strip()
+            # "Без группы": поддерживаем пустую строку и '0'
+            if group_id_str == '' or group_id_str == '0':
+                qs = qs.filter(group__isnull=True)
+            else:
+                try:
+                    qs = qs.filter(group_id=int(group_id_str))
+                except Exception:
+                    pass
         # Поддержка серверной сортировки по group__name
         ordering = self.request.query_params.get('ordering')
         if ordering in ('group__name', '-group__name'):
@@ -555,134 +561,6 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
             'success_rate': (completed / total * 100) if total > 0 else 0
         })
 
-
-class PorosityGroupViewSet(viewsets.ModelViewSet):
-    """CRUD групп анализов пористости"""
-    serializer_class = PorosityGroupSerializer
-    permission_classes = [IsAuthenticated]
-    filter_backends = [SearchFilter, OrderingFilter]
-    search_fields = ['name', 'description']
-    ordering_fields = ['name', 'created_at']
-    ordering = ['name']
-
-    def get_queryset(self):
-        return PorosityGroup.objects.all().order_by('name')
-
-    def list(self, request, *args, **kwargs):
-        queryset = self.filter_queryset(self.get_queryset())
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
-    
-    @action(detail=False, methods=['get'], url_path='upload_config')
-    def upload_config(self, request):
-        """Получение конфигурации загрузки файлов"""
-        try:
-            upload_threads = PorosityAnalysisConfig.get_upload_threads()
-            return Response({
-                'upload_threads': upload_threads,
-                'max_concurrent_uploads': upload_threads
-            })
-        except Exception as e:
-            logger.error(f"Ошибка при получении конфигурации загрузки: {e}")
-            return Response({
-                'upload_threads': 8,  # Значение по умолчанию
-                'max_concurrent_uploads': 8
-            })
-    
-    @action(detail=False, methods=['post'])
-    def restart_multiple(self, request):
-        """Массовый перезапуск анализов"""
-        try:
-            analysis_ids = request.data.get('analysis_ids', [])
-            status_filter = request.data.get('status', None)
-            
-            if not analysis_ids and not status_filter:
-                return Response({
-                    'error': 'Необходимо указать ID анализов или статус для фильтрации'
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            # Получаем анализы для перезапуска
-            queryset = self.get_queryset()
-            if analysis_ids:
-                analyses = queryset.filter(id__in=analysis_ids)
-            elif status_filter:
-                analyses = queryset.filter(status=status_filter)
-            else:
-                analyses = queryset.none()
-            
-            if not analyses.exists():
-                return Response({
-                    'error': 'Не найдено анализов для перезапуска'
-                }, status=status.HTTP_404_NOT_FOUND)
-            
-            restarted_count = 0
-            failed_count = 0
-            errors = []
-            
-            for analysis in analyses:
-                try:
-                    # Проверяем, что у анализа есть изображение
-                    if not analysis.original_image_uuid:
-                        errors.append(f"Анализ {analysis.id}: нет изображения")
-                        failed_count += 1
-                        continue
-                    
-                    # Проверяем, что изображение существует
-                    image_path = analysis.original_image_path
-                    if not image_path or not os.path.exists(image_path):
-                        errors.append(f"Анализ {analysis.id}: изображение не найдено")
-                        failed_count += 1
-                        continue
-                    
-                    # Очищаем старые результаты
-                    if analysis.results_directory and os.path.exists(analysis.results_directory):
-                        try:
-                            import shutil
-                            shutil.rmtree(analysis.results_directory)
-                        except Exception as e:
-                            logger.warning(f"Не удалось удалить старую директорию результатов для анализа {analysis.id}: {e}")
-                    
-                    # Сбрасываем статус, время и результаты
-                    analysis.status = 'pending'
-                    analysis.error_message = ''
-                    analysis.start_time = timezone.now()
-                    analysis.end_time = None
-                    analysis.porosity_percentage = None
-                    analysis.number_of_pores = None
-                    analysis.average_pore_size = None
-                    analysis.max_pore_size = None
-                    analysis.min_pore_size = None
-                    analysis.pore_density = None
-                    analysis.average_interpore_distance = None
-                    analysis.save()
-                    
-                    # Запускаем асинхронную задачу
-                    run_porosity_analysis.delay(analysis.id)
-                    restarted_count += 1
-                    
-                except Exception as e:
-                    errors.append(f"Анализ {analysis.id}: {str(e)}")
-                    failed_count += 1
-            
-            logger.info(f"Массовый перезапуск завершен: {restarted_count} успешно, {failed_count} с ошибками")
-            
-            return Response({
-                'success': True,
-                'message': f'Перезапущено {restarted_count} анализов',
-                'restarted_count': restarted_count,
-                'failed_count': failed_count,
-                'errors': errors if errors else None
-            }, status=status.HTTP_200_OK)
-            
-        except Exception as e:
-            logger.error(f"Ошибка при массовом перезапуске: {e}")
-            return Response({
-                'success': False,
-                'error': f'Ошибка при массовом перезапуске: {str(e)}'
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
-    # Убран эндпоинт limits, так как ограничения сняты
-    
     def _prepare_report_file_cached(self, analysis, report_type, file_cache):
         """Подготовка файла отчета с использованием кэша"""
         cache_key = f"{analysis.id}_{report_type}"
@@ -1080,7 +958,237 @@ class PorosityGroupViewSet(viewsets.ModelViewSet):
                 'success': False,
                 'error': f'Ошибка при создании архива: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class PorosityGroupViewSet(viewsets.ModelViewSet):
+    """CRUD групп анализов пористости"""
+    serializer_class = PorosityGroupSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [SearchFilter, OrderingFilter]
+    search_fields = ['name', 'description']
+    ordering_fields = ['name', 'created_at']
+    ordering = ['name']
+
+    def get_queryset(self):
+        return PorosityGroup.objects.all().order_by('name')
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
     
+    @action(detail=False, methods=['get'], url_path='upload_config')
+    def upload_config(self, request):
+        """Получение конфигурации загрузки файлов"""
+        try:
+            upload_threads = PorosityAnalysisConfig.get_upload_threads()
+            return Response({
+                'upload_threads': upload_threads,
+                'max_concurrent_uploads': upload_threads
+            })
+        except Exception as e:
+            logger.error(f"Ошибка при получении конфигурации загрузки: {e}")
+            return Response({
+                'upload_threads': 8,  # Значение по умолчанию
+                'max_concurrent_uploads': 8
+            })
+    
+    @action(detail=False, methods=['post'])
+    def restart_multiple(self, request):
+        """Массовый перезапуск анализов"""
+        try:
+            analysis_ids = request.data.get('analysis_ids', [])
+            status_filter = request.data.get('status', None)
+            
+            if not analysis_ids and not status_filter:
+                return Response({
+                    'error': 'Необходимо указать ID анализов или статус для фильтрации'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Получаем анализы для перезапуска
+            queryset = self.get_queryset()
+            if analysis_ids:
+                analyses = queryset.filter(id__in=analysis_ids)
+            elif status_filter:
+                analyses = queryset.filter(status=status_filter)
+            else:
+                analyses = queryset.none()
+            
+            if not analyses.exists():
+                return Response({
+                    'error': 'Не найдено анализов для перезапуска'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            restarted_count = 0
+            failed_count = 0
+            errors = []
+            
+            for analysis in analyses:
+                try:
+                    # Проверяем, что у анализа есть изображение
+                    if not analysis.original_image_uuid:
+                        errors.append(f"Анализ {analysis.id}: нет изображения")
+                        failed_count += 1
+                        continue
+                    
+                    # Проверяем, что изображение существует
+                    image_path = analysis.original_image_path
+                    if not image_path or not os.path.exists(image_path):
+                        errors.append(f"Анализ {analysis.id}: изображение не найдено")
+                        failed_count += 1
+                        continue
+                    
+                    # Очищаем старые результаты
+                    if analysis.results_directory and os.path.exists(analysis.results_directory):
+                        try:
+                            import shutil
+                            shutil.rmtree(analysis.results_directory)
+                        except Exception as e:
+                            logger.warning(f"Не удалось удалить старую директорию результатов для анализа {analysis.id}: {e}")
+                    
+                    # Сбрасываем статус, время и результаты
+                    analysis.status = 'pending'
+                    analysis.error_message = ''
+                    analysis.start_time = timezone.now()
+                    analysis.end_time = None
+                    analysis.porosity_percentage = None
+                    analysis.number_of_pores = None
+                    analysis.average_pore_size = None
+                    analysis.max_pore_size = None
+                    analysis.min_pore_size = None
+                    analysis.pore_density = None
+                    analysis.average_interpore_distance = None
+                    analysis.save()
+                    
+                    # Запускаем асинхронную задачу
+                    run_porosity_analysis.delay(analysis.id)
+                    restarted_count += 1
+                    
+                except Exception as e:
+                    errors.append(f"Анализ {analysis.id}: {str(e)}")
+                    failed_count += 1
+            
+            logger.info(f"Массовый перезапуск завершен: {restarted_count} успешно, {failed_count} с ошибками")
+            
+            return Response({
+                'success': True,
+                'message': f'Перезапущено {restarted_count} анализов',
+                'restarted_count': restarted_count,
+                'failed_count': failed_count,
+                'errors': errors if errors else None
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Ошибка при массовом перезапуске: {e}")
+            return Response({
+                'success': False,
+                'error': f'Ошибка при массовом перезапуске: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    # Убран эндпоинт limits, так как ограничения сняты
+    
+    def _prepare_report_file_cached(self, analysis, report_type, file_cache):
+        """Подготовка файла отчета с использованием кэша"""
+        cache_key = f"{analysis.id}_{report_type}"
+        
+        # Проверяем кэш
+        if cache_key in file_cache:
+            cached_file = file_cache[cache_key]
+            if os.path.exists(cached_file) and os.path.getsize(cached_file) > 0:
+                return cached_file, None
+        
+        try:
+            # Ищем существующий файл отчета
+            reports_dir = os.path.join(analysis.results_directory, 'reports')
+            report_file = None
+            
+            if os.path.exists(reports_dir):
+                for filename in os.listdir(reports_dir):
+                    if filename.endswith(f'.{report_type}'):
+                        report_file = os.path.join(reports_dir, filename)
+                        break
+            
+            # Если файл не найден, генерируем новый
+            if not report_file or not os.path.exists(report_file):
+                from .report_generator import PorosityReportGenerator
+                report_generator = PorosityReportGenerator(analysis)
+                report_file = report_generator.generate_single_report(report_type)
+            
+            # Проверяем валидность файла
+            if not report_file or not os.path.exists(report_file) or os.path.getsize(report_file) == 0:
+                return None, f"Анализ {analysis.id}: не удалось подготовить отчет типа {report_type}"
+            
+            # Кэшируем файл
+            file_cache[cache_key] = report_file
+            return report_file, None
+            
+        except Exception as e:
+            return None, f"Анализ {analysis.id}: {str(e)}"
+
+    def _create_partial_archive(self, analyses_chunk, report_type, file_cache):
+        """Создание частичного архива для группы анализов"""
+        try:
+            archive_buffer = io.BytesIO()
+            successful_reports = 0
+            failed_reports = []
+            
+            with zipfile.ZipFile(archive_buffer, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as zip_file:
+                for analysis in analyses_chunk:
+                    try:
+                        report_file, error = self._prepare_report_file_cached(analysis, report_type, file_cache)
+                        
+                        if error:
+                            failed_reports.append(error)
+                            continue
+                        
+                        # Имя файла в архиве = имя исходного фото без расширения
+                        base_photo_name = (analysis.name or '').strip() or f"analysis_{analysis.id}"
+                        safe_name = re.sub(r'[^\w\s\-]', '', base_photo_name)[:100] or f"analysis_{analysis.id}"
+                        archive_filename = f"{safe_name}.{report_type}"
+                        
+                        # Добавляем файл в архив
+                        zip_file.write(report_file, archive_filename)
+                        successful_reports += 1
+                        
+                    except Exception as e:
+                        failed_reports.append(f"Анализ {analysis.id}: {str(e)}")
+            
+            archive_buffer.seek(0)
+            return archive_buffer.getvalue(), successful_reports, failed_reports
+            
+        except Exception as e:
+            return None, 0, [f"Ошибка создания частичного архива: {str(e)}"]
+
+    def _merge_archives_fast(self, archive_parts, info_content=None):
+        """Быстрое объединение частичных архивов"""
+        try:
+            final_buffer = io.BytesIO()
+            
+            with zipfile.ZipFile(final_buffer, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as final_zip:
+                # Добавляем информационный файл, если есть
+                if info_content:
+                    final_zip.writestr('ИНФОРМАЦИЯ_О_ЗАПРОСЕ.txt', info_content.encode('utf-8'))
+                
+                # Объединяем все частичные архивы
+                for i, archive_data in enumerate(archive_parts):
+                    if archive_data is None:
+                        continue
+                        
+                    with zipfile.ZipFile(io.BytesIO(archive_data), 'r') as partial_zip:
+                        for file_info in partial_zip.infolist():
+                            # Читаем данные файла
+                            file_data = partial_zip.read(file_info.filename)
+                            # Добавляем в финальный архив с префиксом для избежания конфликтов
+                            final_filename = f"part_{i+1}/{file_info.filename}"
+                            final_zip.writestr(final_filename, file_data)
+            
+            final_buffer.seek(0)
+            return final_buffer.getvalue()
+            
+        except Exception as e:
+            logger.error(f"Ошибка объединения архивов: {e}")
+            return None
+
     @action(detail=True, methods=['get'])
     def generate_report(self, request, pk=None):
         """Генерация отчетов в форматах DOCX и PDF"""
