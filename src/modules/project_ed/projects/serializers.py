@@ -30,6 +30,8 @@ class ProjectCreateSerializer(serializers.Serializer):
     start_date = serializers.DateField()
     end_date = serializers.DateField()
     curator_id = serializers.IntegerField(required=False, allow_null=True)
+    manager_id = serializers.IntegerField(required=False, allow_null=True)
+    customer_id = serializers.IntegerField(required=False, allow_null=True)
 
     # Совместимость с фронтом: строки-имена. Можем проигнорировать как FK, но положить в payload версии
     customer_name = serializers.CharField(required=False, allow_blank=True, default='')
@@ -141,7 +143,7 @@ class ProjectCreateSerializer(serializers.Serializer):
             except Exception:
                 return Decimal('0.00')
 
-        # Вычисляем роли
+        # Вычисляем роли/идентификаторы
         basic_provisions = validated_data.get('basic_provisions') or {}
 
         curator_id = (
@@ -149,12 +151,16 @@ class ProjectCreateSerializer(serializers.Serializer):
             or basic_provisions.get('curator')
         )
 
-        # Менеджер: по умолчанию текущий пользователь, иначе попытаемся найти по имени
-        manager_obj = user if user and getattr(user, 'is_authenticated', False) else None
+        # Менеджер: сначала берём переданный manager_id, затем текущего пользователя, затем пытаемся найти по имени
+        manager_obj = None
+        manager_id = validated_data.get('manager_id')
+        if manager_id:
+            manager_obj = User.objects.filter(id=manager_id).first()
+        if manager_obj is None and user and getattr(user, 'is_authenticated', False):
+            manager_obj = user
         if manager_obj is None:
             manager_name = basic_provisions.get('manager') or validated_data.get('manager_name')
             if isinstance(manager_name, str) and manager_name.strip():
-                # Пробуем найти по username или по совпадению "Имя Фамилия"
                 candidate = (
                     User.objects.filter(username=manager_name).first()
                     or User.objects.filter(first_name__icontains=manager_name.split(' ')[0]).first()
@@ -211,6 +217,29 @@ class ProjectCreateSerializer(serializers.Serializer):
                     ProjectExecutor.objects.create(project=project, user_id=int(user_id))
                 except Exception:
                     continue
+
+        # Фиксация ролей через ProjectUserRole (отдельные модели)
+        try:
+            role_manager, _ = ProjectRole.objects.get_or_create(name='Руководитель')
+            role_curator, _ = ProjectRole.objects.get_or_create(name='Куратор')
+            role_customer, _ = ProjectRole.objects.get_or_create(name='Заказчик')
+            role_executor, _ = ProjectRole.objects.get_or_create(name='Исполнитель')
+
+            if manager_obj and getattr(manager_obj, 'id', None):
+                ProjectUserRole.objects.get_or_create(project=project, user_id=manager_obj.id, role=role_manager)
+            if curator_id:
+                ProjectUserRole.objects.get_or_create(project=project, user_id=curator_id, role=role_curator)
+            if customer_id:
+                ProjectUserRole.objects.get_or_create(project=project, user_id=customer_id, role=role_customer)
+            if isinstance(executors, list):
+                for uid in executors:
+                    try:
+                        ProjectUserRole.objects.get_or_create(project=project, user_id=int(uid), role=role_executor)
+                    except Exception:
+                        continue
+        except Exception:
+            # Не валим транзакцию из-за доп. связи ролей
+            pass
 
         # Целевые показатели
         for item in (validated_data.get('target_indicators') or []):
