@@ -324,6 +324,7 @@ class ProjectReadSerializer(serializers.ModelSerializer):
     roles = ProjectUserRoleSerializer(source='user_roles', many=True, read_only=True)
     owner_id = serializers.IntegerField(source='owner.id', read_only=True)
     customer_id = serializers.IntegerField(source='customer.id', read_only=True)
+    executors_count = serializers.SerializerMethodField()
     
     class Meta:
         model = Project
@@ -331,7 +332,7 @@ class ProjectReadSerializer(serializers.ModelSerializer):
             'id', 'status', 'short_name', 'name', 'name_clarification', 'goal',
             'start_date', 'end_date', 'event_block_id', 'event_id',
             'owner_id', 'curator_id', 'manager_id', 'customer_id', 'budget_total', 'additional_info',
-            'created_at', 'updated_at', 'user_role', 'roles',
+            'created_at', 'updated_at', 'user_role', 'roles', 'executors_count',
         )
     
     def get_user_role(self, obj):
@@ -360,3 +361,7 @@ class ProjectReadSerializer(serializers.ModelSerializer):
             return executor.role if executor and executor.role else 'Исполнитель'
         
         return 'Неизвестно'
+    
+    def get_executors_count(self, obj):
+        """Возвращает количество исполнителей проекта."""
+        return obj.executors.count()
