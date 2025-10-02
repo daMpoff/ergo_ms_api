@@ -4,6 +4,7 @@ from django.contrib.auth import get_user_model
 
 from django.db import transaction
 from django.utils import timezone
+import json
 from rest_framework import serializers
 
 from src.modules.project_ed.models import Event, EventBlock, Project
@@ -80,6 +81,39 @@ class ProjectCreateSerializer(serializers.Serializer):
         # Проверки дат
         if attrs['start_date'] > attrs['end_date']:
             raise serializers.ValidationError('Дата начала не может быть позже даты окончания')
+        
+        # Мягкая нормализация вложенных структур на случай, если пришли строками
+        def ensure_dict(value):
+            if isinstance(value, dict) or value is None:
+                return value or {}
+            if isinstance(value, str):
+                try:
+                    parsed = json.loads(value)
+                    return parsed if isinstance(parsed, dict) else {}
+                except Exception:
+                    return {}
+            return {}
+
+        def ensure_list_of_dicts(value):
+            if value is None:
+                return []
+            if isinstance(value, list):
+                return [v for v in value if isinstance(v, dict)]
+            if isinstance(value, str):
+                try:
+                    parsed = json.loads(value)
+                    if isinstance(parsed, list):
+                        return [v for v in parsed if isinstance(v, dict)]
+                except Exception:
+                    return []
+            return []
+
+        attrs['calendar_plan'] = ensure_dict(attrs.get('calendar_plan'))
+        attrs['budget'] = ensure_dict(attrs.get('budget'))
+        attrs['additional_info'] = ensure_dict(attrs.get('additional_info'))
+        attrs['basic_provisions'] = ensure_dict(attrs.get('basic_provisions'))
+        attrs['event'] = ensure_dict(attrs.get('event'))
+        attrs['target_indicators'] = ensure_list_of_dicts(attrs.get('target_indicators'))
         return attrs
 
     @transaction.atomic

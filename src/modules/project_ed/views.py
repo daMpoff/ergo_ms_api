@@ -98,6 +98,15 @@ class ProjectViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
             return self.get_safe_queryset(base_qs)
         return base_qs.filter(owner=user)
 
+    def create(self, request, *args, **kwargs):
+        """Переопределяем create, чтобы возвращать ProjectReadSerializer,
+        а не входной ProjectCreateSerializer (во избежание ошибок сериализации DictField)."""
+        serializer = ProjectCreateSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        project = serializer.save()
+        read_data = ProjectReadSerializer(project).data
+        return Response(read_data, status=status.HTTP_201_CREATED)
+
 
 class CategoryViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     """ViewSet для управления категориями показателей."""
@@ -263,14 +272,22 @@ class TargetIndicatorViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     def get_queryset(self):
         category_id = self.request.query_params.get('category_id')
         subcategory_id = self.request.query_params.get('subcategory_id')
-        
+        # Поддержка фильтрации по блоку мероприятий
+        event_block_id = (
+            self.request.query_params.get('event_block')
+            or self.request.query_params.get('event_block_id')
+            or self.request.query_params.get('block_id')
+        )
+
+        # Если задан event_block — считаем его приоритетным фильтром
+        if event_block_id:
+            return TargetIndicator.objects.filter(is_active=True, event_block_id=event_block_id)
+
         queryset = TargetIndicator.objects.filter(is_active=True)
-        
         if category_id:
             queryset = queryset.filter(category_id=category_id)
         if subcategory_id:
             queryset = queryset.filter(subcategory_id=subcategory_id)
-        
         return queryset
     
     def perform_create(self, serializer):
@@ -335,6 +352,14 @@ class EventBlockViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         block = self.get_object()
         events = block.events.filter(is_active=True)
         serializer = EventSerializer(events, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get'])
+    def indicators(self, request, pk=None):
+        """Получить целевые показатели для конкретного блока мероприятий."""
+        block = self.get_object()
+        indicators = block.target_indicators.filter(is_active=True)
+        serializer = TargetIndicatorSerializer(indicators, many=True)
         return Response(serializer.data)
     
     @action(detail=True, methods=['delete'])
