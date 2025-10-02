@@ -126,3 +126,54 @@ class ProjectVersion(models.Model):
 
     def __str__(self):
         return f'Project #{self.project_id} v{self.version_number}'
+
+
+# --- Роли в рамках проекта ---
+class ProjectRole(models.Model):
+    """Справочник ролей в рамках ProjectEd-проекта.
+
+    Примеры: 'Руководитель', 'Куратор', 'Заказчик', 'Исполнитель'.
+    """
+    name = models.CharField('Роль в проекте', max_length=255, unique=True)
+
+    class Meta:
+        verbose_name = 'Роль проекта (справочник)'
+        verbose_name_plural = 'Роли проекта (справочник)'
+        ordering = ['name']
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class ProjectUserRole(models.Model):
+    """Связь пользователь ↔ проект ↔ роль (многие ко многим с атрибутом роль)."""
+
+    project = models.ForeignKey(
+        'project_ed.Project',
+        on_delete=models.CASCADE,
+        related_name='user_roles',
+        verbose_name='Проект',
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='project_ed_roles',
+        verbose_name='Пользователь',
+    )
+    role = models.ForeignKey(
+        ProjectRole,
+        on_delete=models.CASCADE,
+        related_name='user_links',
+        verbose_name='Роль',
+    )
+
+    class Meta:
+        verbose_name = 'Роль пользователя в проекте'
+        verbose_name_plural = 'Роли пользователей в проекте'
+        unique_together = [('project', 'user', 'role')]
+        indexes = [
+            models.Index(fields=['project', 'user']),
+        ]
+
+    def __str__(self) -> str:
+        return f'{self.project_id}:{self.user_id}:{self.role_id}'

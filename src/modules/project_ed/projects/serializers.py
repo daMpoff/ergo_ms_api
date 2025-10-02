@@ -17,6 +17,8 @@ from .models import (
     ProjectBudgetItem,
     ProjectBudgetTotal,
     ProjectVersion,
+    ProjectRole,
+    ProjectUserRole,
 )
 
 
@@ -279,12 +281,53 @@ class ProjectCreateSerializer(serializers.Serializer):
         return project
 
 
+class ProjectUserRoleSerializer(serializers.ModelSerializer):
+    user_id = serializers.IntegerField(source='user.id', read_only=True)
+    role_name = serializers.CharField(source='role.name', read_only=True)
+
+    class Meta:
+        model = ProjectUserRole
+        fields = ['user_id', 'role', 'role_name']
+
+
 class ProjectReadSerializer(serializers.ModelSerializer):
+    user_role = serializers.SerializerMethodField()
+    roles = ProjectUserRoleSerializer(source='user_roles', many=True, read_only=True)
+    owner_id = serializers.IntegerField(source='owner.id', read_only=True)
+    customer_id = serializers.IntegerField(source='customer.id', read_only=True)
+    
     class Meta:
         model = Project
         fields = (
             'id', 'status', 'short_name', 'name', 'name_clarification', 'goal',
             'start_date', 'end_date', 'event_block_id', 'event_id',
-            'curator_id', 'manager_id', 'budget_total', 'additional_info',
-            'created_at', 'updated_at',
+            'owner_id', 'curator_id', 'manager_id', 'customer_id', 'budget_total', 'additional_info',
+            'created_at', 'updated_at', 'user_role', 'roles',
         )
+    
+    def get_user_role(self, obj):
+        """Определяет роль текущего пользователя в проекте."""
+        request = self.context.get('request')
+        if not request or not request.user or not request.user.is_authenticated:
+            return 'Неизвестно'
+        
+        user = request.user
+        
+        # Если есть назначенная роль через ProjectUserRole — берём её
+        link = obj.user_roles.filter(user=user).select_related('role').first()
+        if link and getattr(link, 'role', None):
+            return link.role.name or 'Неизвестно'
+
+        # Fallback на поля проекта
+        if obj.manager == user:
+            return 'Руководитель'
+        elif obj.curator == user:
+            return 'Куратор'
+        elif obj.customer == user:
+            return 'Заказчик'
+        elif obj.executors.filter(user=user).exists():
+            # Получаем роль исполнителя из ProjectExecutor
+            executor = obj.executors.filter(user=user).first()
+            return executor.role if executor and executor.role else 'Исполнитель'
+        
+        return 'Неизвестно'

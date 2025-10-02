@@ -79,7 +79,7 @@ class IsProjectEdAdmin(permissions.BasePermission):
 
 
 class ProjectViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
-    queryset = Project.objects.all()
+    queryset = Project.objects.select_related('owner', 'manager', 'curator', 'customer').prefetch_related('executors', 'user_roles__role')
     serializer_class = ProjectSerializer
     permission_classes = [permissions.IsAuthenticated, IsOwnerOrReadOnly]
     pagination_class = ProjectPagination
@@ -92,11 +92,23 @@ class ProjectViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         return ProjectSerializer
 
     def get_queryset(self):
+        from django.db.models import Q
+        
         base_qs = super().get_queryset()
         user = self.get_safe_user()
         if user is None:
             return self.get_safe_queryset(base_qs)
-        return base_qs.filter(owner=user)
+        
+        # Получаем все проекты пользователя: где он владелец, руководитель, куратор, заказчик или исполнитель
+        user_projects = base_qs.filter(
+            Q(owner=user) |
+            Q(manager=user) |
+            Q(curator=user) |
+            Q(customer=user) |
+            Q(executors__user=user)
+        ).distinct()
+        
+        return user_projects
 
     def create(self, request, *args, **kwargs):
         """Переопределяем create, чтобы возвращать ProjectReadSerializer,
