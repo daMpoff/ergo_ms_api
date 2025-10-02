@@ -266,6 +266,28 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
         self.perform_destroy(instance)
         return Response(status=status.HTTP_204_NO_CONTENT)
     
+    def create(self, request, *args, **kwargs):
+        """Переопределяем метод create для возврата данных в нужном формате"""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        analysis = serializer.save()
+        
+        # Возвращаем данные в формате, ожидаемом фронтендом
+        return Response({
+            'success': True,
+            'message': 'Анализ создан успешно',
+            'data': {
+                'id': analysis.id,
+                'name': analysis.name,
+                'description': analysis.description,
+                'scale_value': analysis.scale_value,
+                'pixels_per_micron': analysis.pixels_per_micron,
+                'status': analysis.status,
+                'created_at': analysis.created_at,
+                'group': PorosityGroupSerializer(analysis.group).data if analysis.group else None
+            }
+        }, status=status.HTTP_201_CREATED)
+    
     def perform_create(self, serializer):
         """Создание анализа (задача запускается только после загрузки изображения)"""
         analysis = serializer.save()
@@ -304,13 +326,19 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
             run_porosity_analysis.delay(analysis.id)
             
             return Response({
+                'success': True,
                 'message': 'Изображение загружено успешно, анализ запущен',
-                'analysis_id': analysis.id
+                'data': {
+                    'analysis_id': analysis.id,
+                    'status': analysis.status
+                }
             }, status=status.HTTP_200_OK)
             
         except Exception as e:
             return Response({
-                'error': f'Ошибка при загрузке изображения: {str(e)}'
+                'success': False,
+                'message': f'Ошибка при загрузке изображения: {str(e)}',
+                'data': None
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     @action(detail=True, methods=['post'])
@@ -983,14 +1011,20 @@ class PorosityGroupViewSet(viewsets.ModelViewSet):
         try:
             upload_threads = PorosityAnalysisConfig.get_upload_threads()
             return Response({
-                'upload_threads': upload_threads,
-                'max_concurrent_uploads': upload_threads
+                'success': True,
+                'data': {
+                    'upload_threads': upload_threads,
+                    'max_concurrent_uploads': upload_threads
+                }
             })
         except Exception as e:
             logger.error(f"Ошибка при получении конфигурации загрузки: {e}")
             return Response({
-                'upload_threads': 8,  # Значение по умолчанию
-                'max_concurrent_uploads': 8
+                'success': True,
+                'data': {
+                    'upload_threads': 8,  # Значение по умолчанию
+                    'max_concurrent_uploads': 8
+                }
             })
     
     @action(detail=False, methods=['post'])
