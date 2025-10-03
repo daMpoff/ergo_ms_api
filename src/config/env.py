@@ -20,12 +20,44 @@
 
 import environ
 import os
+import logging
 
-from src.config.settings.base import SYSTEM_DIR
+from src.config.settings.static import ENV_FILE_PATH
+from src.core.utils.environment.methods import collect_env_files_from_configs
 
-# Определение пути к файлу .env
-ENV_DIR = os.path.join(SYSTEM_DIR, '.env')
+logger = logging.getLogger(__name__)
+
+# Собираем переменные из всех .env файлов в папке configs
+configs_env_vars = collect_env_files_from_configs()
 
 # Инициализация объекта для работы с переменными окружения
 env = environ.Env()
-environ.Env.read_env(ENV_DIR)
+
+# Отслеживаем переменные, загруженные из основного .env файла
+main_env_vars = set()
+
+# Сначала загружаем основной .env файл (если существует)
+if os.path.exists(ENV_FILE_PATH):
+    # Читаем основной .env файл и отслеживаем его переменные
+    with open(ENV_FILE_PATH, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#') and '=' in line:
+                key = line.split('=', 1)[0].strip()
+                main_env_vars.add(key)
+    environ.Env.read_env(ENV_FILE_PATH)
+
+# Затем добавляем переменные из configs (они имеют приоритет)
+if configs_env_vars:
+    overridden_vars = []
+    for key, value in configs_env_vars.items():
+        # Проверяем, была ли переменная определена в основном .env файле
+        if key in main_env_vars:
+            overridden_vars.append(key)
+        os.environ[key] = value
+    
+    # Логируем только если есть переопределения
+    if overridden_vars:
+        logger.warning(f"⚠️  Переменные из configs переопределили {len(overridden_vars)} переменных из основного .env:")
+        for var in overridden_vars:
+            logger.warning(f"  - {var}")

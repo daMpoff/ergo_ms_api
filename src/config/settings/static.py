@@ -11,13 +11,13 @@ from src.config.settings.base import API_DIR
 STATIC_URL = '/static/'
 
 # Корневая директория для статических файлов.
-STATIC_ROOT = 'static'
+STATIC_ROOT = os.path.join(API_DIR, 'static')
 
 # URL для доступа к медиа файлам.
 MEDIA_URL = '/media/'
 
 # Корневая директория для медиа файлов.
-MEDIA_ROOT = 'media'
+MEDIA_ROOT = os.path.join(API_DIR, 'media')
 
 # URL для доступа к логам.
 LOGS_URL = '/logs/'
@@ -36,3 +36,9 @@ TRAINED_MODELS_PATH = os.path.join(API_DIR, 'trained_models')
 
 # Корневая директория для сторонних программ.
 PACKAGES_PATH = os.path.join(API_DIR, 'packages')
+
+# Корневая директория для конфигурационных файлов модулей.
+CONFIGS_DIR = os.path.join(os.path.dirname(API_DIR), 'configs')
+
+# Путь к основному .env файлу.
+ENV_FILE_PATH = os.path.join(os.path.dirname(API_DIR), '.env')
