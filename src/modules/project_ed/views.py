@@ -80,7 +80,11 @@ class IsProjectEdAdmin(permissions.BasePermission):
 
 
 class ProjectViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
-    queryset = Project.objects.select_related('owner', 'manager', 'curator', 'customer').prefetch_related('executors', 'user_roles__role')
+    queryset = Project.objects.select_related('owner', 'manager', 'curator', 'customer').prefetch_related(
+        'user_roles__role',
+        'executors__user__avatar',
+        'executors__user__project_ed_profile',
+    )
     serializer_class = ProjectSerializer
     permission_classes = [permissions.IsAuthenticated, IsOwnerOrReadOnly]
     pagination_class = ProjectPagination

@@ -375,10 +375,11 @@ class ProjectDetailSerializer(ProjectReadSerializer):
     manager_data = serializers.SerializerMethodField()
     curator_data = serializers.SerializerMethodField()
     customer_data = serializers.SerializerMethodField()
+    performers = serializers.SerializerMethodField()
     
     class Meta(ProjectReadSerializer.Meta):
         fields = ProjectReadSerializer.Meta.fields + (
-            'manager_data', 'curator_data', 'customer_data',
+            'manager_data', 'curator_data', 'customer_data', 'performers',
         )
     
     def get_manager_data(self, obj):
@@ -398,3 +399,27 @@ class ProjectDetailSerializer(ProjectReadSerializer):
         if obj.customer:
             return UserListSerializer(obj.customer, context=self.context).data
         return None
+
+    def get_performers(self, obj):
+        """Список исполнителей проекта для фронта (аватар + ФИО)."""
+        request = self.context.get('request')
+        items = []
+        for link in obj.executors.select_related('user__avatar', 'user__project_ed_profile').all():
+            user = getattr(link, 'user', None)
+            if not user:
+                continue
+            # Полное имя
+            full_name = f"{getattr(user, 'last_name', '')} {getattr(user, 'first_name', '')}".strip() or getattr(user, 'username', '')
+            # URL аватара, если есть
+            avatar_url = None
+            try:
+                if request and hasattr(user, 'avatar') and user.avatar and user.avatar.image:
+                    avatar_url = request.build_absolute_uri(user.avatar.image.url)
+            except Exception:
+                avatar_url = None
+            items.append({
+                'id': getattr(user, 'id', None),
+                'full_name': full_name,
+                'avatar_url': avatar_url,
+            })
+        return items
