@@ -29,6 +29,7 @@ from src.modules.project_ed.serializers import (
 from src.modules.project_ed.projects.serializers import (
     ProjectCreateSerializer,
     ProjectReadSerializer,
+    ProjectDetailSerializer,
 )
 
 
@@ -87,8 +88,10 @@ class ProjectViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     def get_serializer_class(self):
         if self.action == 'create':
             return ProjectCreateSerializer
-        if self.action in ['list', 'retrieve']:
+        if self.action == 'list':
             return ProjectReadSerializer
+        if self.action == 'retrieve':
+            return ProjectDetailSerializer
         return ProjectSerializer
 
     def get_queryset(self):

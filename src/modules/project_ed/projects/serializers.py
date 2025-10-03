@@ -8,6 +8,7 @@ import json
 from rest_framework import serializers
 
 from src.modules.project_ed.models import Event, EventBlock, Project
+from src.modules.project_ed.profiles.serializers import UserListSerializer
 from .models import (
     ProjectTask,
     ProjectExecutor,
@@ -365,3 +366,35 @@ class ProjectReadSerializer(serializers.ModelSerializer):
     def get_executors_count(self, obj):
         """Возвращает количество исполнителей проекта."""
         return obj.executors.count()
+
+
+class ProjectDetailSerializer(ProjectReadSerializer):
+    """Расширенный сериализатор проекта с полными данными о ролях."""
+    
+    # Полные данные о ролях
+    manager_data = serializers.SerializerMethodField()
+    curator_data = serializers.SerializerMethodField()
+    customer_data = serializers.SerializerMethodField()
+    
+    class Meta(ProjectReadSerializer.Meta):
+        fields = ProjectReadSerializer.Meta.fields + (
+            'manager_data', 'curator_data', 'customer_data',
+        )
+    
+    def get_manager_data(self, obj):
+        """Возвращает полные данные о руководителе проекта."""
+        if obj.manager:
+            return UserListSerializer(obj.manager, context=self.context).data
+        return None
+    
+    def get_curator_data(self, obj):
+        """Возвращает полные данные о кураторе проекта."""
+        if obj.curator:
+            return UserListSerializer(obj.curator, context=self.context).data
+        return None
+    
+    def get_customer_data(self, obj):
+        """Возвращает полные данные о заказчике проекта."""
+        if obj.customer:
+            return UserListSerializer(obj.customer, context=self.context).data
+        return None
