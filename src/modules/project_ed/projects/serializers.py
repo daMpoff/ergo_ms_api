@@ -368,8 +368,32 @@ class ProjectReadSerializer(serializers.ModelSerializer):
         return obj.executors.count()
 
 
+class ProjectTaskSerializer(serializers.ModelSerializer):
+    """Сериализатор для задач проекта."""
+    
+    class Meta:
+        model = ProjectTask
+        fields = ['id', 'description', 'order']
+
+
+class ProjectPlannedResultSerializer(serializers.ModelSerializer):
+    """Сериализатор для планируемых результатов проекта."""
+    
+    class Meta:
+        model = ProjectPlannedResult
+        fields = ['id', 'description', 'order']
+
+
+class ProjectStageSerializer(serializers.ModelSerializer):
+    """Сериализатор для этапов проекта."""
+    
+    class Meta:
+        model = ProjectStage
+        fields = ['id', 'name', 'start_date', 'end_date', 'planned_results', 'order']
+
+
 class ProjectDetailSerializer(ProjectReadSerializer):
-    """Расширенный сериализатор проекта с полными данными о ролях."""
+    """Расширенный сериализатор проекта с полными данными о ролях и бюджете."""
     
     # Полные данные о ролях
     manager_data = serializers.SerializerMethodField()
@@ -377,9 +401,19 @@ class ProjectDetailSerializer(ProjectReadSerializer):
     customer_data = serializers.SerializerMethodField()
     performers = serializers.SerializerMethodField()
     
+    # Данные о бюджете
+    budget_items = serializers.SerializerMethodField()
+    budget_totals = serializers.SerializerMethodField()
+    
+    # Задачи, планируемые результаты и этапы
+    tasks = ProjectTaskSerializer(many=True, read_only=True)
+    planned_results = ProjectPlannedResultSerializer(many=True, read_only=True)
+    stages = ProjectStageSerializer(many=True, read_only=True)
+    
     class Meta(ProjectReadSerializer.Meta):
         fields = ProjectReadSerializer.Meta.fields + (
             'manager_data', 'curator_data', 'customer_data', 'performers',
+            'budget_items', 'budget_totals', 'tasks', 'planned_results', 'stages',
         )
     
     def get_manager_data(self, obj):
@@ -423,3 +457,30 @@ class ProjectDetailSerializer(ProjectReadSerializer):
                 'avatar_url': avatar_url,
             })
         return items
+    
+    def get_budget_items(self, obj):
+        """Список позиций бюджета проекта."""
+        items = []
+        for item in obj.budget_items.select_related('stage').all():
+            items.append({
+                'id': item.id,
+                'stage_id': item.stage_id,
+                'stage_name': item.stage.name if item.stage else None,
+                'cost_article': item.cost_article,
+                'funding_source': item.funding_source,
+                'amount': float(item.amount),
+            })
+        return items
+    
+    def get_budget_totals(self, obj):
+        """Итоги по бюджету проекта."""
+        totals = obj.budget_totals.first()
+        if totals:
+            return {
+                'total_with_insurance': float(totals.total_with_insurance),
+                'salary_off_budget': float(totals.salary_off_budget),
+                'salary_budget': float(totals.salary_budget),
+                'other_off_budget': float(totals.other_off_budget),
+                'other_budget': float(totals.other_budget),
+            }
+        return None
