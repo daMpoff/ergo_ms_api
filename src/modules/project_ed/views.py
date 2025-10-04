@@ -117,6 +117,19 @@ class ProjectViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         
         return user_projects
 
+    @action(detail=True, methods=['get'], permission_classes=[permissions.IsAuthenticated])
+    def public_view(self, request, pk=None):
+        """
+        Публичный просмотр проекта по ID для всех аутентифицированных пользователей.
+        Позволяет просматривать чужие проекты.
+        """
+        try:
+            project = self.get_object()
+            serializer = ProjectDetailSerializer(project, context={'request': request})
+            return Response(serializer.data)
+        except Exception as e:
+            return Response({'error': 'Проект не найден'}, status=status.HTTP_404_NOT_FOUND)
+
     def create(self, request, *args, **kwargs):
         """Переопределяем create, чтобы возвращать ProjectReadSerializer,
         а не входной ProjectCreateSerializer (во избежание ошибок сериализации DictField)."""
