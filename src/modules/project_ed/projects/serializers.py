@@ -23,6 +23,13 @@ from .models import (
 )
 
 
+# Возвращает первое значение, которое не является None (0 считается валидным)
+def first_not_none(*values):
+    for v in values:
+        if v is not None:
+            return v
+    return None
+
 class ProjectCreateSerializer(serializers.Serializer):
     # Плоские поля проекта
     short_name = serializers.CharField()
@@ -271,15 +278,20 @@ class ProjectCreateSerializer(serializers.Serializer):
                 planned_results='\n'.join(st.get('plannedResults') or []),
                 order=idx,
             )
-            key = str(st.get('id') or st.get('key') or idx)
+            key = str(first_not_none(st.get('id'), st.get('key'), idx))
             item_stage_map[key] = stage
+            
 
         budget_block = validated_data.get('budget') or {}
         for it in budget_block.get('items') or []:
-            stage_key = str(it.get('stage') or it.get('stageId') or '')
+            stage_key_raw = first_not_none(it.get('stage'), it.get('stageId'))
+            stage_key = str(stage_key_raw) if stage_key_raw is not None else ''
+            stage_obj = item_stage_map.get(stage_key)
+            
+            
             ProjectBudgetItem.objects.create(
                 project=project,
-                stage=item_stage_map.get(stage_key),
+                stage=stage_obj,
                 cost_article=it.get('article') or it.get('costArticle') or '',
                 funding_source=it.get('source') or it.get('fundingSource') or '',
                 amount=to_dec_2(it.get('amount') or 0),
