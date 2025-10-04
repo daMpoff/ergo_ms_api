@@ -372,6 +372,32 @@ class Event(models.Model):
             return f'до {self.end_year}'
         return ''
     
+    @property
+    def unique_leaders_count(self):
+        """Количество уникальных руководителей проектов для данного мероприятия."""
+        from django.db.models import Count
+        return self.projects.values('owner').distinct().count()
+    
+    @property
+    def leaders(self):
+        """Список уникальных руководителей проектов для данного мероприятия."""
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        
+        leader_ids = self.projects.values_list('owner_id', flat=True).distinct()
+        leaders = User.objects.filter(id__in=leader_ids)
+        
+        return [
+            {
+                'id': leader.id,
+                'full_name': f"{leader.last_name or ''} {leader.first_name or ''}".strip() or leader.username,
+                'username': leader.username,
+                'email': leader.email,
+                'avatar_url': getattr(leader, 'avatar_url', None) or getattr(leader, 'avatar', None)
+            }
+            for leader in leaders
+        ]
+
     def clean(self):
         """Валидация: год начала не может быть больше года окончания."""
         from django.core.exceptions import ValidationError

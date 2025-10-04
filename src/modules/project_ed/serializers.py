@@ -265,6 +265,8 @@ class TargetIndicatorSerializer(serializers.ModelSerializer):
 class EventSerializer(serializers.ModelSerializer):
     """Сериализатор для мероприятий."""
     years_display = serializers.ReadOnlyField()
+    unique_leaders_count = serializers.ReadOnlyField()
+    leaders = serializers.ReadOnlyField()
     
     class Meta:
         model = Event
@@ -277,12 +279,14 @@ class EventSerializer(serializers.ModelSerializer):
             'start_year',
             'end_year',
             'years_display',
+            'unique_leaders_count',
+            'leaders',
             'order',
             'is_active',
             'created_at',
             'updated_at',
         ]
-        read_only_fields = ['years_display', 'created_at', 'updated_at']
+        read_only_fields = ['years_display', 'unique_leaders_count', 'leaders', 'created_at', 'updated_at']
     
     def validate(self, attrs):
         """Валидация: год начала не может быть больше года окончания."""

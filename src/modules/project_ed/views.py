@@ -333,7 +333,12 @@ class TargetIndicatorViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
 class EventBlockViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     """ViewSet для управления блоками мероприятий."""
     queryset = EventBlock.objects.filter(is_active=True).prefetch_related(
-        Prefetch('events', queryset=Event.objects.filter(is_active=True)),
+        Prefetch(
+            'events', 
+            queryset=Event.objects.filter(is_active=True).prefetch_related(
+                Prefetch('projects', queryset=Project.objects.select_related('owner'))
+            )
+        ),
         'subcategory'
     )
     permission_classes = [permissions.IsAuthenticated]
@@ -378,7 +383,12 @@ class EventBlockViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
             queryset = queryset.filter(subcategory_id=subcategory_id)
         
         return queryset.prefetch_related(
-            Prefetch('events', queryset=Event.objects.filter(is_active=True)),
+            Prefetch(
+                'events', 
+                queryset=Event.objects.filter(is_active=True).prefetch_related(
+                    Prefetch('projects', queryset=Project.objects.select_related('owner'))
+                )
+            ),
             'subcategory'
         )
     
