@@ -15,6 +15,7 @@ import zipfile
 import io
 import logging
 import re
+import urllib.parse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Настраиваем логгер
@@ -164,7 +165,9 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
             with open(file_path, 'rb') as f:
                 file_content = f.read()
                 response = HttpResponse(file_content, content_type='image/png')
-                response['Content-Disposition'] = f'attachment; filename="{filename}"'
+                # Правильно кодируем имя файла для HTTP заголовка
+                encoded_filename = urllib.parse.quote(filename.encode('utf-8'))
+                response['Content-Disposition'] = f'attachment; filename="{filename}"; filename*=UTF-8\'\'{encoded_filename}'
                 return response
         except Exception as e:
             return Response({
@@ -518,7 +521,9 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
             with open(file_path, 'rb') as f:
                 file_content = f.read()
                 response = HttpResponse(file_content, content_type='image/png')
-                response['Content-Disposition'] = f'inline; filename="{filename}"'
+                # Правильно кодируем имя файла для HTTP заголовка
+                encoded_filename = urllib.parse.quote(filename.encode('utf-8'))
+                response['Content-Disposition'] = f'inline; filename="{filename}"; filename*=UTF-8\'\'{encoded_filename}'
                 return response
         except Exception as e:
             # Приглушаем подробный вывод
@@ -645,7 +650,7 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
                         
                         # Имя файла в архиве = имя исходного фото без расширения
                         base_photo_name = (analysis.name or '').strip() or f"analysis_{analysis.id}"
-                        safe_name = re.sub(r'[^\w\s\-]', '', base_photo_name)[:100] or f"analysis_{analysis.id}"
+                        safe_name = re.sub(r'[^\w\s\-а-яё]', '', base_photo_name, flags=re.IGNORECASE)[:100] or f"analysis_{analysis.id}"
                         archive_filename = f"{safe_name}.{report_type}"
                         
                         # Добавляем файл в архив
@@ -788,7 +793,9 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
                 archive_filename = f"porosity_reports_empty_{report_type}_{timestamp}.zip"
                 
                 response = HttpResponse(archive_content, content_type='application/zip')
-                response['Content-Disposition'] = f'attachment; filename="{archive_filename}"'
+                # Правильно кодируем имя файла для HTTP заголовка
+                encoded_filename = urllib.parse.quote(archive_filename.encode('utf-8'))
+                response['Content-Disposition'] = f'attachment; filename="{archive_filename}"; filename*=UTF-8\'\'{encoded_filename}'
                 response['Content-Length'] = len(archive_content)
                 
                 response['X-Reports-Count'] = '0'
@@ -854,7 +861,7 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
                             
                             # Имя файла в архиве = имя исходного фото без расширения
                             base_photo_name = (analysis.name or '').strip() or f"analysis_{analysis.id}"
-                            safe_name = re.sub(r'[^\w\s\-]', '', base_photo_name)[:100] or f"analysis_{analysis.id}"
+                            safe_name = re.sub(r'[^\w\s\-а-яё]', '', base_photo_name, flags=re.IGNORECASE)[:100] or f"analysis_{analysis.id}"
                             archive_filename = f"{safe_name}.{report_type}"
                             
                             # Добавляем файл в архив
@@ -963,7 +970,9 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
             archive_filename = f"porosity_reports_{report_type}_{timestamp}.zip"
             
             response = HttpResponse(archive_content, content_type='application/zip')
-            response['Content-Disposition'] = f'attachment; filename="{archive_filename}"'
+            # Правильно кодируем имя файла для HTTP заголовка
+            encoded_filename = urllib.parse.quote(archive_filename.encode('utf-8'))
+            response['Content-Disposition'] = f'attachment; filename="{archive_filename}"; filename*=UTF-8\'\'{encoded_filename}'
             response['Content-Length'] = len(archive_content)
             
             # Добавляем информационные заголовки
@@ -987,46 +996,116 @@ class PorosityAnalysisViewSet(viewsets.ModelViewSet):
                 'error': f'Ошибка при создании архива: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
-class PorosityGroupViewSet(viewsets.ModelViewSet):
-    """CRUD групп анализов пористости"""
-    serializer_class = PorosityGroupSerializer
-    permission_classes = [IsAuthenticated]
-    filter_backends = [SearchFilter, OrderingFilter]
-    search_fields = ['name', 'description']
-    ordering_fields = ['name', 'created_at']
-    ordering = ['name']
-
-    def get_queryset(self):
-        return PorosityGroup.objects.all().order_by('name')
-
-    def list(self, request, *args, **kwargs):
-        queryset = self.filter_queryset(self.get_queryset())
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
-    
-    @action(detail=False, methods=['get'], url_path='upload_config')
-    def upload_config(self, request):
-        """Получение конфигурации загрузки файлов"""
+    @action(detail=True, methods=['get'])
+    def download_report(self, request, pk=None):
+        """Скачивание сгенерированного отчета"""
+        analysis = self.get_object()
+        report_type = request.query_params.get('type', 'pdf')  # По умолчанию PDF
+        
+        if analysis.status != 'completed':
+            return Response({
+                'error': 'Анализ еще не завершен'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Путь к директории отчетов
+        reports_dir = os.path.join(analysis.results_directory, 'reports')
+        
+        # Если отчеты еще не созданы, создаем их
+        if not os.path.exists(reports_dir) or not os.listdir(reports_dir):
+            try:
+                from .report_generator import PorosityReportGenerator
+                report_generator = PorosityReportGenerator(analysis)
+                reports = report_generator.generate_reports()
+                
+                # Проверяем, что отчеты действительно созданы
+                if not reports:
+                    return Response({
+                        'error': 'Не удалось сгенерировать отчеты'
+                    }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                    
+            except Exception as e:
+                return Response({
+                    'error': f'Ошибка при генерации отчетов: {str(e)}'
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        # Ищем файл отчета
+        report_files = []
+        if os.path.exists(reports_dir):
+            for filename in os.listdir(reports_dir):
+                if filename.endswith(f'.{report_type}'):
+                    report_files.append(filename)
+        
+        if not report_files:
+            # Попробуем сгенерировать отчеты еще раз
+            try:
+                from .report_generator import PorosityReportGenerator
+                report_generator = PorosityReportGenerator(analysis)
+                reports = report_generator.generate_reports()
+                
+                # Проверяем снова
+                if os.path.exists(reports_dir):
+                    for filename in os.listdir(reports_dir):
+                        if filename.endswith(f'.{report_type}'):
+                            report_files.append(filename)
+            except Exception as e:
+                pass
+            
+            if not report_files:
+                return Response({
+                    'error': f'Отчет в формате {report_type} не найден и не может быть сгенерирован',
+                    'reports_dir': reports_dir,
+                    'dir_exists': os.path.exists(reports_dir),
+                    'available_files': os.listdir(reports_dir) if os.path.exists(reports_dir) else []
+                }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Берем самый последний файл
+        report_files.sort(reverse=True)
+        latest_report = report_files[0]
+        file_path = os.path.join(reports_dir, latest_report)
+        
+        if not os.path.exists(file_path):
+            return Response({
+                'error': f'Файл отчета не найден: {file_path}'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Проверяем размер файла
+        file_size = os.path.getsize(file_path)
+        if file_size == 0:
+            return Response({
+                'error': f'Файл отчета пустой: {file_path}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
         try:
-            upload_threads = PorosityAnalysisConfig.get_upload_threads()
-            return Response({
-                'success': True,
-                'data': {
-                    'upload_threads': upload_threads,
-                    'max_concurrent_uploads': upload_threads
-                }
-            })
+            # Определяем content type
+            content_type = {
+                'pdf': 'application/pdf',
+                'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            }.get(report_type, 'application/octet-stream')
+            
+            # Отправляем файл
+            with open(file_path, 'rb') as f:
+                file_content = f.read()
+                
+                # Имя скачиваемого файла = имя исходного фото без расширения
+                base_photo_name = (analysis.name or '').strip() or f"analysis_{analysis.id}"
+                # Сохраняем русские символы, буквы, цифры, пробелы, дефисы и подчеркивания
+                safe_base = re.sub(r'[^\w\s\-а-яё]', '', base_photo_name, flags=re.IGNORECASE)[:100] or f"analysis_{analysis.id}"
+                download_filename = f"{safe_base}.{report_type}"
+
+                response = HttpResponse(file_content, content_type=content_type)
+                # Правильно кодируем имя файла для HTTP заголовка
+                encoded_filename = urllib.parse.quote(download_filename.encode('utf-8'))
+                # Используем оба формата для максимальной совместимости
+                response['Content-Disposition'] = f'attachment; filename="{download_filename}"; filename*=UTF-8\'\'{encoded_filename}'
+                response['Content-Length'] = len(file_content)
+                return response
+            
         except Exception as e:
-            logger.error(f"Ошибка при получении конфигурации загрузки: {e}")
+            logger.error(f"Ошибка при чтении файла отчета: {str(e)}")
             return Response({
-                'success': True,
-                'data': {
-                    'upload_threads': 8,  # Значение по умолчанию
-                    'max_concurrent_uploads': 8
-                }
-            })
-    
+                'error': f'Ошибка при скачивании отчета: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
     @action(detail=False, methods=['post'])
     def restart_multiple(self, request):
         """Массовый перезапуск анализов"""
@@ -1118,6 +1197,46 @@ class PorosityGroupViewSet(viewsets.ModelViewSet):
                 'success': False,
                 'error': f'Ошибка при массовом перезапуске: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class PorosityGroupViewSet(viewsets.ModelViewSet):
+    """CRUD групп анализов пористости"""
+    serializer_class = PorosityGroupSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [SearchFilter, OrderingFilter]
+    search_fields = ['name', 'description']
+    ordering_fields = ['name', 'created_at']
+    ordering = ['name']
+
+    def get_queryset(self):
+        return PorosityGroup.objects.all().order_by('name')
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'], url_path='upload_config')
+    def upload_config(self, request):
+        """Получение конфигурации загрузки файлов"""
+        try:
+            upload_threads = PorosityAnalysisConfig.get_upload_threads()
+            return Response({
+                'success': True,
+                'data': {
+                    'upload_threads': upload_threads,
+                    'max_concurrent_uploads': upload_threads
+                }
+            })
+        except Exception as e:
+            logger.error(f"Ошибка при получении конфигурации загрузки: {e}")
+            return Response({
+                'success': True,
+                'data': {
+                    'upload_threads': 8,  # Значение по умолчанию
+                    'max_concurrent_uploads': 8
+                }
+            })
     
     # Убран эндпоинт limits, так как ограничения сняты
     
@@ -1177,7 +1296,7 @@ class PorosityGroupViewSet(viewsets.ModelViewSet):
                         
                         # Имя файла в архиве = имя исходного фото без расширения
                         base_photo_name = (analysis.name or '').strip() or f"analysis_{analysis.id}"
-                        safe_name = re.sub(r'[^\w\s\-]', '', base_photo_name)[:100] or f"analysis_{analysis.id}"
+                        safe_name = re.sub(r'[^\w\s\-а-яё]', '', base_photo_name, flags=re.IGNORECASE)[:100] or f"analysis_{analysis.id}"
                         archive_filename = f"{safe_name}.{report_type}"
                         
                         # Добавляем файл в архив
@@ -1265,126 +1384,3 @@ class PorosityGroupViewSet(viewsets.ModelViewSet):
                 'error': f'Ошибка при генерации отчетов: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
-    @action(detail=True, methods=['get'])
-    def download_report(self, request, pk=None):
-        """Скачивание сгенерированного отчета"""
-        analysis = self.get_object()
-        report_type = request.query_params.get('type', 'pdf')  # По умолчанию PDF
-        
-        # Приглушаем подробный вывод
-        
-        if analysis.status != 'completed':
-            return Response({
-                'error': 'Анализ еще не завершен'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Путь к директории отчетов
-        reports_dir = os.path.join(analysis.results_directory, 'reports')
-        # Приглушаем подробный вывод
-        
-        # Если отчеты еще не созданы, создаем их
-        if not os.path.exists(reports_dir) or not os.listdir(reports_dir):
-            # Приглушаем подробный вывод
-            try:
-                from .report_generator import PorosityReportGenerator
-                report_generator = PorosityReportGenerator(analysis)
-                reports = report_generator.generate_reports()
-                # Приглушаем подробный вывод
-                
-                # Проверяем, что отчеты действительно созданы
-                if not reports:
-                    return Response({
-                        'error': 'Не удалось сгенерировать отчеты'
-                    }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-                    
-            except Exception as e:
-                # Приглушаем подробный вывод
-                return Response({
-                    'error': f'Ошибка при генерации отчетов: {str(e)}'
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
-        # Ищем файл отчета
-        report_files = []
-        if os.path.exists(reports_dir):
-            # Приглушаем подробный вывод
-            for filename in os.listdir(reports_dir):
-                # Приглушаем подробный вывод
-                if filename.endswith(f'.{report_type}'):
-                    report_files.append(filename)
-                    # Приглушаем подробный вывод
-        
-        # Приглушаем подробный вывод
-        
-        if not report_files:
-            # Попробуем сгенерировать отчеты еще раз
-            # Приглушаем подробный вывод
-            try:
-                from .report_generator import PorosityReportGenerator
-                report_generator = PorosityReportGenerator(analysis)
-                reports = report_generator.generate_reports()
-                # Приглушаем подробный вывод
-                
-                # Проверяем снова
-                if os.path.exists(reports_dir):
-                    for filename in os.listdir(reports_dir):
-                        if filename.endswith(f'.{report_type}'):
-                            report_files.append(filename)
-                            # Приглушаем подробный вывод
-            except Exception as e:
-                pass
-            
-            if not report_files:
-                return Response({
-                    'error': f'Отчет в формате {report_type} не найден и не может быть сгенерирован',
-                    'reports_dir': reports_dir,
-                    'dir_exists': os.path.exists(reports_dir),
-                    'available_files': os.listdir(reports_dir) if os.path.exists(reports_dir) else []
-                }, status=status.HTTP_404_NOT_FOUND)
-        
-        # Берем самый последний файл
-        report_files.sort(reverse=True)
-        latest_report = report_files[0]
-        file_path = os.path.join(reports_dir, latest_report)
-        
-        # Приглушаем подробный вывод
-        
-        if not os.path.exists(file_path):
-            return Response({
-                'error': f'Файл отчета не найден: {file_path}'
-            }, status=status.HTTP_404_NOT_FOUND)
-        
-        # Проверяем размер файла
-        file_size = os.path.getsize(file_path)
-        if file_size == 0:
-            return Response({
-                'error': f'Файл отчета пустой: {file_path}'
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
-        try:
-            # Определяем content type
-            content_type = {
-                'pdf': 'application/pdf',
-                'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-            }.get(report_type, 'application/octet-stream')
-            
-            # Приглушаем подробный вывод
-            
-            # Отправляем файл
-            with open(file_path, 'rb') as f:
-                file_content = f.read()
-                
-                # Имя скачиваемого файла = имя исходного фото без расширения
-                base_photo_name = (analysis.name or '').strip() or f"analysis_{analysis.id}"
-                safe_base = re.sub(r'[^\w\s\-]', '', base_photo_name)[:100] or f"analysis_{analysis.id}"
-                download_filename = f"{safe_base}.{report_type}"
-
-                response = HttpResponse(file_content, content_type=content_type)
-                response['Content-Disposition'] = f'attachment; filename="{download_filename}"'
-                response['Content-Length'] = len(file_content)
-                return response
-            
-        except Exception as e:
-            logger.error(f"Ошибка при чтении файла отчета: {str(e)}")
-            return Response({
-                'error': f'Ошибка при скачивании отчета: {str(e)}'
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

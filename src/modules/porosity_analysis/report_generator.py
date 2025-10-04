@@ -1208,7 +1208,7 @@ class PorosityReportGenerator:
         reports = {}
         # Формируем безопасное имя файла на основе названия анализа
         base_photo_name = (self.analysis.name or '').strip() or f"analysis_{self.analysis.id}"
-        safe_name = re.sub(r'[^\w\s\-]', '', base_photo_name).strip() or f"analysis_{self.analysis.id}"
+        safe_name = re.sub(r'[^\w\s\-а-яё]', '', base_photo_name, flags=re.IGNORECASE).strip() or f"analysis_{self.analysis.id}"
         
         # Создаем директорию для отчетов если её нет
         reports_dir = os.path.join(self.results_dir, 'reports')
@@ -1253,7 +1253,7 @@ class PorosityReportGenerator:
             
         # Формируем безопасное имя файла на основе названия анализа
         base_photo_name = (self.analysis.name or '').strip() or f"analysis_{self.analysis.id}"
-        safe_name = re.sub(r'[^\w\s\-]', '', base_photo_name).strip() or f"analysis_{self.analysis.id}"
+        safe_name = re.sub(r'[^\w\s\-а-яё]', '', base_photo_name, flags=re.IGNORECASE).strip() or f"analysis_{self.analysis.id}"
         
         # Создаем директорию для отчетов если её нет
         reports_dir = os.path.join(self.results_dir, 'reports')
