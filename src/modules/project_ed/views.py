@@ -88,6 +88,7 @@ class ProjectViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         'budget_totals',
         'tasks',
         'planned_results',
+        'target_indicators_rel',
     )
     serializer_class = ProjectSerializer
     permission_classes = [permissions.IsAuthenticated, IsOwnerOrReadOnly]

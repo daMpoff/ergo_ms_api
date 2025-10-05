@@ -404,6 +404,14 @@ class ProjectStageSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'start_date', 'end_date', 'planned_results', 'order']
 
 
+class ProjectTargetIndicatorSerializer(serializers.ModelSerializer):
+    """Сериализатор для целевых показателей проекта."""
+    
+    class Meta:
+        model = ProjectTargetIndicator
+        fields = ['id', 'name', 'unit', 'baseline', 'planned', 'source_indicator', 'is_manual', 'display_name', 'display_unit']
+
+
 class ProjectDetailSerializer(ProjectReadSerializer):
     """Расширенный сериализатор проекта с полными данными о ролях и бюджете."""
     
@@ -417,15 +425,16 @@ class ProjectDetailSerializer(ProjectReadSerializer):
     budget_items = serializers.SerializerMethodField()
     budget_totals = serializers.SerializerMethodField()
     
-    # Задачи, планируемые результаты и этапы
+    # Задачи, планируемые результаты, этапы и целевые показатели
     tasks = ProjectTaskSerializer(many=True, read_only=True)
     planned_results = ProjectPlannedResultSerializer(many=True, read_only=True)
     stages = ProjectStageSerializer(many=True, read_only=True)
+    target_indicators = ProjectTargetIndicatorSerializer(source='target_indicators_rel', many=True, read_only=True)
     
     class Meta(ProjectReadSerializer.Meta):
         fields = ProjectReadSerializer.Meta.fields + (
             'manager_data', 'curator_data', 'customer_data', 'performers',
-            'budget_items', 'budget_totals', 'tasks', 'planned_results', 'stages',
+            'budget_items', 'budget_totals', 'tasks', 'planned_results', 'stages', 'target_indicators',
         )
     
     def get_manager_data(self, obj):
