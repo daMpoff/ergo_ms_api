@@ -38,6 +38,7 @@ from src.modules.project_ed.projects.models import (
     ProjectAuditLog,
     ProjectBudgetItem,
     ProjectBudgetTotal,
+    ProjectStage,
 )
 from src.modules.project_ed.projects.serializers import ProjectAuditLogSerializer
 
@@ -269,6 +270,159 @@ class ProjectViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
                     pass
         except Exception:
             # Ошибки сохранения бюджета не должны валить обновление прочих полей
+            pass
+
+        # --- Обработка этапов (создание/обновление/удаление) ---
+        try:
+            import json
+            payload_stages = request.data.get('stages')
+            if isinstance(payload_stages, list):
+                # Текущее состояние
+                existing_qs = list(instance.stages.all())
+                by_id = {s.id: s for s in existing_qs}
+
+                # Идентификаторы из payload
+                seen_ids = set()
+
+                def user_display_name(u):
+                    try:
+                        first = (getattr(u, 'first_name', '') or '').strip()
+                        last = (getattr(u, 'last_name', '') or '').strip()
+                        full = f"{first} {last}".strip()
+                        return full or getattr(u, 'username', '') or 'Пользователь'
+                    except Exception:
+                        return 'Пользователь'
+
+                actor = user_display_name(getattr(request, 'user', None))
+
+                # Обновление/создание
+                for idx, item in enumerate(payload_stages):
+                    if not isinstance(item, dict):
+                        continue
+                    stage_id = item.get('id')
+                    name = item.get('name') or ''
+                    start_date = item.get('start_date') or item.get('start') or instance.start_date
+                    end_date = item.get('end_date') or item.get('end') or instance.end_date
+                    planned_results = item.get('planned_results') or item.get('result') or ''
+                    order = item.get('order', idx)
+
+                    if stage_id and stage_id in by_id:
+                        s = by_id[stage_id]
+                        changed = (
+                            (s.name or '') != (name or '') or
+                            str(s.start_date) != str(start_date) or
+                            str(s.end_date) != str(end_date) or
+                            (s.planned_results or '') != (planned_results or '') or
+                            s.order != order
+                        )
+                        if changed:
+                            old_snapshot = {
+                                'id': s.id,
+                                'name': s.name,
+                                'start_date': str(s.start_date),
+                                'end_date': str(s.end_date),
+                                'planned_results': s.planned_results,
+                                'order': s.order,
+                            }
+                            s.name = name or ''
+                            s.start_date = start_date
+                            s.end_date = end_date
+                            s.planned_results = planned_results or ''
+                            s.order = order
+                            s.save()
+                            try:
+                                ProjectAuditLog.log_action(
+                                    project=instance,
+                                    action=ProjectAuditLog.ActionType.STAGE_UPDATE,
+                                    user=getattr(request, 'user', None),
+                                    model_type=ProjectAuditLog.ModelType.PROJECT_STAGE,
+                                    object_id=getattr(s, 'id', None),
+                                    field_name='project_stage',
+                                    old_value=json.dumps(old_snapshot, ensure_ascii=False),
+                                    new_value=json.dumps({
+                                        'id': s.id,
+                                        'name': s.name,
+                                        'start_date': str(s.start_date),
+                                        'end_date': str(s.end_date),
+                                        'planned_results': s.planned_results,
+                                        'order': s.order,
+                                    }, ensure_ascii=False),
+                                    metadata={'source': 'api', 'view': 'ProjectViewSet.update'},
+                                    ip_address=request.META.get('REMOTE_ADDR') if hasattr(request, 'META') else None,
+                                    user_agent=request.META.get('HTTP_USER_AGENT') if hasattr(request, 'META') else '',
+                                    description=f"{actor} обновил этап {name}",
+                                )
+                            except Exception:
+                                pass
+                        seen_ids.add(stage_id)
+                    else:
+                        # Создание
+                        new_stage = ProjectStage.objects.create(
+                            project=instance,
+                            name=name or '',
+                            start_date=start_date,
+                            end_date=end_date,
+                            planned_results=planned_results or '',
+                            order=order,
+                        )
+                        try:
+                            ProjectAuditLog.log_action(
+                                project=instance,
+                                action=ProjectAuditLog.ActionType.STAGE_ADD,
+                                user=getattr(request, 'user', None),
+                                model_type=ProjectAuditLog.ModelType.PROJECT_STAGE,
+                                object_id=getattr(new_stage, 'id', None),
+                                field_name='project_stage',
+                                old_value='',
+                                new_value=json.dumps({
+                                    'id': new_stage.id,
+                                    'name': new_stage.name,
+                                    'start_date': str(new_stage.start_date),
+                                    'end_date': str(new_stage.end_date),
+                                    'planned_results': new_stage.planned_results,
+                                    'order': new_stage.order,
+                                }, ensure_ascii=False),
+                                metadata={'source': 'api', 'view': 'ProjectViewSet.update'},
+                                ip_address=request.META.get('REMOTE_ADDR') if hasattr(request, 'META') else None,
+                                user_agent=request.META.get('HTTP_USER_AGENT') if hasattr(request, 'META') else '',
+                                description=f"{actor} создал новый этап {name}",
+                            )
+                        except Exception:
+                            pass
+                        seen_ids.add(new_stage.id)
+
+                # Удаление отсутствующих
+                for s in existing_qs:
+                    if s.id not in seen_ids:
+                        name = s.name
+                        snapshot = {
+                            'id': s.id,
+                            'name': s.name,
+                            'start_date': str(s.start_date),
+                            'end_date': str(s.end_date),
+                            'planned_results': s.planned_results,
+                            'order': s.order,
+                        }
+                        s.delete()
+                        try:
+                            ProjectAuditLog.log_action(
+                                project=instance,
+                                action=ProjectAuditLog.ActionType.STAGE_DELETE,
+                                user=getattr(request, 'user', None),
+                                model_type=ProjectAuditLog.ModelType.PROJECT_STAGE,
+                                object_id=None,
+                                field_name='project_stage',
+                                old_value=json.dumps(snapshot, ensure_ascii=False),
+                                new_value='',
+                                metadata={'source': 'api', 'view': 'ProjectViewSet.update'},
+                                ip_address=request.META.get('REMOTE_ADDR') if hasattr(request, 'META') else None,
+                                user_agent=request.META.get('HTTP_USER_AGENT') if hasattr(request, 'META') else '',
+                                description=f"{actor} удалил этап {name}",
+                            )
+                        except Exception:
+                            pass
+        except Exception:
+            # Ошибки обработки этапов не должны валить обновление прочих полей
             pass
 
         # Фиксируем аудит по измененным полям
