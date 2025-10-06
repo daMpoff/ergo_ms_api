@@ -31,6 +31,9 @@ from src.modules.project_ed.projects.serializers import (
     ProjectReadSerializer,
     ProjectDetailSerializer,
 )
+from django.db import transaction
+from django.utils import timezone
+from src.modules.project_ed.projects.models import ProjectVersion, ProjectAuditLog
 
 
 class ProjectPagination(PageNumberPagination):
@@ -143,6 +146,75 @@ class ProjectViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         project = serializer.save()
         read_data = ProjectReadSerializer(project).data
         return Response(read_data, status=status.HTTP_201_CREATED)
+
+    @transaction.atomic
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+
+        # Захватываем старые значения редактируемых полей
+        editable_fields = set(request.data.keys())
+        old_values = {}
+        for field in editable_fields:
+            if hasattr(instance, field):
+                try:
+                    old_values[field] = getattr(instance, field)
+                except Exception:
+                    pass
+
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        instance = serializer.save()
+
+        # Фиксируем аудит по измененным полям
+        for field, old_val in old_values.items():
+            try:
+                new_val = getattr(instance, field)
+            except Exception:
+                continue
+            # Сравниваем как строки для универсальности
+            old_str = '' if old_val is None else str(old_val)
+            new_str = '' if new_val is None else str(new_val)
+            if old_str != new_str:
+                ProjectAuditLog.log_action(
+                    project=instance,
+                    action=ProjectAuditLog.ActionType.UPDATE,
+                    user=getattr(request, 'user', None),
+                    model_type=ProjectAuditLog.ModelType.PROJECT,
+                    object_id=getattr(instance, 'id', None),
+                    field_name=field,
+                    old_value=old_str,
+                    new_value=new_str,
+                    metadata={'source': 'api', 'view': 'ProjectViewSet.update'},
+                    ip_address=request.META.get('REMOTE_ADDR') if hasattr(request, 'META') else None,
+                    user_agent=request.META.get('HTTP_USER_AGENT') if hasattr(request, 'META') else '',
+                    description=f'Изменение поля {field}',
+                )
+
+        # Создаем новую версию проекта (снимок текущего состояния)
+        try:
+            snapshot = ProjectDetailSerializer(instance, context={'request': request}).data
+            last_version = ProjectVersion.objects.filter(project=instance).order_by('-version_number').first()
+            next_number = (last_version.version_number + 1) if last_version else 1
+            ProjectVersion.objects.create(
+                project=instance,
+                version_number=next_number,
+                title=f'Обновление {timezone.now().strftime("%Y-%m-%d %H:%M")}',
+                payload=snapshot,
+                created_by=request.user if getattr(request, 'user', None) and request.user.is_authenticated else None,
+            )
+        except Exception:
+            # Снимок не должен валить обновление проекта
+            pass
+
+        # Возвращаем актуальные детальные данные
+        read = ProjectDetailSerializer(instance, context={'request': request})
+        return Response(read.data)
+
+    @transaction.atomic
+    def partial_update(self, request, *args, **kwargs):
+        kwargs['partial'] = True
+        return self.update(request, *args, **kwargs)
 
 
 class CategoryViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):

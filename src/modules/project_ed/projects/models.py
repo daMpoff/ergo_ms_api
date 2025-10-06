@@ -177,3 +177,176 @@ class ProjectUserRole(models.Model):
 
     def __str__(self) -> str:
         return f'{self.project_id}:{self.user_id}:{self.role_id}'
+
+
+class ProjectAuditLog(models.Model):
+    """Модель для отслеживания аудита изменений в проекте.
+    
+    Записывает все изменения полей проекта, связанных моделей и действий пользователей.
+    Позволяет восстановить историю изменений и отследить, кто и когда что изменил.
+    """
+
+    class ActionType(models.TextChoices):
+        CREATE = 'create', 'Создание'
+        UPDATE = 'update', 'Обновление'
+        DELETE = 'delete', 'Удаление'
+        STATUS_CHANGE = 'status_change', 'Изменение статуса'
+        ROLE_ASSIGN = 'role_assign', 'Назначение роли'
+        ROLE_REMOVE = 'role_remove', 'Удаление роли'
+        BUDGET_CHANGE = 'budget_change', 'Изменение бюджета'
+        STAGE_ADD = 'stage_add', 'Добавление этапа'
+        STAGE_UPDATE = 'stage_update', 'Обновление этапа'
+        STAGE_DELETE = 'stage_delete', 'Удаление этапа'
+
+    class ModelType(models.TextChoices):
+        PROJECT = 'project', 'Проект'
+        PROJECT_TASK = 'project_task', 'Задача проекта'
+        PROJECT_EXECUTOR = 'project_executor', 'Исполнитель проекта'
+        PROJECT_PLANNED_RESULT = 'project_planned_result', 'Планируемый результат'
+        PROJECT_TARGET_INDICATOR = 'project_target_indicator', 'Целевой показатель'
+        PROJECT_STAGE = 'project_stage', 'Этап проекта'
+        PROJECT_BUDGET_ITEM = 'project_budget_item', 'Бюджетная позиция'
+        PROJECT_BUDGET_TOTAL = 'project_budget_total', 'Бюджет итого'
+        PROJECT_USER_ROLE = 'project_user_role', 'Роль пользователя'
+
+    # Связь с проектом
+    project = models.ForeignKey(
+        'project_ed.Project',
+        on_delete=models.CASCADE,
+        related_name='audit_logs',
+        verbose_name='Проект'
+    )
+    
+    # Связь с пользователем, который выполнил действие
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='project_ed_audit_logs',
+        verbose_name='Пользователь'
+    )
+    
+    # Тип действия
+    action = models.CharField(
+        'Действие',
+        max_length=32,
+        choices=ActionType.choices
+    )
+    
+    # Тип модели, которая была изменена
+    model_type = models.CharField(
+        'Тип модели',
+        max_length=32,
+        choices=ModelType.choices,
+        default=ModelType.PROJECT
+    )
+    
+    # ID объекта, который был изменен (может быть None для создания)
+    object_id = models.PositiveIntegerField(
+        'ID объекта',
+        null=True,
+        blank=True
+    )
+    
+    # Название поля, которое было изменено (для UPDATE действий)
+    field_name = models.CharField(
+        'Название поля',
+        max_length=255,
+        blank=True,
+        default=''
+    )
+    
+    # Старое значение поля (для UPDATE действий)
+    old_value = models.TextField(
+        'Старое значение',
+        blank=True,
+        default=''
+    )
+    
+    # Новое значение поля (для UPDATE действий)
+    new_value = models.TextField(
+        'Новое значение',
+        blank=True,
+        default=''
+    )
+    
+    # Дополнительная информация о действии (JSON)
+    metadata = models.JSONField(
+        'Метаданные',
+        default=dict,
+        blank=True
+    )
+    
+    # IP адрес пользователя (если доступен)
+    ip_address = models.GenericIPAddressField(
+        'IP адрес',
+        null=True,
+        blank=True
+    )
+    
+    # User-Agent браузера (если доступен)
+    user_agent = models.TextField(
+        'User-Agent',
+        blank=True,
+        default=''
+    )
+    
+    # Время выполнения действия
+    timestamp = models.DateTimeField(
+        'Время действия',
+        auto_now_add=True
+    )
+    
+    # Дополнительное описание действия
+    description = models.TextField(
+        'Описание',
+        blank=True,
+        default=''
+    )
+
+    class Meta:
+        verbose_name = 'Запись аудита проекта'
+        verbose_name_plural = 'Записи аудита проекта'
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['project', 'timestamp']),
+            models.Index(fields=['user', 'timestamp']),
+            models.Index(fields=['action', 'timestamp']),
+            models.Index(fields=['model_type', 'object_id']),
+        ]
+
+    def __str__(self) -> str:
+        return f'{self.project_id}: {self.get_action_display()} - {self.get_model_type_display()} ({self.timestamp.strftime("%d.%m.%Y %H:%M")})'
+
+    @classmethod
+    def log_action(
+        cls,
+        project,
+        action,
+        user=None,
+        model_type=ModelType.PROJECT,
+        object_id=None,
+        field_name='',
+        old_value='',
+        new_value='',
+        metadata=None,
+        ip_address=None,
+        user_agent='',
+        description=''
+    ):
+        """Удобный метод для создания записи аудита."""
+        return cls.objects.create(
+            project=project,
+            user=user,
+            action=action,
+            model_type=model_type,
+            object_id=object_id,
+            field_name=field_name,
+            old_value=old_value,
+            new_value=new_value,
+            metadata=metadata or {},
+            ip_address=ip_address,
+            user_agent=user_agent,
+            description=description
+        )
