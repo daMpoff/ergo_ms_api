@@ -33,7 +33,12 @@ from src.modules.project_ed.projects.serializers import (
 )
 from django.db import transaction
 from django.utils import timezone
-from src.modules.project_ed.projects.models import ProjectVersion, ProjectAuditLog
+from src.modules.project_ed.projects.models import (
+    ProjectVersion,
+    ProjectAuditLog,
+    ProjectBudgetItem,
+    ProjectBudgetTotal,
+)
 from src.modules.project_ed.projects.serializers import ProjectAuditLogSerializer
 
 
@@ -166,6 +171,105 @@ class ProjectViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
         instance = serializer.save()
+
+        # --- Обработка бюджета (итоги и позиции) ---
+        try:
+            from decimal import Decimal, ROUND_HALF_UP
+            import json
+
+            def to_dec(value):
+                try:
+                    return Decimal(str(value)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                except Exception:
+                    return Decimal('0.00')
+
+            payload_totals = request.data.get('budget_totals')
+            payload_items = request.data.get('budget_items')
+
+            # Снимки старых значений для аудита
+            old_totals_obj = instance.budget_totals.first()
+            old_totals_data = None
+            if old_totals_obj:
+                old_totals_data = {
+                    'total_with_insurance': float(old_totals_obj.total_with_insurance),
+                    'salary_off_budget': float(old_totals_obj.salary_off_budget),
+                    'salary_budget': float(old_totals_obj.salary_budget),
+                    'other_off_budget': float(old_totals_obj.other_off_budget),
+                    'other_budget': float(old_totals_obj.other_budget),
+                }
+
+            old_items_data = [
+                {
+                    'id': itm.id,
+                    'stage_id': itm.stage_id,
+                    'cost_article': itm.cost_article,
+                    'funding_source': itm.funding_source,
+                    'amount': float(itm.amount),
+                }
+                for itm in instance.budget_items.select_related('stage').all()
+            ]
+
+            # Обновление итогов бюджета (upsert одиночной записи)
+            if isinstance(payload_totals, dict):
+                totals_obj = instance.budget_totals.first() or ProjectBudgetTotal(project=instance)
+                totals_obj.total_with_insurance = to_dec(payload_totals.get('total_with_insurance') or 0)
+                totals_obj.salary_off_budget = to_dec(payload_totals.get('salary_off_budget') or 0)
+                totals_obj.salary_budget = to_dec(payload_totals.get('salary_budget') or 0)
+                totals_obj.other_off_budget = to_dec(payload_totals.get('other_off_budget') or 0)
+                totals_obj.other_budget = to_dec(payload_totals.get('other_budget') or 0)
+                totals_obj.save()
+                # Не записываем аудит изменения итогов: общий бюджет пересчитывается системой автоматически
+
+            # Полная замена списка позиций бюджета
+            if isinstance(payload_items, list):
+                # Удаляем старые позиции проекта
+                instance.budget_items.all().delete()
+                bulk = []
+                for it in payload_items:
+                    if not isinstance(it, dict):
+                        continue
+                    bulk.append(ProjectBudgetItem(
+                        project=instance,
+                        stage_id=it.get('stage_id') or None,
+                        cost_article=str(it.get('cost_article') or ''),
+                        funding_source=str(it.get('funding_source') or ''),
+                        amount=to_dec(it.get('amount') or 0),
+                    ))
+                if bulk:
+                    ProjectBudgetItem.objects.bulk_create(bulk)
+
+                # Аудит изменения позиций бюджета (агрегированная запись)
+                try:
+                    new_items_qs = instance.budget_items.all()
+                    new_items_data = [
+                        {
+                            'id': itm.id,
+                            'stage_id': itm.stage_id,
+                            'cost_article': itm.cost_article,
+                            'funding_source': itm.funding_source,
+                            'amount': float(itm.amount),
+                        }
+                        for itm in new_items_qs
+                    ]
+                    ProjectAuditLog.log_action(
+                        project=instance,
+                        action=ProjectAuditLog.ActionType.BUDGET_CHANGE,
+                        user=getattr(request, 'user', None),
+                        model_type=ProjectAuditLog.ModelType.PROJECT_BUDGET_ITEM,
+                        object_id=None,
+                        field_name='budget_items',
+                        old_value=json.dumps(old_items_data, ensure_ascii=False),
+                        new_value=json.dumps(new_items_data, ensure_ascii=False),
+                        metadata={'source': 'api', 'view': 'ProjectViewSet.update'},
+                        ip_address=request.META.get('REMOTE_ADDR') if hasattr(request, 'META') else None,
+                        user_agent=request.META.get('HTTP_USER_AGENT') if hasattr(request, 'META') else '',
+                        description='Изменение позиций бюджета',
+                    )
+                except Exception:
+                    pass
+        except Exception:
+            # Ошибки сохранения бюджета не должны валить обновление прочих полей
+            pass
 
         # Фиксируем аудит по измененным полям
         for field, old_val in old_values.items():
