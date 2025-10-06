@@ -393,7 +393,13 @@ class Event(models.Model):
                 'full_name': f"{leader.last_name or ''} {leader.first_name or ''}".strip() or leader.username,
                 'username': leader.username,
                 'email': leader.email,
-                'avatar_url': getattr(leader, 'avatar_url', None) or getattr(leader, 'avatar', None)
+                # Возвращаем строковый URL аватара, если он есть; иначе None
+                'avatar_url': (
+                    (getattr(getattr(leader, 'avatar', None), 'image', None).url
+                     if getattr(getattr(leader, 'avatar', None), 'image', None) and hasattr(getattr(getattr(leader, 'avatar', None), 'image', None), 'url')
+                     else None)
+                    or getattr(leader, 'avatar_url', None)
+                )
             }
             for leader in leaders
         ]

@@ -34,6 +34,7 @@ from src.modules.project_ed.projects.serializers import (
 from django.db import transaction
 from django.utils import timezone
 from src.modules.project_ed.projects.models import ProjectVersion, ProjectAuditLog
+from src.modules.project_ed.projects.serializers import ProjectAuditLogSerializer
 
 
 class ProjectPagination(PageNumberPagination):
@@ -215,6 +216,21 @@ class ProjectViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     def partial_update(self, request, *args, **kwargs):
         kwargs['partial'] = True
         return self.update(request, *args, **kwargs)
+
+    @action(detail=True, methods=['get'])
+    def audit_logs(self, request, pk=None):
+        """Возвращает журнал аудита для проекта."""
+        project = self.get_object()
+        logs = project.audit_logs.select_related('user').all()
+
+        # Пагинация при необходимости
+        page = self.paginate_queryset(logs)
+        if page is not None:
+            serializer = ProjectAuditLogSerializer(page, many=True, context={'request': request})
+            return self.get_paginated_response(serializer.data)
+
+        serializer = ProjectAuditLogSerializer(logs, many=True, context={'request': request})
+        return Response(serializer.data)
 
 
 class CategoryViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):

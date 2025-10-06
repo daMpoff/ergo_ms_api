@@ -20,6 +20,7 @@ from .models import (
     ProjectVersion,
     ProjectRole,
     ProjectUserRole,
+    ProjectAuditLog,
 )
 
 
@@ -442,7 +443,7 @@ class ProjectDetailSerializer(ProjectReadSerializer):
         if obj.manager:
             return UserListSerializer(obj.manager, context=self.context).data
         return None
-    
+
     def get_curator_data(self, obj):
         """Возвращает полные данные о кураторе проекта."""
         if obj.curator:
@@ -505,3 +506,43 @@ class ProjectDetailSerializer(ProjectReadSerializer):
                 'other_budget': float(totals.other_budget),
             }
         return None
+
+
+class ProjectAuditLogSerializer(serializers.ModelSerializer):
+    """Сериализатор для отображения записей аудита проекта."""
+
+    user_name = serializers.SerializerMethodField()
+    action_display = serializers.CharField(source='get_action_display', read_only=True)
+    model_type_display = serializers.CharField(source='get_model_type_display', read_only=True)
+
+    class Meta:
+        model = ProjectAuditLog
+        fields = [
+            'id',
+            'project',
+            'user',
+            'user_name',
+            'action',
+            'action_display',
+            'model_type',
+            'model_type_display',
+            'object_id',
+            'field_name',
+            'old_value',
+            'new_value',
+            'metadata',
+            'ip_address',
+            'user_agent',
+            'timestamp',
+            'description',
+        ]
+        read_only_fields = fields
+
+    def get_user_name(self, obj):
+        user = getattr(obj, 'user', None)
+        if not user:
+            return ''
+        last = getattr(user, 'last_name', '') or ''
+        first = getattr(user, 'first_name', '') or ''
+        full = f"{last} {first}".strip()
+        return full or getattr(user, 'username', '') or str(getattr(user, 'id', ''))
