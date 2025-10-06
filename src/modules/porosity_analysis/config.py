@@ -16,9 +16,9 @@ CLEANUP_FAILED_ANALYSES_DAYS = 7  # Количество дней для очи�
 VALIDATE_FILES_INTERVAL_HOURS = 24  # Интервал проверки файлов в часах
 DEFAULT_REPORT_ZIP_THREADS = 8  # Количество потоков для подготовки отчетов в ZIP по умолчанию
 DEFAULT_UPLOAD_THREADS = 8  # Количество потоков для загрузки файлов по умолчанию
-DEFAULT_ARCHIVE_CHUNK_SIZE = 50  # Размер чанка для создания частичных архивов
-DEFAULT_ARCHIVE_MERGE_THREADS = 4  # Количество потоков для объединения архивов
-DEFAULT_FILE_CACHE_SIZE = 1000  # Размер кэша для файлов отчетов
+DEFAULT_ARCHIVE_CHUNK_SIZE = 100  # Размер чанка для создания частичных архивов (оптимизирован для больших объемов)
+DEFAULT_ARCHIVE_MERGE_THREADS = 4  # Количество потоков для объединения архивов (минимизировано для стабильности)
+DEFAULT_FILE_CACHE_SIZE = 1000  # Размер кэша для файлов отчетов (минимизирован для экономии памяти)
 
 # Настройки файловой системы
 MEDIA_ROOT = getattr(settings, 'MEDIA_ROOT', 'media')

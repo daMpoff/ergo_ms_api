@@ -572,7 +572,7 @@ class PorosityAnalyzer:
             ),
             lambda: visualize_interpore_distances(
                 results['interpore_distances'], results['pore_centers'], 
-                1.0 / results.get('pixels_per_micron', 1), save_directory
+                1.0 / (results.get('pixels_per_micron', 1) or 1), save_directory
             ),
             lambda: visualize_pore_orientation(
                 results['pore_orientation'], save_directory

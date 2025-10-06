@@ -267,4 +267,165 @@ def validate_analysis_files():
             logger.warning(f"Директория результатов для анализа {analysis.id} не найдена")
             analysis.status = 'failed'
             analysis.error_message = "Директория результатов удалена"
-            analysis.save() 
+            analysis.save()
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+def create_archive_task(self, archive_id):
+    """
+    Асинхронная задача для создания архива отчетов
+    
+    Args:
+        archive_id (int): ID архива в базе данных
+    """
+    from src.modules.porosity_analysis.models import PorosityArchive
+    import zipfile
+    import io
+    import re
+    import gc
+    
+    try:
+        # Получаем архив
+        archive = PorosityArchive.objects.get(id=archive_id)
+        
+        # Проверяем, что архив еще создается
+        if archive.status != 'creating':
+            logger.warning(f"Архив {archive_id} уже обработан (статус: {archive.status})")
+            return
+        
+        # Получаем анализы
+        analyses = archive.analyses.all()
+        
+        if not analyses.exists():
+            archive.status = 'failed'
+            archive.error_message = "Нет анализов для архивирования"
+            archive.save()
+            return
+        
+        # Создаем директорию для архивов, если её нет
+        archives_dir = os.path.join(settings.MEDIA_ROOT, 'porosity_analysis', 'archives')
+        os.makedirs(archives_dir, exist_ok=True)
+        
+        # Генерируем имя файла архива с UUID
+        archive_filename = f"{archive.uuid}.zip"
+        archive_path = os.path.join(archives_dir, archive_filename)
+        
+        logger.info(f"Создаем архив с UUID: {archive.uuid}, имя файла: {archive_filename}")
+        
+        # Создаем архив
+        successful_reports = 0
+        failed_reports = []
+        
+        with zipfile.ZipFile(archive_path, 'w', zipfile.ZIP_DEFLATED, compresslevel=1) as zip_file:
+            # Добавляем информационный файл
+            info_content = f"""Информация об архиве отчетов
+
+Название архива: {archive.name}
+Описание: {archive.description or 'Не указано'}
+Тип отчета: {archive.report_type.upper()}
+Дата создания: {archive.created_at.strftime('%Y-%m-%d %H:%M:%S')}
+Количество анализов: {analyses.count()}
+
+СПИСОК АНАЛИЗОВ В АРХИВЕ:
+"""
+            
+            for analysis in analyses:
+                info_content += f"- Анализ #{analysis.id}: {analysis.name} (статус: {analysis.status})\n"
+            
+            info_content += f"""
+ОБРАБОТКА:
+"""
+            
+            # Обрабатываем каждый анализ
+            for analysis in analyses:
+                try:
+                    # Ищем существующие файлы отчетов в директории результатов
+                    reports_dir = os.path.join(analysis.results_directory, 'reports')
+                    report_files = []
+                    
+                    if os.path.exists(reports_dir):
+                        # Ищем файлы нужного типа
+                        for file in os.listdir(reports_dir):
+                            if file.endswith(f'.{archive.report_type}'):
+                                report_files.append(os.path.join(reports_dir, file))
+                    
+                    if not report_files:
+                        failed_reports.append(f"Анализ {analysis.id}: не найдены файлы отчетов типа {archive.report_type}")
+                        continue
+                    
+                    # Берем первый найденный файл отчета
+                    report_file = report_files[0]
+                    
+                    if not os.path.exists(report_file) or os.path.getsize(report_file) == 0:
+                        failed_reports.append(f"Анализ {analysis.id}: файл отчета пустой или не существует")
+                        continue
+                    
+                    # Имя файла в архиве
+                    base_photo_name = (analysis.name or '').strip() or f"analysis_{analysis.id}"
+                    safe_photo_name = re.sub(r'[^\w\s\-а-яё]', '', base_photo_name, flags=re.IGNORECASE)[:100] or f"analysis_{analysis.id}"
+                    archive_filename = f"{safe_photo_name}.{archive.report_type}"
+                    
+                    # Добавляем файл в архив
+                    zip_file.write(report_file, archive_filename)
+                    successful_reports += 1
+                    
+                    # Периодическая очистка памяти
+                    if successful_reports % 5 == 0:
+                        gc.collect()
+                    
+                except Exception as e:
+                    failed_reports.append(f"Анализ {analysis.id}: {str(e)}")
+                    logger.error(f"Ошибка при обработке анализа {analysis.id} для архива {archive_id}: {e}")
+                    gc.collect()
+            
+            # Добавляем информацию об ошибках
+            if failed_reports:
+                info_content += f"""
+ОШИБКИ ПРИ ОБРАБОТКЕ:
+{chr(10).join(failed_reports)}
+"""
+            
+            info_content += f"""
+РЕЗУЛЬТАТ:
+Успешно обработано: {successful_reports}
+Ошибок: {len(failed_reports)}
+"""
+            
+            # Добавляем информационный файл в архив
+            zip_file.writestr('ИНФОРМАЦИЯ_О_АРХИВЕ.txt', info_content.encode('utf-8'))
+        
+        # Обновляем информацию об архиве
+        file_size = os.path.getsize(archive_path)
+        archive.file_path = archive_path
+        archive.file_size = file_size
+        
+        if successful_reports > 0:
+            archive.status = 'completed'
+            archive.error_message = ''
+        else:
+            archive.status = 'failed'
+            archive.error_message = f"Не удалось создать ни одного отчета. Ошибки: {'; '.join(failed_reports)}"
+        
+        archive.save()
+        
+        logger.info(f"Архив {archive_id} создан успешно: {successful_reports} отчетов, {len(failed_reports)} ошибок")
+        
+        # Финальная очистка памяти
+        gc.collect()
+        
+    except PorosityArchive.DoesNotExist:
+        logger.error(f"Архив {archive_id} не найден")
+    except Exception as e:
+        logger.error(f"Ошибка при создании архива {archive_id}: {e}")
+        
+        # Обновляем статус архива на ошибку
+        try:
+            archive = PorosityArchive.objects.get(id=archive_id)
+            archive.status = 'failed'
+            archive.error_message = str(e)
+            archive.save()
+        except PorosityArchive.DoesNotExist:
+            pass
+        
+        # Повторяем задачу при ошибке
+        raise self.retry(exc=e) 

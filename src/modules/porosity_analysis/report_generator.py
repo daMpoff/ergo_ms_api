@@ -179,10 +179,10 @@ class PorosityReportGenerator:
         results = self.in_memory_results
         
         # Безопасное получение значений с дефолтными значениями
-        num_pores = results.get('number_of_pores', 0)
-        porosity = results.get('porosity_percentage', 0.0)
+        num_pores = results.get('number_of_pores', 0) or 0
+        porosity = results.get('porosity_percentage', 0.0) or 0.0
         scale_value = self.analysis.scale_value if self.analysis.scale_value else 0
-        pixels_per_micron = results.get('pixels_per_micron', 0)
+        pixels_per_micron = results.get('pixels_per_micron', 0) or 0
         
         # Подсчет исключенных областей
         try:
@@ -214,10 +214,20 @@ class PorosityReportGenerator:
         
         # Статистика по размерам пор
         mean_size = results.get('mean_pore_size_microns', 0)
+        if mean_size is None:
+            mean_size = 0
         max_size = results.get('max_pore_size_microns', 0)
+        if max_size is None:
+            max_size = 0
         min_size = results.get('min_pore_size_microns', 0)
+        if min_size is None:
+            min_size = 0
         pore_density = results.get('pore_density', 0)
+        if pore_density is None:
+            pore_density = 0
         avg_interpore_dist = results.get('average_interpore_distance', 0)
+        if avg_interpore_dist is None:
+            avg_interpore_dist = 0
         
         # Данные об ориентации
         orientation_data = results.get('pore_orientation', {})
@@ -323,6 +333,8 @@ class PorosityReportGenerator:
         results = self.in_memory_results
         pore_properties = results.get('pore_properties', [])
         microns_per_pixel = results.get('microns_per_pixel', 1.0)
+        if microns_per_pixel is None or microns_per_pixel <= 0:
+            microns_per_pixel = 1.0
         
         import numpy as np
         
@@ -352,16 +364,22 @@ class PorosityReportGenerator:
                 minor_axes_microns.append(radius * 1.6)
                 major_axes_microns.append(radius * 2.2)
         
+        # Безопасное вычисление статистики с проверкой на пустые массивы
+        def safe_stat(array, default=0.0):
+            if len(array) == 0:
+                return default
+            return array
+        
         return {
-            'min_area': np.min(areas_microns),
-            'max_area': np.max(areas_microns),
-            'mean_area': np.mean(areas_microns),
-            'min_minor_axis': np.min(minor_axes_microns),
-            'max_minor_axis': np.max(minor_axes_microns),
-            'mean_minor_axis': np.mean(minor_axes_microns),
-            'min_major_axis': np.min(major_axes_microns),
-            'max_major_axis': np.max(major_axes_microns),
-            'mean_major_axis': np.mean(major_axes_microns)
+            'min_area': np.min(safe_stat(areas_microns)),
+            'max_area': np.max(safe_stat(areas_microns)),
+            'mean_area': np.mean(safe_stat(areas_microns)),
+            'min_minor_axis': np.min(safe_stat(minor_axes_microns)),
+            'max_minor_axis': np.max(safe_stat(minor_axes_microns)),
+            'mean_minor_axis': np.mean(safe_stat(minor_axes_microns)),
+            'min_major_axis': np.min(safe_stat(major_axes_microns)),
+            'max_major_axis': np.max(safe_stat(major_axes_microns)),
+            'mean_major_axis': np.mean(safe_stat(major_axes_microns))
         }
 
 
@@ -375,6 +393,8 @@ class PorosityReportGenerator:
         results = self.in_memory_results
         exclude_mask = results.get('exclude_mask')
         microns_per_pixel = results.get('microns_per_pixel', 1.0)
+        if microns_per_pixel is None or microns_per_pixel <= 0:
+            microns_per_pixel = 1.0
         
         import numpy as np
         total_pixels = np.sum(exclude_mask)
@@ -399,6 +419,8 @@ class PorosityReportGenerator:
         num_pores = results.get('number_of_pores', 0)
         pore_properties = results.get('pore_properties', [])
         microns_per_pixel = results.get('microns_per_pixel', 1.0)
+        if microns_per_pixel is None or microns_per_pixel <= 0:
+            microns_per_pixel = 1.0
         porosity_percentage = results.get('porosity_percentage', 0)
         
         # Вычисляем общую площадь пор
@@ -409,11 +431,16 @@ class PorosityReportGenerator:
         pore_diameters_microns = results.get('pore_diameters_microns', [])
         
         import numpy as np
-        min_diameter = np.min(pore_diameters_microns)
-        max_diameter = np.max(pore_diameters_microns)
-        mean_diameter = np.mean(pore_diameters_microns)
-        std_diameter = np.std(pore_diameters_microns)
-        median_diameter = np.median(pore_diameters_microns)
+        
+        # Безопасное вычисление статистики с проверкой на пустые массивы
+        if len(pore_diameters_microns) == 0:
+            min_diameter = max_diameter = mean_diameter = std_diameter = median_diameter = 0.0
+        else:
+            min_diameter = np.min(pore_diameters_microns)
+            max_diameter = np.max(pore_diameters_microns)
+            mean_diameter = np.mean(pore_diameters_microns)
+            std_diameter = np.std(pore_diameters_microns)
+            median_diameter = np.median(pore_diameters_microns)
         
         # Получаем распределение по размерам
         size_distribution_df = results.get('pore_size_distribution')

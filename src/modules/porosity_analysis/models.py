@@ -1,4 +1,5 @@
 import os
+import uuid
 from django.db import models
 from django.utils import timezone
 
@@ -149,3 +150,114 @@ class PorosityAnalysis(models.Model):
         
         # Подробный вывод отключен
         return result_files
+
+
+class PorosityArchive(models.Model):
+    """Модель для хранения информации о созданных архивах отчетов"""
+    
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False, verbose_name="UUID архива")
+    name = models.CharField(max_length=255, verbose_name="Название архива")
+    description = models.TextField(blank=True, verbose_name="Описание")
+    created_at = models.DateTimeField(default=timezone.now, verbose_name="Дата создания")
+    
+    # Связь с анализами
+    analyses = models.ManyToManyField(
+        'porosity_analysis.PorosityAnalysis',
+        related_name='archives',
+        verbose_name="Анализы в архиве"
+    )
+    
+    # Информация об архиве
+    file_path = models.CharField(max_length=500, verbose_name="Путь к файлу архива")
+    file_size = models.BigIntegerField(null=True, blank=True, verbose_name="Размер файла (байты)")
+    report_type = models.CharField(max_length=10, choices=[('pdf', 'PDF'), ('docx', 'Word')], default='docx', verbose_name="Тип отчета")
+    
+    # Статус создания
+    STATUS_CHOICES = [
+        ('creating', 'Создается'),
+        ('completed', 'Создан'),
+        ('failed', 'Ошибка'),
+    ]
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='creating', verbose_name="Статус")
+    error_message = models.TextField(blank=True, verbose_name="Сообщение об ошибке")
+    
+    class Meta:
+        db_table = 'porosity_analysis_archive'
+        verbose_name = "Архив отчетов пористости"
+        verbose_name_plural = "Архивы отчетов пористости"
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.name} ({self.created_at.strftime('%Y-%m-%d %H:%M')})"
+    
+    @property
+    def file_size_mb(self):
+        """Размер файла в мегабайтах"""
+        if self.file_size:
+            return round(self.file_size / (1024 * 1024), 2)
+        return 0
+    
+    @property
+    def analyses_count(self):
+        """Количество анализов в архиве"""
+        return self.analyses.count()
+    
+    @property
+    def is_completed(self):
+        return self.status == 'completed'
+    
+    @property
+    def is_failed(self):
+        return self.status == 'failed'
+    
+    @property
+    def is_creating(self):
+        return self.status == 'creating'
+
+
+class DownloadToken(models.Model):
+    """Временный токен для скачивания файлов без авторизации"""
+    
+    token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False, verbose_name="Токен")
+    created_at = models.DateTimeField(default=timezone.now, verbose_name="Дата создания")
+    expires_at = models.DateTimeField(verbose_name="Дата истечения")
+    
+    # Тип файла
+    FILE_TYPE_CHOICES = [
+        ('archive', 'Архив'),
+        ('report', 'Отчет'),
+        ('original', 'Исходное изображение'),
+    ]
+    file_type = models.CharField(max_length=20, choices=FILE_TYPE_CHOICES, verbose_name="Тип файла")
+    
+    # ID объекта (analysis_id или archive_id)
+    object_id = models.IntegerField(verbose_name="ID объекта")
+    
+    # Дополнительные параметры (например, тип отчета)
+    params = models.JSONField(default=dict, blank=True, verbose_name="Параметры")
+    
+    # Использование
+    is_used = models.BooleanField(default=False, verbose_name="Использован")
+    used_at = models.DateTimeField(null=True, blank=True, verbose_name="Время использования")
+    
+    class Meta:
+        db_table = 'porosity_download_token'
+        verbose_name = "Токен скачивания"
+        verbose_name_plural = "Токены скачивания"
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['token', 'expires_at']),
+        ]
+    
+    def __str__(self):
+        return f"Token {self.token} ({self.file_type})"
+    
+    @property
+    def is_expired(self):
+        """Проверка истечения токена"""
+        return timezone.now() > self.expires_at
+    
+    @property
+    def is_valid(self):
+        """Проверка валидности токена"""
+        return not self.is_used and not self.is_expired

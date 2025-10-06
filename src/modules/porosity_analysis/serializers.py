@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from src.modules.porosity_analysis.models import PorosityAnalysis, PorosityGroup
+from src.modules.porosity_analysis.models import PorosityAnalysis, PorosityGroup, PorosityArchive
 from django.utils import timezone
 
 
@@ -9,7 +9,64 @@ class PorosityGroupSerializer(serializers.ModelSerializer):
     class Meta:
         model = PorosityGroup
         fields = ['id', 'name', 'description', 'created_at']
-        read_only_fields = ['id', 'created_at']
+
+
+class PorosityArchiveSerializer(serializers.ModelSerializer):
+    """Сериализатор архива отчетов пористости"""
+    
+    file_size_mb = serializers.ReadOnlyField()
+    analyses_count = serializers.ReadOnlyField()
+    is_completed = serializers.ReadOnlyField()
+    is_failed = serializers.ReadOnlyField()
+    is_creating = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = PorosityArchive
+        fields = [
+            'id', 'uuid', 'name', 'description', 'created_at', 'file_path', 
+            'file_size', 'file_size_mb', 'report_type', 'status', 
+            'error_message', 'analyses_count', 'is_completed', 
+            'is_failed', 'is_creating'
+        ]
+        read_only_fields = ['created_at', 'file_size', 'file_size_mb', 'analyses_count']
+
+
+class CreatePorosityArchiveSerializer(serializers.ModelSerializer):
+    """Сериализатор для создания архива отчетов"""
+    
+    analysis_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        write_only=True,
+        help_text="Список ID анализов для включения в архив"
+    )
+    input_text = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_blank=True,
+        help_text="Строка с номерами анализов через запятую или тире"
+    )
+    
+    class Meta:
+        model = PorosityArchive
+        fields = [
+            'name', 'description', 'report_type', 'analysis_ids', 'input_text'
+        ]
+    
+    def validate_report_type(self, value):
+        if value not in ['pdf', 'docx']:
+            raise serializers.ValidationError("Тип отчета должен быть 'pdf' или 'docx'")
+        return value
+    
+    def validate(self, attrs):
+        analysis_ids = attrs.get('analysis_ids', [])
+        input_text = attrs.get('input_text', '')
+        
+        if not analysis_ids and not input_text.strip():
+            raise serializers.ValidationError(
+                "Необходимо указать либо analysis_ids, либо input_text"
+            )
+        
+        return attrs
 
 
 class PorosityAnalysisSerializer(serializers.ModelSerializer):
