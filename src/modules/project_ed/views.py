@@ -40,6 +40,7 @@ from src.modules.project_ed.projects.models import (
     ProjectBudgetTotal,
     ProjectStage,
 )
+from src.modules.project_ed.projects.models import ProjectTargetIndicator
 from src.modules.project_ed.projects.serializers import ProjectAuditLogSerializer
 
 
@@ -160,7 +161,7 @@ class ProjectViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         instance = self.get_object()
 
         # Захватываем старые значения редактируемых полей
-        editable_fields = set(request.data.keys())
+        editable_fields = set(getattr(request, 'data', {}) .keys())
         old_values = {}
         for field in editable_fields:
             if hasattr(instance, field):
@@ -169,7 +170,11 @@ class ProjectViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
                 except Exception:
                     pass
 
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        # Извлекаем целевые показатели из payload до сериализации (чтобы не упасть на неописанном поле)
+        payload_data = dict(request.data) if hasattr(request, 'data') else {}
+        target_indicators_payload = payload_data.pop('target_indicators', None)
+
+        serializer = self.get_serializer(instance, data=payload_data, partial=partial)
         serializer.is_valid(raise_exception=True)
         instance = serializer.save()
 
@@ -423,6 +428,81 @@ class ProjectViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
                             pass
         except Exception:
             # Ошибки обработки этапов не должны валить обновление прочих полей
+            pass
+
+        # --- Обработка целевых показателей проекта ---
+        try:
+            import json as _json
+            # Снимок старых показателей
+            old_ti_qs = list(instance.target_indicators_rel.all())
+            old_ti_snapshot = [
+                {
+                    'id': ti.id,
+                    'source_indicator_id': getattr(ti, 'source_indicator_id', None),
+                    'name': ti.name,
+                    'unit': ti.unit,
+                    'baseline': float(ti.baseline) if ti.baseline is not None else None,
+                    'planned': float(ti.planned) if ti.planned is not None else None,
+                }
+                for ti in old_ti_qs
+            ]
+
+            if isinstance(target_indicators_payload, list):
+                # Полная замена списка показателей
+                instance.target_indicators_rel.all().delete()
+
+                new_objs = []
+                for item in target_indicators_payload:
+                    if not isinstance(item, dict):
+                        continue
+                    source_indicator_id = item.get('source_indicator_id') or item.get('id')
+                    name = item.get('name') or ''
+                    unit = item.get('unit') or ''
+                    baseline = item.get('baseline')
+                    planned = item.get('planned')
+                    new_objs.append(ProjectTargetIndicator(
+                        project=instance,
+                        source_indicator_id=source_indicator_id if source_indicator_id else None,
+                        name=name,
+                        unit=unit,
+                        baseline=baseline,
+                        planned=planned,
+                    ))
+                if new_objs:
+                    ProjectTargetIndicator.objects.bulk_create(new_objs)
+
+                # Аудит агрегированного изменения показателей
+                try:
+                    new_qs = list(instance.target_indicators_rel.all())
+                    new_snapshot = [
+                        {
+                            'id': ti.id,
+                            'source_indicator_id': getattr(ti, 'source_indicator_id', None),
+                            'name': ti.name,
+                            'unit': ti.unit,
+                            'baseline': float(ti.baseline) if ti.baseline is not None else None,
+                            'planned': float(ti.planned) if ti.planned is not None else None,
+                        }
+                        for ti in new_qs
+                    ]
+                    ProjectAuditLog.log_action(
+                        project=instance,
+                        action=ProjectAuditLog.ActionType.UPDATE,
+                        user=getattr(request, 'user', None),
+                        model_type=ProjectAuditLog.ModelType.PROJECT_TARGET_INDICATOR,
+                        object_id=None,
+                        field_name='target_indicators',
+                        old_value=_json.dumps(old_ti_snapshot, ensure_ascii=False),
+                        new_value=_json.dumps(new_snapshot, ensure_ascii=False),
+                        metadata={'source': 'api', 'view': 'ProjectViewSet.update'},
+                        ip_address=request.META.get('REMOTE_ADDR') if hasattr(request, 'META') else None,
+                        user_agent=request.META.get('HTTP_USER_AGENT') if hasattr(request, 'META') else '',
+                        description='Обновление целевых показателей проекта',
+                    )
+                except Exception:
+                    pass
+        except Exception:
+            # Ошибки показателей не должны валить обновление прочих полей
             pass
 
         # Фиксируем аудит по измененным полям
