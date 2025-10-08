@@ -158,6 +158,70 @@ class ProjectViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         return Response(read_data, status=status.HTTP_201_CREATED)
 
     @transaction.atomic
+    def destroy(self, request, *args, **kwargs):
+        """Переопределяем destroy для записи аудита при удалении проекта."""
+        instance = self.get_object()
+        
+        # Записываем аудит удаления проекта
+        try:
+            from .models import ProjectAuditLog
+            import json
+            
+            # Собираем основную информацию о проекте для аудита
+            project_data = {
+                'id': instance.id,
+                'short_name': instance.short_name,
+                'name': instance.name,
+                'status': instance.status,
+                'owner_id': instance.owner_id,
+                'manager_id': instance.manager_id,
+                'curator_id': instance.curator_id,
+                'customer_id': instance.customer_id,
+                'start_date': instance.start_date.isoformat() if instance.start_date else None,
+                'end_date': instance.end_date.isoformat() if instance.end_date else None,
+                'budget_total': float(instance.budget_total) if instance.budget_total else 0,
+                'created_at': instance.created_at.isoformat() if instance.created_at else None,
+                'updated_at': instance.updated_at.isoformat() if instance.updated_at else None,
+            }
+            
+            # Записываем аудит удаления
+            ProjectAuditLog.log_action(
+                project=instance,
+                action=ProjectAuditLog.ActionType.DELETE,
+                user=getattr(request, 'user', None),
+                model_type=ProjectAuditLog.ModelType.PROJECT,
+                object_id=instance.id,
+                field_name='project',
+                old_value=json.dumps(project_data, ensure_ascii=False),
+                new_value='',
+                metadata={
+                    'source': 'api', 
+                    'view': 'ProjectViewSet.destroy',
+                    'deleted_related_data': {
+                        'tasks_count': instance.tasks.count(),
+                        'executors_count': instance.executors.count(),
+                        'planned_results_count': instance.planned_results.count(),
+                        'target_indicators_count': instance.target_indicators_rel.count(),
+                        'stages_count': instance.stages.count(),
+                        'budget_items_count': instance.budget_items.count(),
+                        'user_roles_count': instance.user_roles.count(),
+                        'versions_count': instance.versions.count(),
+                    }
+                },
+                ip_address=request.META.get('REMOTE_ADDR') if hasattr(request, 'META') else None,
+                user_agent=request.META.get('HTTP_USER_AGENT') if hasattr(request, 'META') else '',
+                description='Полное удаление проекта и всех связанных данных',
+            )
+        except Exception as e:
+            # Ошибки аудита не должны блокировать удаление
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Ошибка записи аудита при удалении проекта {instance.id}: {e}")
+        
+        # Выполняем стандартное удаление
+        return super().destroy(request, *args, **kwargs)
+
+    @transaction.atomic
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
