@@ -512,6 +512,7 @@ class ProjectAuditLogSerializer(serializers.ModelSerializer):
     """Сериализатор для отображения записей аудита проекта."""
 
     user_name = serializers.SerializerMethodField()
+    avatar_url = serializers.SerializerMethodField()
     action_display = serializers.CharField(source='get_action_display', read_only=True)
     model_type_display = serializers.CharField(source='get_model_type_display', read_only=True)
 
@@ -522,6 +523,7 @@ class ProjectAuditLogSerializer(serializers.ModelSerializer):
             'project',
             'user',
             'user_name',
+            'avatar_url',
             'action',
             'action_display',
             'model_type',
@@ -546,3 +548,14 @@ class ProjectAuditLogSerializer(serializers.ModelSerializer):
         first = getattr(user, 'first_name', '') or ''
         full = f"{last} {first}".strip()
         return full or getattr(user, 'username', '') or str(getattr(user, 'id', ''))
+    
+    def get_avatar_url(self, obj):
+        """Получить URL аватара пользователя."""
+        user = getattr(obj, 'user', None)
+        if not user:
+            return None
+        
+        request = self.context.get('request')
+        if request and hasattr(user, 'avatar') and user.avatar and user.avatar.image:
+            return request.build_absolute_uri(user.avatar.image.url)
+        return None

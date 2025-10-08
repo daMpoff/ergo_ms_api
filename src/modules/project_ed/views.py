@@ -559,7 +559,7 @@ class ProjectViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     def audit_logs(self, request, pk=None):
         """Возвращает журнал аудита для проекта."""
         project = self.get_object()
-        logs = project.audit_logs.select_related('user').all()
+        logs = project.audit_logs.select_related('user__avatar').all()
 
         # Пагинация при необходимости
         page = self.paginate_queryset(logs)
