@@ -39,6 +39,8 @@ from src.modules.project_ed.projects.models import (
     ProjectBudgetItem,
     ProjectBudgetTotal,
     ProjectStage,
+    ProjectPlannedResult,
+    ProjectTask,
 )
 from src.modules.project_ed.projects.models import ProjectTargetIndicator
 from src.modules.project_ed.projects.serializers import ProjectAuditLogSerializer
@@ -173,6 +175,9 @@ class ProjectViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         # Извлекаем целевые показатели из payload до сериализации (чтобы не упасть на неописанном поле)
         payload_data = dict(request.data) if hasattr(request, 'data') else {}
         target_indicators_payload = payload_data.pop('target_indicators', None)
+        planned_results_payload = payload_data.pop('planned_results', None)
+        tasks_payload = payload_data.pop('tasks', None)
+        executors_payload = payload_data.pop('executors', None)
 
         serializer = self.get_serializer(instance, data=payload_data, partial=partial)
         serializer.is_valid(raise_exception=True)
@@ -275,6 +280,360 @@ class ProjectViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
                     pass
         except Exception:
             # Ошибки сохранения бюджета не должны валить обновление прочих полей
+            pass
+
+        # --- Обработка планируемых результатов ---
+        try:
+            if isinstance(planned_results_payload, list):
+                import json as _json
+                # Снимок старых результатов
+                old_qs = list(instance.planned_results.all())
+                old_items = [
+                    { 'id': pr.id, 'description': pr.description, 'order': pr.order }
+                    for pr in old_qs
+                ]
+
+                # Нормализуем новые результаты
+                new_items = []
+                for idx, item in enumerate(planned_results_payload):
+                    if isinstance(item, dict):
+                        desc = (item.get('description') or '').strip()
+                        order = item.get('order', idx)
+                    else:
+                        desc = (str(item) if item is not None else '').strip()
+                        order = idx
+                    if not desc:
+                        continue
+                    new_items.append({ 'description': desc, 'order': order })
+
+                # Подсчёт множеств для add/delete
+                from collections import Counter, defaultdict
+                old_counter = Counter((it['description'], it['order']) for it in old_items)
+                new_counter = Counter((it['description'], it['order']) for it in new_items)
+
+                # Изменение порядка: попытаемся определить по совпадающему описанию
+                old_by_desc = defaultdict(list)
+                for it in old_items:
+                    old_by_desc[it['description']].append(it['order'])
+                new_by_desc = defaultdict(list)
+                for it in new_items:
+                    new_by_desc[it['description']].append(it['order'])
+
+                # Пер-айтемное логирование
+                # 1) Обновления (смена порядка при том же описании)
+                for desc, old_orders in old_by_desc.items():
+                    if desc in new_by_desc:
+                        new_orders = new_by_desc[desc][:]
+                        # Зафиксируем изменения порядка по паре списков
+                        # Берём минимально возможное число пар для сравнения по длине
+                        # Остатки уйдут в добавления/удаления
+                        common = min(len(old_orders), len(new_orders))
+                        # Сравниваем по позициям (порядок внутри одинаковых описаний не критичен, но даёт эвристику)
+                        for i in range(common):
+                            if old_orders[i] != new_orders[i]:
+                                try:
+                                    ProjectAuditLog.log_action(
+                                        project=instance,
+                                        action=ProjectAuditLog.ActionType.UPDATE,
+                                        user=getattr(request, 'user', None),
+                                        model_type=ProjectAuditLog.ModelType.PROJECT_PLANNED_RESULT,
+                                        object_id=None,
+                                        field_name='planned_result.order',
+                                        old_value=str(old_orders[i]),
+                                        new_value=str(new_orders[i]),
+                                        metadata={'source': 'api', 'view': 'ProjectViewSet.update', 'description': desc},
+                                        ip_address=request.META.get('REMOTE_ADDR') if hasattr(request, 'META') else None,
+                                        user_agent=request.META.get('HTTP_USER_AGENT') if hasattr(request, 'META') else '',
+                                        description=f"Изменён порядок планируемого результата: '{desc}'",
+                                    )
+                                except Exception:
+                                    pass
+
+                # 2) Удаления
+                for key, cnt in (old_counter - new_counter).items():
+                    desc, order = key
+                    for _ in range(cnt):
+                        try:
+                            ProjectAuditLog.log_action(
+                                project=instance,
+                                action=ProjectAuditLog.ActionType.DELETE,
+                                user=getattr(request, 'user', None),
+                                model_type=ProjectAuditLog.ModelType.PROJECT_PLANNED_RESULT,
+                                object_id=None,
+                                field_name='planned_result',
+                                old_value=_json.dumps({'description': desc, 'order': order}, ensure_ascii=False),
+                                new_value='',
+                                metadata={'source': 'api', 'view': 'ProjectViewSet.update'},
+                                ip_address=request.META.get('REMOTE_ADDR') if hasattr(request, 'META') else None,
+                                user_agent=request.META.get('HTTP_USER_AGENT') if hasattr(request, 'META') else '',
+                                description=f"Удалён планируемый результат: '{desc}'",
+                            )
+                        except Exception:
+                            pass
+
+                # 3) Добавления
+                for key, cnt in (new_counter - old_counter).items():
+                    desc, order = key
+                    for _ in range(cnt):
+                        try:
+                            ProjectAuditLog.log_action(
+                                project=instance,
+                                action=ProjectAuditLog.ActionType.CREATE,
+                                user=getattr(request, 'user', None),
+                                model_type=ProjectAuditLog.ModelType.PROJECT_PLANNED_RESULT,
+                                object_id=None,
+                                field_name='planned_result',
+                                old_value='',
+                                new_value=_json.dumps({'description': desc, 'order': order}, ensure_ascii=False),
+                                metadata={'source': 'api', 'view': 'ProjectViewSet.update'},
+                                ip_address=request.META.get('REMOTE_ADDR') if hasattr(request, 'META') else None,
+                                user_agent=request.META.get('HTTP_USER_AGENT') if hasattr(request, 'META') else '',
+                                description=f"Добавлен планируемый результат: '{desc}'",
+                            )
+                        except Exception:
+                            pass
+
+                # Полная замена записей в БД под текущий payload
+                instance.planned_results.all().delete()
+                bulk = [
+                    ProjectPlannedResult(project=instance, description=it['description'], order=it['order'])
+                    for it in new_items
+                ]
+                if bulk:
+                    ProjectPlannedResult.objects.bulk_create(bulk)
+
+                # Агрегированная запись об изменениях всего списка
+                try:
+                    ProjectAuditLog.log_action(
+                        project=instance,
+                        action=ProjectAuditLog.ActionType.UPDATE,
+                        user=getattr(request, 'user', None),
+                        model_type=ProjectAuditLog.ModelType.PROJECT_PLANNED_RESULT,
+                        object_id=None,
+                        field_name='planned_results',
+                        old_value=_json.dumps(old_items, ensure_ascii=False),
+                        new_value=_json.dumps(new_items, ensure_ascii=False),
+                        metadata={'source': 'api', 'view': 'ProjectViewSet.update'},
+                        ip_address=request.META.get('REMOTE_ADDR') if hasattr(request, 'META') else None,
+                        user_agent=request.META.get('HTTP_USER_AGENT') if hasattr(request, 'META') else '',
+                        description='Обновление списка планируемых результатов',
+                    )
+                except Exception:
+                    pass
+        except Exception:
+            # Ошибки обработки планируемых результатов не должны валить обновление прочих полей
+            pass
+
+        # --- Обработка задач проекта ---
+        try:
+            if isinstance(tasks_payload, list):
+                import json as _json
+                # Снимок старых задач
+                old_qs = list(instance.tasks.all())
+                old_items = [
+                    { 'id': t.id, 'description': t.description, 'order': t.order }
+                    for t in old_qs
+                ]
+
+                # Нормализуем новые задачи
+                new_items = []
+                for idx, item in enumerate(tasks_payload):
+                    if isinstance(item, dict):
+                        desc = (item.get('description') or item.get('title') or '').strip()
+                        order = item.get('order', idx)
+                    else:
+                        desc = (str(item) if item is not None else '').strip()
+                        order = idx
+                    if not desc:
+                        continue
+                    new_items.append({ 'description': desc, 'order': order })
+
+                from collections import Counter, defaultdict
+                old_counter = Counter((it['description'], it['order']) for it in old_items)
+                new_counter = Counter((it['description'], it['order']) for it in new_items)
+
+                # Изменение порядка по совпадающему описанию
+                old_by_desc = defaultdict(list)
+                for it in old_items:
+                    old_by_desc[it['description']].append(it['order'])
+                new_by_desc = defaultdict(list)
+                for it in new_items:
+                    new_by_desc[it['description']].append(it['order'])
+
+                for desc, old_orders in old_by_desc.items():
+                    if desc in new_by_desc:
+                        new_orders = new_by_desc[desc][:]
+                        common = min(len(old_orders), len(new_orders))
+                        for i in range(common):
+                            if old_orders[i] != new_orders[i]:
+                                try:
+                                    ProjectAuditLog.log_action(
+                                        project=instance,
+                                        action=ProjectAuditLog.ActionType.UPDATE,
+                                        user=getattr(request, 'user', None),
+                                        model_type=ProjectAuditLog.ModelType.PROJECT_TASK,
+                                        object_id=None,
+                                        field_name='task.order',
+                                        old_value=str(old_orders[i]),
+                                        new_value=str(new_orders[i]),
+                                        metadata={'source': 'api', 'view': 'ProjectViewSet.update', 'description': desc},
+                                        ip_address=request.META.get('REMOTE_ADDR') if hasattr(request, 'META') else None,
+                                        user_agent=request.META.get('HTTP_USER_AGENT') if hasattr(request, 'META') else '',
+                                        description=f"Изменён порядок задачи: '{desc}'",
+                                    )
+                                except Exception:
+                                    pass
+
+                # Удаления
+                for key, cnt in (old_counter - new_counter).items():
+                    desc, order = key
+                    for _ in range(cnt):
+                        try:
+                            ProjectAuditLog.log_action(
+                                project=instance,
+                                action=ProjectAuditLog.ActionType.DELETE,
+                                user=getattr(request, 'user', None),
+                                model_type=ProjectAuditLog.ModelType.PROJECT_TASK,
+                                object_id=None,
+                                field_name='task',
+                                old_value=_json.dumps({'description': desc, 'order': order}, ensure_ascii=False),
+                                new_value='',
+                                metadata={'source': 'api', 'view': 'ProjectViewSet.update'},
+                                ip_address=request.META.get('REMOTE_ADDR') if hasattr(request, 'META') else None,
+                                user_agent=request.META.get('HTTP_USER_AGENT') if hasattr(request, 'META') else '',
+                                description=f"Удалена задача: '{desc}'",
+                            )
+                        except Exception:
+                            pass
+
+                # Добавления
+                for key, cnt in (new_counter - old_counter).items():
+                    desc, order = key
+                    for _ in range(cnt):
+                        try:
+                            ProjectAuditLog.log_action(
+                                project=instance,
+                                action=ProjectAuditLog.ActionType.CREATE,
+                                user=getattr(request, 'user', None),
+                                model_type=ProjectAuditLog.ModelType.PROJECT_TASK,
+                                object_id=None,
+                                field_name='task',
+                                old_value='',
+                                new_value=_json.dumps({'description': desc, 'order': order}, ensure_ascii=False),
+                                metadata={'source': 'api', 'view': 'ProjectViewSet.update'},
+                                ip_address=request.META.get('REMOTE_ADDR') if hasattr(request, 'META') else None,
+                                user_agent=request.META.get('HTTP_USER_AGENT') if hasattr(request, 'META') else '',
+                                description=f"Добавлена задача: '{desc}'",
+                            )
+                        except Exception:
+                            pass
+
+                # Полная замена в БД
+                instance.tasks.all().delete()
+                bulk = [
+                    ProjectTask(project=instance, description=it['description'], order=it['order'])
+                    for it in new_items
+                ]
+                if bulk:
+                    ProjectTask.objects.bulk_create(bulk)
+
+                # Агрегированная запись
+                try:
+                    ProjectAuditLog.log_action(
+                        project=instance,
+                        action=ProjectAuditLog.ActionType.UPDATE,
+                        user=getattr(request, 'user', None),
+                        model_type=ProjectAuditLog.ModelType.PROJECT_TASK,
+                        object_id=None,
+                        field_name='tasks',
+                        old_value=_json.dumps(old_items, ensure_ascii=False),
+                        new_value=_json.dumps(new_items, ensure_ascii=False),
+                        metadata={'source': 'api', 'view': 'ProjectViewSet.update'},
+                        ip_address=request.META.get('REMOTE_ADDR') if hasattr(request, 'META') else None,
+                        user_agent=request.META.get('HTTP_USER_AGENT') if hasattr(request, 'META') else '',
+                        description='Обновление списка задач проекта',
+                    )
+                except Exception:
+                    pass
+        except Exception:
+            # Ошибки обработки задач не должны валить обновление прочих полей
+            pass
+
+        # --- Обработка исполнителей проекта ---
+        try:
+            if isinstance(executors_payload, list):
+                import json as _json
+                # Текущее состояние
+                old_qs = list(instance.executors.all())
+                old_ids = [link.user_id for link in old_qs]
+                # Нормализуем новые id
+                new_ids = []
+                for v in executors_payload:
+                    try:
+                        n = int(v)
+                    except Exception:
+                        continue
+                    if n not in new_ids:
+                        new_ids.append(n)
+
+                old_set = set(old_ids)
+                new_set = set(new_ids)
+
+                removed = sorted(list(old_set - new_set))
+                added = sorted(list(new_set - old_set))
+
+                # Логирование
+                for uid in removed:
+                    try:
+                        ProjectAuditLog.log_action(
+                            project=instance,
+                            action=ProjectAuditLog.ActionType.ROLE_REMOVE,
+                            user=getattr(request, 'user', None),
+                            model_type=ProjectAuditLog.ModelType.PROJECT_EXECUTOR,
+                            object_id=uid,
+                            field_name='executor',
+                            old_value=str(uid),
+                            new_value='',
+                            metadata={'source': 'api', 'view': 'ProjectViewSet.update'},
+                            ip_address=request.META.get('REMOTE_ADDR') if hasattr(request, 'META') else None,
+                            user_agent=request.META.get('HTTP_USER_AGENT') if hasattr(request, 'META') else '',
+                            description=f'Удалён исполнитель {uid}',
+                        )
+                    except Exception:
+                        pass
+
+                for uid in added:
+                    try:
+                        ProjectAuditLog.log_action(
+                            project=instance,
+                            action=ProjectAuditLog.ActionType.ROLE_ASSIGN,
+                            user=getattr(request, 'user', None),
+                            model_type=ProjectAuditLog.ModelType.PROJECT_EXECUTOR,
+                            object_id=uid,
+                            field_name='executor',
+                            old_value='',
+                            new_value=str(uid),
+                            metadata={'source': 'api', 'view': 'ProjectViewSet.update'},
+                            ip_address=request.META.get('REMOTE_ADDR') if hasattr(request, 'META') else None,
+                            user_agent=request.META.get('HTTP_USER_AGENT') if hasattr(request, 'META') else '',
+                            description=f'Добавлен исполнитель {uid}',
+                        )
+                    except Exception:
+                        pass
+
+                # Синхронизация в БД
+                from src.modules.project_ed.projects.models import ProjectExecutor
+                # Удаляем лишние
+                instance.executors.exclude(user_id__in=new_ids).delete()
+                # Добавляем недостающие
+                to_create = [uid for uid in new_ids if uid not in old_set]
+                if to_create:
+                    ProjectExecutor.objects.bulk_create([
+                        ProjectExecutor(project=instance, user_id=uid)
+                        for uid in to_create
+                    ], ignore_conflicts=True)
+        except Exception:
+            # Ошибки обработки исполнителей не должны валить обновление прочих полей
             pass
 
         # --- Обработка этапов (создание/обновление/удаление) ---
