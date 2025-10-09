@@ -34,7 +34,7 @@ class ProjectSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
         ]
-        read_only_fields = ['owner', 'status', 'created_at', 'updated_at']
+        read_only_fields = ['owner', 'created_at', 'updated_at']
 
     def validate_budget_total(self, value):
         try:

@@ -969,6 +969,17 @@ class ProjectViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
             # Снимок не должен валить обновление проекта
             pass
 
+        # Создаем уведомление при изменении статуса проекта на pending
+        try:
+            if 'status' in request.data and request.data['status'] == 'pending':
+                from src.modules.project_ed.notifications.methods import create_project_submission_notification
+                create_project_submission_notification(instance, request.user)
+        except Exception:
+            # Логируем ошибку, но не прерываем выполнение
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Ошибка создания уведомления для проекта {instance.id}", exc_info=True)
+
         # Возвращаем актуальные детальные данные
         read = ProjectDetailSerializer(instance, context={'request': request})
         return Response(read.data)
