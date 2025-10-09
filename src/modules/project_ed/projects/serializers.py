@@ -339,6 +339,7 @@ class ProjectReadSerializer(serializers.ModelSerializer):
     owner_id = serializers.IntegerField(source='owner.id', read_only=True)
     customer_id = serializers.IntegerField(source='customer.id', read_only=True)
     executors_count = serializers.SerializerMethodField()
+    performers = serializers.SerializerMethodField()
     
     class Meta:
         model = Project
@@ -346,7 +347,7 @@ class ProjectReadSerializer(serializers.ModelSerializer):
             'id', 'status', 'short_name', 'name', 'name_clarification', 'goal',
             'start_date', 'end_date', 'event_block_id', 'event_id',
             'owner_id', 'curator_id', 'manager_id', 'customer_id', 'budget_total', 'additional_info',
-            'created_at', 'updated_at', 'user_role', 'roles', 'executors_count',
+            'created_at', 'updated_at', 'user_role', 'roles', 'executors_count', 'performers',
         )
     
     def get_user_role(self, obj):
@@ -379,6 +380,43 @@ class ProjectReadSerializer(serializers.ModelSerializer):
     def get_executors_count(self, obj):
         """Возвращает количество исполнителей проекта."""
         return obj.executors.count()
+    
+    def get_performers(self, obj):
+        """Список исполнителей проекта для фронта (аватар + ФИО + должность)."""
+        request = self.context.get('request')
+        items = []
+        
+        for link in obj.executors.select_related('user__avatar', 'user__project_ed_profile__position_ref').all():
+            user = getattr(link, 'user', None)
+            if not user:
+                continue
+            # Полное имя
+            full_name = f"{getattr(user, 'last_name', '')} {getattr(user, 'first_name', '')}".strip() or getattr(user, 'username', '')
+            # URL аватара, если есть
+            avatar_url = None
+            try:
+                if request and hasattr(user, 'avatar') and user.avatar and user.avatar.image:
+                    avatar_url = request.build_absolute_uri(user.avatar.image.url)
+            except Exception:
+                avatar_url = None
+            
+            # Получаем должность из профиля
+            position_name = None
+            try:
+                profile = getattr(user, 'project_ed_profile', None)
+                if profile:
+                    position_name = getattr(profile, 'position_name', None)
+            except Exception:
+                position_name = None
+            
+            items.append({
+                'id': getattr(user, 'id', None),
+                'full_name': full_name,
+                'avatar_url': avatar_url,
+                'position': position_name,
+            })
+        
+        return items
 
 
 class ProjectTaskSerializer(serializers.ModelSerializer):
@@ -457,10 +495,11 @@ class ProjectDetailSerializer(ProjectReadSerializer):
         return None
 
     def get_performers(self, obj):
-        """Список исполнителей проекта для фронта (аватар + ФИО)."""
+        """Список исполнителей проекта для фронта (аватар + ФИО + должность)."""
         request = self.context.get('request')
         items = []
-        for link in obj.executors.select_related('user__avatar', 'user__project_ed_profile').all():
+        
+        for link in obj.executors.select_related('user__avatar', 'user__project_ed_profile__position_ref').all():
             user = getattr(link, 'user', None)
             if not user:
                 continue
@@ -473,11 +512,23 @@ class ProjectDetailSerializer(ProjectReadSerializer):
                     avatar_url = request.build_absolute_uri(user.avatar.image.url)
             except Exception:
                 avatar_url = None
+            
+            # Получаем должность из профиля
+            position_name = None
+            try:
+                profile = getattr(user, 'project_ed_profile', None)
+                if profile:
+                    position_name = getattr(profile, 'position_name', None)
+            except Exception:
+                position_name = None
+            
             items.append({
                 'id': getattr(user, 'id', None),
                 'full_name': full_name,
                 'avatar_url': avatar_url,
+                'position': position_name,
             })
+        
         return items
     
     def get_budget_items(self, obj):
