@@ -41,6 +41,7 @@ from src.modules.project_ed.projects.models import (
     ProjectStage,
     ProjectPlannedResult,
     ProjectTask,
+    ProjectReviewExpert,
 )
 from src.modules.project_ed.projects.models import ProjectTargetIndicator
 from src.modules.project_ed.projects.serializers import ProjectAuditLogSerializer

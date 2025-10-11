@@ -21,6 +21,8 @@ from .models import (
     ProjectRole,
     ProjectUserRole,
     ProjectAuditLog,
+    ProjectReviewExpert,
+    ProjectReviewComment,
 )
 
 
@@ -610,3 +612,124 @@ class ProjectAuditLogSerializer(serializers.ModelSerializer):
         if request and hasattr(user, 'avatar') and user.avatar and user.avatar.image:
             return request.build_absolute_uri(user.avatar.image.url)
         return None
+
+
+class ProjectReviewExpertSerializer(serializers.ModelSerializer):
+    """Сериализатор для эксперта, назначенного на проверку проекта."""
+    
+    expert_name = serializers.SerializerMethodField()
+    expert_username = serializers.CharField(source='expert.username', read_only=True)
+    expert_full_name = serializers.SerializerMethodField()
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    
+    class Meta:
+        model = ProjectReviewExpert
+        fields = [
+            'id',
+            'expert',
+            'expert_name',
+            'expert_username', 
+            'expert_full_name',
+            'status',
+            'status_display',
+            'assigned_at',
+            'started_at',
+            'completed_at'
+        ]
+        read_only_fields = ['id', 'assigned_at']
+    
+    def get_expert_name(self, obj):
+        """Получить полное имя эксперта."""
+        user = obj.expert
+        if not user:
+            return ''
+        
+        first = getattr(user, 'first_name', '') or ''
+        last = getattr(user, 'last_name', '') or ''
+        full = f"{last} {first}".strip()
+        return full or getattr(user, 'username', '') or str(getattr(user, 'id', ''))
+    
+    def get_expert_full_name(self, obj):
+        """Получить полное имя эксперта для отображения."""
+        return self.get_expert_name(obj)
+
+
+class ProjectReviewCommentSerializer(serializers.ModelSerializer):
+    """Сериализатор для замечания эксперта."""
+    
+    expert_name = serializers.SerializerMethodField()
+    section_display = serializers.CharField(source='get_section_display', read_only=True)
+    element_type_display = serializers.CharField(source='get_element_type_display', read_only=True)
+    comment_type_display = serializers.CharField(source='get_comment_type_display', read_only=True)
+    
+    class Meta:
+        model = ProjectReviewComment
+        fields = [
+            'id',
+            'expert',
+            'expert_name',
+            'section',
+            'section_display',
+            'field_name',
+            'field_display_name',
+            'element_type',
+            'element_type_display',
+            'element_index',
+            'element_name',
+            'element_path',
+            'comment_type',
+            'comment_type_display',
+            'title',
+            'text',
+            'is_resolved',
+            'resolved_at',
+            'resolved_by',
+            'created_at',
+            'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+    
+    def get_expert_name(self, obj):
+        """Получить полное имя эксперта."""
+        user = obj.expert
+        if not user:
+            return ''
+        
+        first = getattr(user, 'first_name', '') or ''
+        last = getattr(user, 'last_name', '') or ''
+        full = f"{last} {first}".strip()
+        return full or getattr(user, 'username', '') or str(getattr(user, 'id', ''))
+
+
+class ProjectReviewSummarySerializer(serializers.Serializer):
+    """Сериализатор для сводной информации о проверке проекта."""
+    
+    experts_count = serializers.IntegerField()
+    decided_experts_count = serializers.IntegerField()
+    pending_experts_count = serializers.IntegerField()
+    started_experts_count = serializers.IntegerField()
+    completed_experts_count = serializers.IntegerField()
+    assigned_experts = ProjectReviewExpertSerializer(many=True, read_only=True)
+    comments = ProjectReviewCommentSerializer(many=True, read_only=True)
+    version_info = serializers.DictField(read_only=True)
+    
+    def to_representation(self, instance):
+        """Преобразовать модель ProjectReview в представление."""
+        return {
+            'experts_count': instance.experts_count,
+            'decided_experts_count': instance.decided_experts_count,
+            'pending_experts_count': instance.pending_experts_count,
+            'started_experts_count': instance.started_experts_count,
+            'completed_experts_count': instance.completed_experts_count,
+            'assigned_experts': ProjectReviewExpertSerializer(
+                instance.assigned_experts.all(), 
+                many=True, 
+                context=self.context
+            ).data,
+            'comments': ProjectReviewCommentSerializer(
+                instance.comments.all(),
+                many=True,
+                context=self.context
+            ).data,
+            'version_info': instance.version_info
+        }
