@@ -47,11 +47,20 @@ class TaskPrioritySerializer(serializers.ModelSerializer):
 class CRMUserSerializer(serializers.ModelSerializer):
     """Сериализатор пользователя"""
     full_name = serializers.CharField(source='get_full_name', read_only=True)
+    middle_name = serializers.SerializerMethodField()
     avatar_url = serializers.SerializerMethodField()
     
     class Meta:
         model = User
-        fields = ['id', 'username', 'first_name', 'last_name', 'full_name', 'email', 'avatar_url']
+        fields = ['id', 'username', 'first_name', 'last_name', 'middle_name', 'full_name', 'email', 'avatar_url']
+
+    def get_middle_name(self, obj):
+        # Получаем отчество из CMS профиля
+        try:
+            profile = getattr(obj, 'adp_profile', None)
+            return profile.middle_name if profile else None
+        except Exception:
+            return None
 
     def get_avatar_url(self, obj):
         # Ожидаем связь one-to-one: user.avatar.image
