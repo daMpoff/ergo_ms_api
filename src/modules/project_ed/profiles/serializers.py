@@ -74,6 +74,9 @@ class UserDetailSerializer(serializers.ModelSerializer):
     # Аватар пользователя
     avatar_url = serializers.SerializerMethodField()
     
+    # Отчество из CMS профиля
+    middle_name = serializers.SerializerMethodField()
+    
     # Расширенные данные профиля
     profile = UserProfileSerializer(source='project_ed_profile', read_only=True)
     
@@ -85,7 +88,7 @@ class UserDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = [
-            'id', 'username', 'first_name', 'last_name', 'email',
+            'id', 'username', 'first_name', 'last_name', 'middle_name', 'email',
             'role_name', 'position_name', 'faculty_name', 'department_name',
             'avatar_url', 'profile', 'projects_count', 'active_projects_count', 
             'completed_projects_count'
@@ -109,7 +112,14 @@ class UserDetailSerializer(serializers.ModelSerializer):
         if request and hasattr(obj, 'avatar') and obj.avatar and obj.avatar.image:
             return request.build_absolute_uri(obj.avatar.image.url)
         return None
-    
+
+    def get_middle_name(self, obj):
+        """Получить отчество из CMS профиля."""
+        try:
+            profile = getattr(obj, 'adp_profile', None)
+            return profile.middle_name if profile else None
+        except Exception:
+            return None
     
     def to_representation(self, instance):
         """Фильтрация данных в зависимости от настроек приватности."""
@@ -139,6 +149,9 @@ class UserListSerializer(serializers.ModelSerializer):
     # Аватар пользователя
     avatar_url = serializers.SerializerMethodField()
     
+    # Отчество из CMS профиля
+    middle_name = serializers.SerializerMethodField()
+    
     # Идентификаторы и короткие имена для админ-страниц
     profile_id = serializers.SerializerMethodField()
     role_ref = serializers.SerializerMethodField()
@@ -154,7 +167,7 @@ class UserListSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = [
-            'id', 'username', 'first_name', 'last_name',
+            'id', 'username', 'first_name', 'last_name', 'middle_name',
             'role_name', 'position_name', 'faculty_name', 'department_name',
             'avatar_url',
             'profile_id', 'role_ref', 'position_ref', 'faculty_ref', 'department_ref',
@@ -172,6 +185,14 @@ class UserListSerializer(serializers.ModelSerializer):
         if request and hasattr(obj, 'avatar') and obj.avatar and obj.avatar.image:
             return request.build_absolute_uri(obj.avatar.image.url)
         return None
+
+    def get_middle_name(self, obj):
+        """Получить отчество из CMS профиля."""
+        try:
+            profile = getattr(obj, 'adp_profile', None)
+            return profile.middle_name if profile else None
+        except Exception:
+            return None
 
     def _get_profile(self, obj):
         return getattr(obj, 'project_ed_profile', None)
