@@ -129,7 +129,23 @@ class ProjectViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         if user is None:
             return self.get_safe_queryset(base_qs)
         
-        # Получаем все проекты пользователя: где он владелец, руководитель, куратор, заказчик или исполнитель
+        # Если пользователь — администратор ProjectEd, показываем все проекты
+        try:
+            profile = getattr(user, 'project_ed_profile', None)
+            role_name = getattr(getattr(profile, 'role_ref', None), 'name', None)
+            if role_name in ['Администратор']:
+                return self.get_safe_queryset(base_qs)
+        except Exception:
+            pass
+        # Резервная проверка через группы Django
+        try:
+            if user.groups.filter(name__in=['Администратор']).exists():
+                return self.get_safe_queryset(base_qs)
+        except Exception:
+            pass
+        
+        # Получаем все проекты пользователя:
+        # - где он владелец, руководитель, куратор, заказчик или исполнитель
         user_projects = base_qs.filter(
             Q(owner=user) |
             Q(manager=user) |
@@ -144,10 +160,43 @@ class ProjectViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     def public_view(self, request, pk=None):
         """
         Публичный просмотр проекта по ID для всех аутентифицированных пользователей.
-        Позволяет просматривать чужие проекты.
+        Для участников с проектной ролью доступ без ограничений, для остальных
+        доступ открыт дополнительно ролям 'Администратор' и 'Экспертная группа'.
         """
         try:
-            project = self.get_object()
+            project = Project.objects.select_related('owner', 'manager', 'curator', 'customer').get(pk=pk)
+            user = getattr(request, 'user', None)
+            if not user or not user.is_authenticated:
+                return Response({'error': 'Требуется аутентификация'}, status=status.HTTP_401_UNAUTHORIZED)
+
+            # Если есть проектная роль — доступ разрешён
+            has_project_role = (
+                project.owner_id == user.id or
+                project.manager_id == user.id or
+                project.curator_id == user.id or
+                project.customer_id == user.id or
+                project.executors.filter(user_id=user.id).exists()
+            )
+
+            if not has_project_role:
+                # Разрешаем доступ для глобальных ролей: Администратор и Экспертная группа
+                allow_by_role = False
+                try:
+                    profile = getattr(user, 'project_ed_profile', None)
+                    role_name = getattr(getattr(profile, 'role_ref', None), 'name', None)
+                    if role_name in ['Администратор', 'Экспертная группа']:
+                        allow_by_role = True
+                except Exception:
+                    pass
+                if not allow_by_role:
+                    try:
+                        if user.groups.filter(name__in=['Администратор', 'Экспертная группа']).exists():
+                            allow_by_role = True
+                    except Exception:
+                        pass
+                if not allow_by_role:
+                    return Response({'error': 'Доступ запрещён'}, status=status.HTTP_403_FORBIDDEN)
+
             serializer = ProjectDetailSerializer(project, context={'request': request})
             return Response(serializer.data)
         except Exception as e:
