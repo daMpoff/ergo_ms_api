@@ -471,11 +471,15 @@ class ProjectDetailSerializer(ProjectReadSerializer):
     planned_results = ProjectPlannedResultSerializer(many=True, read_only=True)
     stages = ProjectStageSerializer(many=True, read_only=True)
     target_indicators = ProjectTargetIndicatorSerializer(source='target_indicators_rel', many=True, read_only=True)
+
+    # Текущая проверка проекта с назначенными экспертами и счетчиками
+    current_review = serializers.SerializerMethodField()
     
     class Meta(ProjectReadSerializer.Meta):
         fields = ProjectReadSerializer.Meta.fields + (
             'manager_data', 'curator_data', 'customer_data', 'performers',
             'budget_items', 'budget_totals', 'tasks', 'planned_results', 'stages', 'target_indicators',
+            'current_review',
         )
     
     def get_manager_data(self, obj):
@@ -560,6 +564,20 @@ class ProjectDetailSerializer(ProjectReadSerializer):
             }
         return None
 
+    def get_current_review(self, obj):
+        """Возвращает сводку по текущей (последней) проверке проекта."""
+        try:
+            review = (
+                obj.reviews.select_related('version')
+                .prefetch_related('assigned_experts', 'comments')
+                .order_by('-started_at', '-id')
+            ).first()
+            if not review:
+                return None
+            return ProjectReviewSummarySerializer(review, context=self.context).data
+        except Exception:
+            return None
+
 
 class ProjectAuditLogSerializer(serializers.ModelSerializer):
     """Сериализатор для отображения записей аудита проекта."""
@@ -620,6 +638,7 @@ class ProjectReviewExpertSerializer(serializers.ModelSerializer):
     expert_name = serializers.SerializerMethodField()
     expert_username = serializers.CharField(source='expert.username', read_only=True)
     expert_full_name = serializers.SerializerMethodField()
+    expert_avatar_url = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     
     class Meta:
@@ -630,6 +649,7 @@ class ProjectReviewExpertSerializer(serializers.ModelSerializer):
             'expert_name',
             'expert_username', 
             'expert_full_name',
+            'expert_avatar_url',
             'status',
             'status_display',
             'assigned_at',
@@ -637,6 +657,21 @@ class ProjectReviewExpertSerializer(serializers.ModelSerializer):
             'completed_at'
         ]
         read_only_fields = ['id', 'assigned_at']
+    
+    def validate(self, attrs):
+        expert = attrs.get('expert') or getattr(self.instance, 'expert', None)
+        if expert is None:
+            return attrs
+        # Проверяем, что пользователь состоит в роли "Экспертная группа"
+        try:
+            profile = getattr(expert, 'project_ed_profile', None)
+            role_name = getattr(getattr(profile, 'role_ref', None), 'name', None)
+            if role_name != 'Экспертная группа':
+                raise serializers.ValidationError({'expert': 'Пользователь должен иметь роль "Экспертная группа" для назначения экспертом.'})
+        except Exception:
+            # Если профиль отсутствует или иная ошибка доступа — запрещаем назначение
+            raise serializers.ValidationError({'expert': 'Пользователь не может быть назначен экспертом (нет профиля ProjectEd или роли).'})
+        return attrs
     
     def get_expert_name(self, obj):
         """Получить полное имя эксперта."""
@@ -652,6 +687,16 @@ class ProjectReviewExpertSerializer(serializers.ModelSerializer):
     def get_expert_full_name(self, obj):
         """Получить полное имя эксперта для отображения."""
         return self.get_expert_name(obj)
+
+    def get_expert_avatar_url(self, obj):
+        request = self.context.get('request')
+        user = getattr(obj, 'expert', None)
+        try:
+            if request and hasattr(user, 'avatar') and user.avatar and user.avatar.image:
+                return request.build_absolute_uri(user.avatar.image.url)
+        except Exception:
+            pass
+        return None
 
 
 class ProjectReviewCommentSerializer(serializers.ModelSerializer):
@@ -701,6 +746,55 @@ class ProjectReviewCommentSerializer(serializers.ModelSerializer):
         return full or getattr(user, 'username', '') or str(getattr(user, 'id', ''))
 
 
+class ProjectReviewDecisionSerializer(serializers.ModelSerializer):
+    """Сериализатор решения эксперта с данными эксперта."""
+
+    expert_name = serializers.SerializerMethodField()
+    expert_username = serializers.CharField(source='expert.username', read_only=True)
+    expert_full_name = serializers.SerializerMethodField()
+    expert_avatar_url = serializers.SerializerMethodField()
+    decision_display = serializers.CharField(source='get_decision_display', read_only=True)
+
+    class Meta:
+        from .models import ProjectReviewDecision
+        model = ProjectReviewDecision
+        fields = [
+            'id',
+            'expert',
+            'expert_name',
+            'expert_username',
+            'expert_full_name',
+            'expert_avatar_url',
+            'decision',
+            'decision_display',
+            'comment',
+            'created_at',
+        ]
+        read_only_fields = fields
+
+    def get_expert_name(self, obj):
+        user = obj.expert
+        if not user:
+            return ''
+        first = getattr(user, 'first_name', '') or ''
+        last = getattr(user, 'last_name', '') or ''
+        full = f"{last} {first}".strip()
+        return full or getattr(user, 'username', '') or str(getattr(user, 'id', ''))
+
+    def get_expert_full_name(self, obj):
+        return self.get_expert_name(obj)
+
+    def get_expert_avatar_url(self, obj):
+        request = self.context.get('request')
+        user = getattr(obj, 'expert', None)
+        try:
+            if request and hasattr(user, 'avatar') and user.avatar and user.avatar.image:
+                return request.build_absolute_uri(user.avatar.image.url)
+        except Exception:
+            pass
+        return None
+
+
 class ProjectReviewSummarySerializer(serializers.Serializer):
     """Сериализатор для сводной информации о проверке проекта."""
     
@@ -711,6 +805,7 @@ class ProjectReviewSummarySerializer(serializers.Serializer):
     completed_experts_count = serializers.IntegerField()
     assigned_experts = ProjectReviewExpertSerializer(many=True, read_only=True)
     comments = ProjectReviewCommentSerializer(many=True, read_only=True)
+    decisions = ProjectReviewDecisionSerializer(many=True, read_only=True)
     version_info = serializers.DictField(read_only=True)
     
     def to_representation(self, instance):
@@ -728,6 +823,11 @@ class ProjectReviewSummarySerializer(serializers.Serializer):
             ).data,
             'comments': ProjectReviewCommentSerializer(
                 instance.comments.all(),
+                many=True,
+                context=self.context
+            ).data,
+            'decisions': ProjectReviewDecisionSerializer(
+                instance.decisions.all(),
                 many=True,
                 context=self.context
             ).data,

@@ -42,6 +42,7 @@ from src.modules.project_ed.projects.models import (
     ProjectPlannedResult,
     ProjectTask,
     ProjectReviewExpert,
+    ProjectReview,
 )
 from src.modules.project_ed.projects.models import ProjectTargetIndicator
 from src.modules.project_ed.projects.serializers import ProjectAuditLogSerializer
@@ -103,6 +104,9 @@ class ProjectViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         'tasks',
         'planned_results',
         'target_indicators_rel',
+        # Для сводки по проверке
+        'reviews__assigned_experts',
+        'reviews__comments',
     )
     serializer_class = ProjectSerializer
     permission_classes = [permissions.IsAuthenticated, IsOwnerOrReadOnly]
@@ -968,6 +972,18 @@ class ProjectViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
             )
         except Exception:
             # Снимок не должен валить обновление проекта
+            pass
+
+        # Если проект переведен в статус pending — создаём запись проверки и назначаем экспертов
+        try:
+            if 'status' in request.data and request.data['status'] == 'pending':
+                latest_version = ProjectVersion.objects.filter(project=instance).order_by('-version_number').first()
+                if latest_version:
+                    exists = ProjectReview.objects.filter(project=instance, version=latest_version).exists()
+                    if not exists:
+                        ProjectReview.create_for_project_version(project=instance, version=latest_version)
+        except Exception:
+            # Ошибки создания проверки не должны блокировать обновление
             pass
 
         # Создаем уведомление при изменении статуса проекта на pending
