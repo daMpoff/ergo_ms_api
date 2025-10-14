@@ -342,6 +342,7 @@ class ProjectReadSerializer(serializers.ModelSerializer):
     customer_id = serializers.IntegerField(source='customer.id', read_only=True)
     executors_count = serializers.SerializerMethodField()
     performers = serializers.SerializerMethodField()
+    manager_data = serializers.SerializerMethodField()
     
     class Meta:
         model = Project
@@ -349,7 +350,7 @@ class ProjectReadSerializer(serializers.ModelSerializer):
             'id', 'status', 'short_name', 'name', 'name_clarification', 'goal',
             'start_date', 'end_date', 'event_block_id', 'event_id',
             'owner_id', 'curator_id', 'manager_id', 'customer_id', 'budget_total', 'additional_info',
-            'created_at', 'updated_at', 'user_role', 'roles', 'executors_count', 'performers',
+            'created_at', 'updated_at', 'user_role', 'roles', 'executors_count', 'performers', 'manager_data',
         )
     
     def get_user_role(self, obj):
@@ -419,6 +420,44 @@ class ProjectReadSerializer(serializers.ModelSerializer):
             })
         
         return items
+    
+    def get_manager_data(self, obj):
+        """Возвращает данные о руководителе проекта."""
+        if not obj.manager:
+            return None
+            
+        request = self.context.get('request')
+        user = obj.manager
+        
+        # Полное имя
+        full_name = f"{getattr(user, 'last_name', '')} {getattr(user, 'first_name', '')}".strip() or getattr(user, 'username', '')
+        
+        # URL аватара, если есть
+        avatar_url = None
+        try:
+            if request and hasattr(user, 'avatar') and user.avatar and user.avatar.image:
+                avatar_url = request.build_absolute_uri(user.avatar.image.url)
+        except Exception:
+            avatar_url = None
+        
+        # Получаем отчество из CMS профиля
+        middle_name = getattr(user, 'middle_name', '')
+        try:
+            adp_profile = getattr(user, 'adp_profile', None)
+            if adp_profile and getattr(adp_profile, 'middle_name', None):
+                middle_name = adp_profile.middle_name
+        except Exception:
+            pass
+        
+        
+        return {
+            'id': getattr(user, 'id', None),
+            'full_name': full_name,
+            'first_name': getattr(user, 'first_name', ''),
+            'last_name': getattr(user, 'last_name', ''),
+            'middle_name': middle_name,
+            'avatar_url': avatar_url,
+        }
 
 
 class ProjectTaskSerializer(serializers.ModelSerializer):

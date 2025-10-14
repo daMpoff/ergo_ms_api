@@ -95,7 +95,7 @@ class IsProjectEdAdmin(permissions.BasePermission):
 
 
 class ProjectViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
-    queryset = Project.objects.select_related('owner', 'manager', 'curator', 'customer').prefetch_related(
+    queryset = Project.objects.select_related('owner', 'manager', 'manager__avatar', 'manager__adp_profile', 'curator', 'customer').prefetch_related(
         'user_roles__role',
         'executors__user__avatar',
         'executors__user__project_ed_profile__position_ref',
