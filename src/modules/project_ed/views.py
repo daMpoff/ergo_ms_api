@@ -1,5 +1,5 @@
 from django.shortcuts import render
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Q
 from django.db import models as dj_models
 from django.db import models
 from rest_framework import viewsets, permissions, status
@@ -112,6 +112,15 @@ class ProjectViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated, IsOwnerOrReadOnly]
     pagination_class = ProjectPagination
 
+    def get_permissions(self):
+        """
+        Переопределяем permissions для открытого доступа к retrieve и list.
+        """
+        if self.action in ['retrieve', 'list']:
+            # Для просмотра проекта и списка проектов разрешаем доступ всем
+            return []
+        return [permission() for permission in self.permission_classes]
+
     def get_serializer_class(self):
         if self.action == 'create':
             return ProjectCreateSerializer
@@ -125,6 +134,12 @@ class ProjectViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         from django.db.models import Q
         
         base_qs = super().get_queryset()
+        
+        # Для методов retrieve и list возвращаем все проекты (открытый доступ)
+        if self.action in ['retrieve', 'list']:
+            return self.get_safe_queryset(base_qs)
+        
+        # Для остальных методов применяем стандартную логику фильтрации
         user = self.get_safe_user()
         if user is None:
             return self.get_safe_queryset(base_qs)
@@ -133,16 +148,17 @@ class ProjectViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
         try:
             profile = getattr(user, 'project_ed_profile', None)
             role_name = getattr(getattr(profile, 'role_ref', None), 'name', None)
-            if role_name in ['Администратор']:
+            if role_name == 'Администратор':
                 return self.get_safe_queryset(base_qs)
         except Exception:
             pass
         # Резервная проверка через группы Django
         try:
-            if user.groups.filter(name__in=['Администратор']).exists():
+            if user.groups.filter(name='Администратор').exists():
                 return self.get_safe_queryset(base_qs)
         except Exception:
             pass
+        
         
         # Получаем все проекты пользователя:
         # - где он владелец, руководитель, куратор, заказчик или исполнитель
@@ -1069,6 +1085,117 @@ class ProjectViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
 
         serializer = ProjectAuditLogSerializer(logs, many=True, context={'request': request})
         return Response(serializer.data)
+
+    @action(detail=False, methods=['get'])
+    def for_review(self, request):
+        """Получить проекты на утверждении для экспертной группы."""
+        user = self.get_safe_user()
+        if user is None:
+            return Response({'error': 'Требуется аутентификация'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        # Проверяем, является ли пользователь экспертом
+        try:
+            profile = getattr(user, 'project_ed_profile', None)
+            role_name = getattr(getattr(profile, 'role_ref', None), 'name', None)
+            if role_name != 'Экспертная группа':
+                return Response({'error': 'Доступ разрешен только экспертной группе'}, status=status.HTTP_403_FORBIDDEN)
+        except Exception:
+            return Response({'error': 'Не удалось определить роль пользователя'}, status=status.HTTP_403_FORBIDDEN)
+
+        # Получаем проекты, где пользователь назначен экспертом
+        base_qs = super().get_queryset()
+        expert_projects = base_qs.filter(
+            Q(reviews__assigned_experts__expert=user)
+        ).distinct()
+
+        # Пагинация
+        page = self.paginate_queryset(expert_projects)
+        if page is not None:
+            serializer = ProjectReadSerializer(page, many=True, context={'request': request})
+            return self.get_paginated_response(serializer.data)
+
+        serializer = ProjectReadSerializer(expert_projects, many=True, context={'request': request})
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['get'], permission_classes=[])
+    def export_all(self, request):
+        """Экспорт всех проектов для открытого доступа."""
+        try:
+            # Получаем все проекты без ограничений
+            all_projects = self.get_safe_queryset(super().get_queryset())
+            serializer = ProjectReadSerializer(all_projects, many=True, context={'request': request})
+            
+            return Response({
+                'count': all_projects.count(),
+                'results': serializer.data,
+                'export_type': 'all_projects',
+                'exported_at': timezone.now().isoformat()
+            })
+        except Exception as e:
+            return Response({'error': 'Ошибка экспорта всех проектов'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
+    def export_my(self, request):
+        """Экспорт проектов текущего пользователя."""
+        user = self.get_safe_user()
+        if user is None:
+            return Response({'error': 'Требуется аутентификация'}, status=status.HTTP_401_UNAUTHORIZED)
+        
+        try:
+            # Получаем проекты пользователя
+            user_projects = super().get_queryset().filter(
+                Q(owner=user) |
+                Q(manager=user) |
+                Q(curator=user) |
+                Q(customer=user) |
+                Q(executors__user=user)
+            ).distinct()
+            
+            serializer = ProjectReadSerializer(user_projects, many=True, context={'request': request})
+            
+            return Response({
+                'count': user_projects.count(),
+                'results': serializer.data,
+                'export_type': 'my_projects',
+                'user_id': user.id,
+                'exported_at': timezone.now().isoformat()
+            })
+        except Exception as e:
+            return Response({'error': 'Ошибка экспорта моих проектов'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
+    def export_for_review(self, request):
+        """Экспорт проектов на рассмотрении для экспертной группы."""
+        user = self.get_safe_user()
+        if user is None:
+            return Response({'error': 'Требуется аутентификация'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        # Проверяем, является ли пользователь экспертом
+        try:
+            profile = getattr(user, 'project_ed_profile', None)
+            role_name = getattr(getattr(profile, 'role_ref', None), 'name', None)
+            if role_name != 'Экспертная группа':
+                return Response({'error': 'Доступ разрешен только экспертной группе'}, status=status.HTTP_403_FORBIDDEN)
+        except Exception:
+            return Response({'error': 'Не удалось определить роль пользователя'}, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            # Получаем проекты, где пользователь назначен экспертом
+            expert_projects = super().get_queryset().filter(
+                Q(reviews__assigned_experts__expert=user)
+            ).distinct()
+            
+            serializer = ProjectReadSerializer(expert_projects, many=True, context={'request': request})
+            
+            return Response({
+                'count': expert_projects.count(),
+                'results': serializer.data,
+                'export_type': 'projects_for_review',
+                'expert_id': user.id,
+                'exported_at': timezone.now().isoformat()
+            })
+        except Exception as e:
+            return Response({'error': 'Ошибка экспорта проектов на рассмотрении'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class CategoryViewSet(SwaggerSafeMixin, viewsets.ModelViewSet):
