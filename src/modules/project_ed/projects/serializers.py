@@ -592,16 +592,17 @@ class ProjectDetailSerializer(ProjectReadSerializer):
     
     def get_budget_totals(self, obj):
         """Итоги по бюджету проекта."""
-        totals = obj.budget_totals.first()
-        if totals:
-            return {
+        totals_list = []
+        for totals in obj.budget_totals.all():
+            totals_list.append({
+                'id': totals.id,
                 'total_with_insurance': float(totals.total_with_insurance),
                 'salary_off_budget': float(totals.salary_off_budget),
                 'salary_budget': float(totals.salary_budget),
                 'other_off_budget': float(totals.other_off_budget),
                 'other_budget': float(totals.other_budget),
-            }
-        return None
+            })
+        return totals_list
 
     def get_current_review(self, obj):
         """Возвращает сводку по текущей (последней) проверке проекта."""
